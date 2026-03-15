@@ -1,0 +1,591 @@
+<header class="top-header">
+  <div class="header-left">
+    <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL Logo" class="header-logo">
+    <span class="header-title">CSPC-CIRL Management System</span>
+  </div>
+  <div class="header-right">
+    <% if (typeof headerAction !=='undefined' && headerAction) { %>
+      <%- headerAction %>
+    <% } else if (typeof activePage !== 'undefined' && activePage === 'dashboard') { %>
+      <!-- Global Search Trigger (Dashboard only) -->
+      <button class="gs-trigger-btn" id="gs-trigger-btn" onclick="openPalette()" title="Search (Ctrl+K)">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span class="gs-trigger-label">Search…</span>
+      </button>
+    <% } %>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- GLOBAL SEARCH COMMAND PALETTE                          -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="gs-overlay" id="gs-overlay" onclick="closePaletteOnOverlay(event)">
+  <div class="gs-palette" id="gs-palette" role="dialog" aria-modal="true" aria-label="Global Search">
+    <div class="gs-input-row">
+      <i class="fa-solid fa-magnifying-glass gs-input-icon"></i>
+      <input class="gs-input" id="gs-input" placeholder="Search pages, partnerships, reports, actions…"
+        autocomplete="off" spellcheck="false" oninput="paletteSearch(this.value)" onkeydown="paletteKeyNav(event)">
+    </div>
+    <div class="gs-divider"></div>
+    <div class="gs-results" id="gs-results"></div>
+    <div class="gs-footer">
+      <span><kbd>↑↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> open</span>
+      <span><kbd>Esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ── Global Search Trigger Button ─────────────────────────────── */
+  .gs-trigger-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 7px 12px;
+    background: #f1f5f9;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: all .18s;
+  }
+
+  .gs-trigger-btn:hover {
+    background: #e8f0fe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+  }
+
+  .gs-trigger-label {
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 80px;
+    text-align: left;
+  }
+
+  .gs-kbd {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    background: #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: #64748b;
+    letter-spacing: .3px;
+  }
+
+  /* ── Palette Overlay ──────────────────────────────────────────── */
+  .gs-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    backdrop-filter: blur(3px);
+    z-index: 9000;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 80px;
+    animation: gsOverlayIn .15s ease;
+  }
+
+  .gs-overlay.open {
+    display: flex;
+  }
+
+  @keyframes gsOverlayIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* ── Palette Box ──────────────────────────────────────────────── */
+  .gs-palette {
+    width: 620px;
+    max-width: calc(100vw - 32px);
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .25), 0 4px 12px rgba(0, 0, 0, .1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: gsPaletteIn .18s cubic-bezier(.4, 0, .2, 1);
+    max-height: calc(100vh - 160px);
+  }
+
+  @keyframes gsPaletteIn {
+    from {
+      opacity: 0;
+      transform: scale(.96) translateY(-8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  /* ── Input Row ────────────────────────────────────────────────── */
+  .gs-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 18px;
+  }
+
+  .gs-input-icon {
+    font-size: 17px;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .gs-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    font-family: 'Inter', sans-serif;
+    color: #0f172a;
+    background: transparent;
+    caret-color: #1e3a8a;
+  }
+
+  .gs-input::placeholder {
+    color: #94a3b8;
+  }
+
+  .gs-esc-hint {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    padding: 3px 7px;
+    color: #64748b;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .gs-divider {
+    height: 1px;
+    background: #f1f5f9;
+    flex-shrink: 0;
+  }
+
+  /* ── Results List ─────────────────────────────────────────────── */
+  .gs-results {
+    overflow-y: auto;
+    padding: 8px 8px 4px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .gs-group-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    padding: 8px 10px 4px;
+  }
+
+  .gs-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: background .12s;
+    outline: none;
+  }
+
+  .gs-item:hover,
+  .gs-item.selected {
+    background: #eff6ff;
+  }
+
+  .gs-item.selected .gs-item-title {
+    color: #1e3a8a;
+  }
+
+  .gs-icon-wrap {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .gs-item-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .gs-item-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gs-item-sub {
+    font-size: 11.5px;
+    color: #94a3b8;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gs-item-tag {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+
+  .tag-page {
+    background: #e8f0fe;
+    color: #1e3a8a;
+  }
+
+  .tag-action {
+    background: #dcfce7;
+    color: #15803d;
+  }
+
+  .tag-record {
+    background: #fef3c7;
+    color: #b45309;
+  }
+
+  .tag-report {
+    background: #f3e8ff;
+    color: #7c3aed;
+  }
+
+  .gs-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13.5px;
+  }
+
+  .gs-empty i {
+    font-size: 28px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* ── Footer ───────────────────────────────────────────────────── */
+  .gs-footer {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 10px 18px;
+    border-top: 1px solid #f1f5f9;
+    background: #fafbff;
+    font-size: 11.5px;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .gs-footer kbd {
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Inter', sans-serif;
+    background: #e2e8f0;
+    border-radius: 4px;
+    padding: 2px 5px;
+    color: #334155;
+    margin-right: 3px;
+  }
+</style>
+
+<script>
+  // ── Search Index ───────────────────────────────────────────────
+  // Groups: pages, actions, partnerships, reports
+  const GS_INDEX = [
+    // ── Pages ──────────────────────────────────────────────────
+    {
+      type: 'page', icon: 'fa-house', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Dashboard', sub: 'Overview, stats, map, charts',
+      url: '/dashboard', keywords: 'dashboard home overview stats map chart'
+    },
+    {
+      type: 'page', icon: 'fa-book-open', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Partnership Registry', sub: 'All MOA/MOU records, add, view, filter',
+      url: '/registry', keywords: 'registry partnership moa mou list table'
+    },
+    {
+      type: 'page', icon: 'fa-chart-bar', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Reports & Analytics', sub: 'Active list, expired list, audit trail',
+      url: '/reports', keywords: 'reports analytics export pdf audit trail'
+    },
+    {
+      type: 'page', icon: 'fa-rotate', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Lifecycle Monitor', sub: 'Expiry tracking, renewal reminders',
+      url: '/lifecycle', keywords: 'lifecycle expiry expiring renewal reminder monitor'
+    },
+    {
+      type: 'page', icon: 'fa-calendar-days', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Calendar', sub: 'Agreement dates, upcoming expirations',
+      url: '/calendar', keywords: 'calendar schedule dates events upcoming'
+    },
+    {
+      type: 'page', icon: 'fa-envelope-open-text', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Requests', sub: 'Pending requests and approvals',
+      url: '/requests', keywords: 'requests approvals pending inbox'
+    },
+    {
+      type: 'page', icon: 'fa-gear', iconBg: '#e8f0fe', iconColor: '#1e3a8a',
+      title: 'Settings', sub: 'System configuration, user management',
+      url: '/settings', keywords: 'settings configuration users roles'
+    },
+
+    // ── Quick Actions ───────────────────────────────────────────
+    {
+      type: 'action', icon: 'fa-circle-plus', iconBg: '#dcfce7', iconColor: '#15803d',
+      title: 'Add New Partnership', sub: 'Open the Add Partnership form',
+      url: '/registry', action: 'openAddModal',
+      keywords: 'add new create partnership moa mou'
+    },
+    {
+      type: 'action', icon: 'fa-file-export', iconBg: '#dcfce7', iconColor: '#15803d',
+      title: 'Export to PDF', sub: 'Generate a PDF report of partnerships',
+      url: '/reports', keywords: 'export pdf download report'
+    },
+    {
+      type: 'action', icon: 'fa-magnifying-glass-chart', iconBg: '#dcfce7', iconColor: '#15803d',
+      title: 'View Active List', sub: 'See all active MOA/MOU agreements',
+      url: '/reports', keywords: 'active list active agreements'
+    },
+    {
+      type: 'action', icon: 'fa-hourglass-half', iconBg: '#fef9c3', iconColor: '#b45309',
+      title: 'View Expiring Soon', sub: 'Agreements expiring within 90 days',
+      url: '/lifecycle', keywords: 'expiring soon 90 days renewal'
+    },
+    {
+      type: 'action', icon: 'fa-clock-rotate-left', iconBg: '#dcfce7', iconColor: '#15803d',
+      title: 'Audit Trail', sub: 'View all system activity logs',
+      url: '/reports', keywords: 'audit trail logs activity history'
+    },
+
+    // ── Partnership Records (sample — replace with real DB later) ─
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'Osaka University', sub: 'MOA · Japan · Active',
+      url: '/registry', keywords: 'osaka university japan moa active asia'
+    },
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'Seoul National University', sub: 'MOU · South Korea · Active',
+      url: '/registry', keywords: 'seoul national university south korea mou active asia'
+    },
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'De La Salle University', sub: 'MOA · Philippines · Active',
+      url: '/registry', keywords: 'de la salle dlsu philippines moa active local'
+    },
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'University of Melbourne', sub: 'MOU · Australia · Expiring Soon',
+      url: '/registry', keywords: 'melbourne australia mou expiring soon oceania'
+    },
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'MIT', sub: 'MOA · United States · Active',
+      url: '/registry', keywords: 'mit massachusetts institute technology usa moa active americas'
+    },
+    {
+      type: 'record', icon: 'fa-handshake', iconBg: '#fef3c7', iconColor: '#b45309',
+      title: 'Ateneo de Manila University', sub: 'MOA · Philippines · Active',
+      url: '/registry', keywords: 'ateneo manila philippines moa active local'
+    },
+
+    // ── Reports ─────────────────────────────────────────────────
+    {
+      type: 'report', icon: 'fa-file-lines', iconBg: '#f3e8ff', iconColor: '#7c3aed',
+      title: 'Active Partnerships Report', sub: 'All currently active agreements',
+      url: '/reports', keywords: 'active report list'
+    },
+    {
+      type: 'report', icon: 'fa-file-lines', iconBg: '#f3e8ff', iconColor: '#7c3aed',
+      title: 'Expired Partnerships Report', sub: 'All expired agreements',
+      url: '/reports', keywords: 'expired report list'
+    },
+    {
+      type: 'report', icon: 'fa-file-lines', iconBg: '#f3e8ff', iconColor: '#7c3aed',
+      title: 'Expiring Soon Report', sub: 'Agreements expiring within 90 days',
+      url: '/reports', keywords: 'expiring soon report 90 days'
+    },
+    {
+      type: 'report', icon: 'fa-file-lines', iconBg: '#f3e8ff', iconColor: '#7c3aed',
+      title: 'Mid-Year Output Report', sub: 'Summary for the first half of the year',
+      url: '/reports', keywords: 'mid year midyear output report summary'
+    },
+    {
+      type: 'report', icon: 'fa-file-lines', iconBg: '#f3e8ff', iconColor: '#7c3aed',
+      title: 'Yearly Output Report', sub: 'Annual partnership summary',
+      url: '/reports', keywords: 'yearly annual output report summary'
+    },
+  ];
+
+  const TYPE_LABEL = { page: 'Pages', action: 'Quick Actions', record: 'Partnerships', report: 'Reports' };
+  const TYPE_TAG = { page: 'tag-page', action: 'tag-action', record: 'tag-record', report: 'tag-report' };
+  const TYPE_ORDER = ['page', 'action', 'record', 'report'];
+
+  let gsIndex = -1;
+  let gsFlatList = [];
+
+  function openPalette() {
+    document.getElementById('gs-overlay').classList.add('open');
+    const inp = document.getElementById('gs-input');
+    inp.value = '';
+    paletteSearch('');
+    setTimeout(() => inp.focus(), 50);
+  }
+  function closePalette() {
+    document.getElementById('gs-overlay').classList.remove('open');
+    gsIndex = -1;
+  }
+  function closePaletteOnOverlay(e) {
+    if (e.target === document.getElementById('gs-overlay')) closePalette();
+  }
+
+  function paletteSearch(q) {
+    const lower = q.toLowerCase().trim();
+    const box = document.getElementById('gs-results');
+    gsFlatList = [];
+    gsIndex = -1;
+
+    // Filter
+    let filtered = lower
+      ? GS_INDEX.filter(item =>
+        item.title.toLowerCase().includes(lower) ||
+        item.sub.toLowerCase().includes(lower) ||
+        item.keywords.toLowerCase().includes(lower))
+      : GS_INDEX.filter(item => item.type === 'page' || item.type === 'action');
+
+    if (!filtered.length) {
+      box.innerHTML = `<div class="gs-empty">
+      <i class="fa-solid fa-face-thinking"></i>
+      No results for <strong>"${escHtml(q)}"</strong><br>
+      <span style="font-size:12px;color:#cbd5e1;">Try searching a page, country, or institution name</span>
+    </div>`;
+      return;
+    }
+
+    // Group
+    let html = '';
+    TYPE_ORDER.forEach(type => {
+      const group = filtered.filter(i => i.type === type);
+      if (!group.length) return;
+      html += `<div class="gs-group-label">${TYPE_LABEL[type]}</div>`;
+      group.forEach(item => {
+        const idx = gsFlatList.length;
+        gsFlatList.push(item);
+        html += `
+        <div class="gs-item" id="gs-item-${idx}" tabindex="-1"
+             onclick="paletteGo(${idx})"
+             onmouseenter="paletteHighlight(${idx})">
+          <div class="gs-icon-wrap" style="background:${item.iconBg};color:${item.iconColor}">
+            <i class="fa-solid ${item.icon}"></i>
+          </div>
+          <div class="gs-item-text">
+            <div class="gs-item-title">${highlight(item.title, lower)}</div>
+            <div class="gs-item-sub">${item.sub}</div>
+          </div>
+          <span class="gs-item-tag ${TYPE_TAG[item.type]}">${TYPE_LABEL[item.type].slice(0, -1)}</span>
+        </div>`;
+      });
+    });
+
+    box.innerHTML = html;
+  }
+
+  function highlight(text, q) {
+    if (!q) return escHtml(text);
+    const i = text.toLowerCase().indexOf(q);
+    if (i === -1) return escHtml(text);
+    return escHtml(text.slice(0, i))
+      + `<mark style="background:#bfdbfe;color:#1e3a8a;border-radius:3px;padding:0 1px">${escHtml(text.slice(i, i + q.length))}</mark>`
+      + escHtml(text.slice(i + q.length));
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function paletteHighlight(idx) {
+    gsIndex = idx;
+    document.querySelectorAll('.gs-item').forEach((el, i) =>
+      el.classList.toggle('selected', i === idx));
+  }
+
+  function paletteKeyNav(e) {
+    const total = gsFlatList.length;
+    if (!total) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      gsIndex = (gsIndex + 1) % total;
+      paletteHighlight(gsIndex);
+      document.getElementById(`gs-item-${gsIndex}`)?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      gsIndex = (gsIndex - 1 + total) % total;
+      paletteHighlight(gsIndex);
+      document.getElementById(`gs-item-${gsIndex}`)?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      if (gsIndex >= 0) paletteGo(gsIndex);
+      else if (gsFlatList.length) paletteGo(0);
+    } else if (e.key === 'Escape') {
+      closePalette();
+    }
+  }
+
+  function paletteGo(idx) {
+    const item = gsFlatList[idx];
+    if (!item) return;
+    closePalette();
+    if (item.action === 'openAddModal' && typeof openModal === 'function') {
+      // navigate to registry first if needed, then open modal
+      if (!window.location.pathname.includes('registry')) {
+        window.location.href = item.url;
+      } else {
+        openModal('add-modal');
+      }
+    } else {
+      window.location.href = item.url;
+    }
+  }
+
+  // ── Keyboard shortcut: Ctrl+K or / ────────────────────────────
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openPalette();
+    }
+    // Press / to open (when not in an input)
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      openPalette();
+    }
+  });
+</script>

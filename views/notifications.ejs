@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications — CIPRMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #eef2f9;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top header ─────────────────────────────────── */
+    .top-header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px 0 18px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .header-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── Layout shell ────────────────────────────────── */
+    .layout {
+      display: flex;
+      margin-top: 64px;
+      height: calc(100vh - 64px);
+    }
+
+    /* ── Sidebar ─────────────────────────────────────── */
+    .sidebar {
+      width: 62px;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0 14px;
+      position: fixed;
+      left: 0;
+      top: 64px;
+      bottom: 0;
+      z-index: 50;
+    }
+
+    .sidebar-top-icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sidebar-icon {
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #64748b;
+      font-size: 17px;
+      transition: all .2s;
+      text-decoration: none;
+    }
+
+    .sidebar-icon:hover {
+      background: #f1f5f9;
+      color: #1e3a5f;
+    }
+
+    .sidebar-icon.active {
+      background: #e8f0fe;
+      color: #1e3a8a;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Main content ────────────────────────────────── */
+    .main-content {
+      margin-left: 62px;
+      flex: 1;
+      padding: 24px 28px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-height: 0;
+    }
+
+    /* ── Page header ──────────────────────────────── */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .page-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0d1b3e;
+    }
+
+    .page-sub {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    /* ── Filter / action bar ──────────────────────── */
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .pill-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 5px 13px;
+      border-radius: 20px;
+      border: 1.5px solid #d8e2f0;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .pill:hover {
+      border-color: #93c5fd;
+      color: #1e3a8a;
+    }
+
+    .pill.active {
+      background: #1e3a8a;
+      color: #fff;
+      border-color: #1e3a8a;
+    }
+
+    .mark-all-btn {
+      margin-left: auto;
+      padding: 6px 14px;
+      background: none;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .mark-all-btn:hover {
+      border-color: #1e3a8a;
+      color: #1e3a8a;
+    }
+
+    /* ── Info strip (summary + config) ─────────────── */
+    .info-strip {
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .info-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 14px 18px;
+    }
+
+    .info-card.summary {
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .info-card.config {
+      flex: 1;
+      min-width: 280px;
+    }
+
+    .info-card-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 10px;
+    }
+
+    /* summary stats row */
+    .sum-stats {
+      display: flex;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+
+    .sum-stat {
+      flex: 1;
+      min-width: 80px;
+      padding: 6px 10px 6px 0;
+    }
+
+    .sum-stat:last-child {
+      border-right: none;
+    }
+
+    .sum-stat-val {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .sum-stat-label {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    /* config form */
+    .cfg-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .cfg-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      margin-bottom: 4px;
+    }
+
+    .cfg-select {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      background: #f8faff;
+      outline: none;
+    }
+
+    .save-btn {
+      padding: 7px 18px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      align-self: flex-end;
+    }
+
+    /* ── Stacked filter bar ──────────────────────── */
+    .filter-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+
+    .filter-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      width: 60px;
+      flex-shrink: 0;
+    }
+
+    .pill-group {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1.5px solid #d8e2f0;
+      background: #f8faff;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    .pill:hover {
+      border-color: #93c5fd;
+      color: #1e3a8a;
+    }
+
+    .pill.active {
+      background: #1e3a8a;
+      color: #fff;
+      border-color: #1e3a8a;
+    }
+
+    /* ── Feed ────────────────────────────────────── */
+    .notif-main {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      min-height: 0;
+      flex: 1;
+      padding-bottom: 12px;
+    }
+
+    .notif-group-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 0 2px;
+    }
+
+    .notif-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      overflow: visible;
+    }
+
+    .notif-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      transition: background .12s;
+      position: relative;
+      min-height: 64px;
+    }
+
+    .notif-item:last-child {
+      border-bottom: none;
+    }
+
+    .notif-item:hover {
+      background: #f8faff;
+    }
+
+    .notif-item.unread {
+      border-left: 3px solid #1e3a8a;
+      padding-left: 17px;
+    }
+
+    .ni-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .ni-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .ni-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0d1b3e;
+      margin-bottom: 3px;
+    }
+
+    .ni-desc {
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.55;
+    }
+
+    .ni-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-top: 7px;
+      flex-wrap: wrap;
+    }
+
+    .ni-tag {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 10px;
+    }
+
+    .ni-time {
+      font-size: 10.5px;
+      color: #94a3b8;
+    }
+
+    .ni-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #1e3a8a;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    .tag-lifecycle {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .tag-calendar {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .tag-requests {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+
+    .tag-registry {
+      background: #f3e8ff;
+      color: #7e22ce;
+    }
+
+    .tag-dashboard {
+      background: #fce7f3;
+      color: #9d174d;
+    }
+
+    .icon-lifecycle {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .icon-calendar {
+      background: #dcfce7;
+      color: #15803d;
+    }
+
+    .icon-requests {
+      background: #fef9c3;
+      color: #854d0e;
+    }
+
+    .icon-registry {
+      background: #f3e8ff;
+      color: #7e22ce;
+    }
+
+    .icon-dashboard {
+      background: #fce7f3;
+      color: #9d174d;
+    }
+
+    .icon-alert {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+  </style>
+</head>
+
+<body>
+
+  <%- include('partials/header') %>
+    <div class="layout">
+      <%- include('partials/sidebar') %>
+        <main class="main-content">
+
+          <!-- Header -->
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Notifications</h1>
+              <p class="page-sub">All system alerts and updates across every module</p>
+            </div>
+            <button class="mark-all-btn" onclick="markAllRead()">Mark all
+              read</button>
+          </div>
+
+          <!-- Info strip: Summary + Alert Config -->
+          <div class="info-strip">
+            <div class="info-card summary">
+              <div class="info-card-title">Summary</div>
+              <div class="sum-stats">
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#0d1b3e;" id="s-total">18</div>
+                  <div class="sum-stat-label">Total</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#1e3a8a;" id="s-unread">7</div>
+                  <div class="sum-stat-label">Unread</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#1e40af;">6</div>
+                  <div class="sum-stat-label">Lifecycle</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#15803d;">4</div>
+                  <div class="sum-stat-label">Calendar</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#854d0e;">5</div>
+                  <div class="sum-stat-label">Requests</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#7e22ce;">2</div>
+                  <div class="sum-stat-label">Registry</div>
+                </div>
+                <div class="sum-stat">
+                  <div class="sum-stat-val" style="color:#9d174d;">1</div>
+                  <div class="sum-stat-label">Dashboard</div>
+                </div>
+              </div>
+            </div>
+            <div class="info-card config">
+              <div class="info-card-title"><i class="fa-solid fa-gear" style="color:#94a3b8;"></i> Alert Config</div>
+              <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                <div class="cfg-row" style="flex:1;min-width:120px;">
+                  <div class="cfg-label">Notify when expiring in</div><select class="cfg-select">
+                    <option>30 days</option>
+                    <option>60 days</option>
+                    <option selected>90 days</option>
+                  </select>
+                </div>
+                <div class="cfg-row" style="flex:1;min-width:120px;">
+                  <div class="cfg-label">Channel</div><select class="cfg-select">
+                    <option selected>Email + In-App</option>
+                    <option>Email Only</option>
+                    <option>In-App Only</option>
+                  </select>
+                </div>
+                <div class="cfg-row" style="flex:1;min-width:120px;">
+                  <div class="cfg-label">Frequency</div><select class="cfg-select">
+                    <option>Once</option>
+                    <option selected>Weekly until renewed</option>
+                    <option>Daily (last 7 days)</option>
+                  </select>
+                </div>
+                <button class="save-btn">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stacked filter bar -->
+          <div class="filter-stack">
+            <div class="filter-row">
+              <span class="filter-label">Module</span>
+              <div class="pill-group" id="pills-module">
+                <button class="pill active" onclick="setPill('module','all',this)">All</button>
+                <button class="pill" onclick="setPill('module','lifecycle',this)"><i class="fa-solid fa-rotate"></i>
+                  Lifecycle</button>
+                <button class="pill" onclick="setPill('module','calendar',this)"><i
+                    class="fa-regular fa-calendar-days"></i> Calendar</button>
+                <button class="pill" onclick="setPill('module','requests',this)"><i class="fa-solid fa-briefcase"></i>
+                  Requests</button>
+                <button class="pill" onclick="setPill('module','registry',this)"><i
+                    class="fa-regular fa-file-lines"></i> Registry</button>
+                <button class="pill" onclick="setPill('module','dashboard',this)"><i class="fa-solid fa-house"></i>
+                  Dashboard</button>
+              </div>
+            </div>
+            <div class="filter-row">
+              <span class="filter-label">Status</span>
+              <div class="pill-group" id="pills-read">
+                <button class="pill active" onclick="setPill('read','all',this)">All</button>
+                <button class="pill" onclick="setPill('read','unread',this)">Unread</button>
+                <button class="pill" onclick="setPill('read','read',this)">Read</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notification feed (full width) -->
+          <div class="notif-main" id="notif-feed"></div>
+
+        </main>
+    </div>
+
+    <script>
+      const allNotifs = [
+        // ── Lifecycle ──────────────────────────────────────────────
+        { id: 1, module: 'lifecycle', unread: true, icon: 'fa-solid fa-triangle-exclamation', iconClass: 'icon-alert', title: 'Critical: MOA Expiring Soon', desc: 'Ateneo de Manila University MOA expires in 12 days. Immediate renewal action required.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Today, 8:00 AM' },
+        { id: 2, module: 'lifecycle', unread: true, icon: 'fa-solid fa-clock', iconClass: 'icon-lifecycle', title: 'Expiry Reminder: Osaka University', desc: 'MOU with Osaka University is expiring in 21 days. Please initiate renewal process.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Today, 8:00 AM' },
+        { id: 3, module: 'lifecycle', unread: true, icon: 'fa-solid fa-clock', iconClass: 'icon-lifecycle', title: 'Expiry Reminder: Hiroshima University', desc: 'MOA with Hiroshima University is expiring in 38 days.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Mar 13, 2026' },
+        { id: 4, module: 'lifecycle', unread: false, icon: 'fa-solid fa-rotate', iconClass: 'icon-lifecycle', title: 'Agreement Expired: TESDA Region V', desc: 'MOA with TESDA Region V has expired as of Jan 1, 2025. Please process renewal or archive.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Jan 1, 2025' },
+        { id: 5, module: 'lifecycle', unread: false, icon: 'fa-solid fa-rotate', iconClass: 'icon-lifecycle', title: 'Agreement Expired: NTU Singapore', desc: 'MOU with NTU Singapore has expired as of Aug 10, 2025.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Aug 10, 2025' },
+        { id: 6, module: 'lifecycle', unread: false, icon: 'fa-solid fa-check-circle', iconClass: 'icon-lifecycle', title: 'Agreement Renewed: Chonnam National', desc: 'MOU with Chonnam National University has been successfully renewed for another 5 years.', tag: 'Lifecycle', tagClass: 'tag-lifecycle', time: 'Mar 30, 2022' },
+        // ── Calendar ──────────────────────────────────────────────
+        { id: 7, module: 'calendar', unread: true, icon: 'fa-regular fa-calendar-days', iconClass: 'icon-calendar', title: 'Upcoming: ASEAN Partnership Summit', desc: 'ASEAN Partnership Summit scheduled on Mar 20, 2026. Calendar event added.', tag: 'Calendar', tagClass: 'tag-calendar', time: 'Today, 9:15 AM' },
+        { id: 8, module: 'calendar', unread: true, icon: 'fa-regular fa-calendar-days', iconClass: 'icon-calendar', title: 'Event Reminder: MOA Signing Ceremony', desc: 'MOA Signing Ceremony with Bulacan State University is in 2 days.', tag: 'Calendar', tagClass: 'tag-calendar', time: 'Mar 12, 2026' },
+        { id: 9, module: 'calendar', unread: false, icon: 'fa-solid fa-calendar-check', iconClass: 'icon-calendar', title: 'Event Completed: Joint Research Forum', desc: 'Joint Research Forum with Kyoto University was completed successfully on Mar 5, 2026.', tag: 'Calendar', tagClass: 'tag-calendar', time: 'Mar 5, 2026' },
+        { id: 10, module: 'calendar', unread: false, icon: 'fa-solid fa-calendar-xmark', iconClass: 'icon-calendar', title: 'Event Cancelled: Virtual Symposium', desc: 'Virtual Symposium scheduled for Feb 28 was cancelled. Please reschedule.', tag: 'Calendar', tagClass: 'tag-calendar', time: 'Feb 28, 2026' },
+        // ── Requests ──────────────────────────────────────────────
+        { id: 11, module: 'requests', unread: true, icon: 'fa-solid fa-briefcase', iconClass: 'icon-requests', title: 'New Request: REQ-2026-011', desc: 'Dr. Santos submitted a new partnership request for review. Awaiting admin approval.', tag: 'Requests', tagClass: 'tag-requests', time: 'Mar 8, 2026' },
+        { id: 12, module: 'requests', unread: false, icon: 'fa-solid fa-circle-check', iconClass: 'icon-requests', title: 'Approved: REQ-2026-009', desc: 'Partnership request REQ-2026-009 has been approved by Admin Rivera.', tag: 'Requests', tagClass: 'tag-requests', time: 'Mar 2, 2026' },
+        { id: 13, module: 'requests', unread: false, icon: 'fa-solid fa-circle-xmark', iconClass: 'icon-requests', title: 'Declined: REQ-2026-007', desc: 'Partnership request REQ-2026-007 was declined due to incomplete documentation.', tag: 'Requests', tagClass: 'tag-requests', time: 'Feb 20, 2026' },
+        { id: 14, module: 'requests', unread: false, icon: 'fa-solid fa-hourglass-half', iconClass: 'icon-requests', title: 'Pending Review: REQ-2026-012', desc: 'REQ-2026-012 from DOST Region V is pending admin review.', tag: 'Requests', tagClass: 'tag-requests', time: 'Mar 13, 2026' },
+        { id: 15, module: 'requests', unread: false, icon: 'fa-solid fa-briefcase', iconClass: 'icon-requests', title: 'Resubmitted: REQ-2026-005', desc: 'REQ-2026-005 has been resubmitted with complete documents.', tag: 'Requests', tagClass: 'tag-requests', time: 'Jan 30, 2026' },
+        // ── Registry ──────────────────────────────────────────────
+        { id: 16, module: 'registry', unread: false, icon: 'fa-regular fa-file-lines', iconClass: 'icon-registry', title: 'Document Uploaded: UST MOA', desc: 'Signed MOA document for University of Santo Tomas has been uploaded to the registry.', tag: 'Registry', tagClass: 'tag-registry', time: 'Dec 16, 2021' },
+        { id: 17, module: 'registry', unread: false, icon: 'fa-solid fa-file-circle-check', iconClass: 'icon-registry', title: 'Document Verified: DLSU Agreement', desc: 'De La Salle University agreement documents have been verified and archived.', tag: 'Registry', tagClass: 'tag-registry', time: 'Feb 2, 2023' },
+        // ── Dashboard ─────────────────────────────────────────────
+        { id: 18, module: 'dashboard', unread: false, icon: 'fa-solid fa-chart-bar', iconClass: 'icon-dashboard', title: 'Monthly Report Generated', desc: 'March 2026 partnership activity report has been generated and is ready for download.', tag: 'Dashboard', tagClass: 'tag-dashboard', time: 'Mar 1, 2026' },
+      ];
+
+      let activeModule = 'all', activeRead = 'all';
+
+      function setPill(type, val, btn) {
+        const grp = document.getElementById('pills-' + type);
+        grp.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        if (type === 'module') activeModule = val;
+        else activeRead = val;
+        render();
+      }
+
+      function markAllRead() {
+        allNotifs.forEach(n => n.unread = false);
+        document.getElementById('s-unread').textContent = '0';
+        render();
+        // also clear sidebar badge
+        const badge = document.getElementById('notif-badge');
+        if (badge) badge.style.display = 'none';
+      }
+
+      function render() {
+        const filtered = allNotifs.filter(n => {
+          const modOk = activeModule === 'all' || n.module === activeModule;
+          const readOk = activeRead === 'all' || (activeRead === 'unread' ? n.unread : !n.unread);
+          return modOk && readOk;
+        });
+
+        const feed = document.getElementById('notif-feed');
+        if (filtered.length === 0) {
+          feed.innerHTML = `<div style="text-align:center;color:#94a3b8;padding:48px 0;font-size:14px;">
+          <i class="fa-regular fa-bell-slash" style="font-size:36px;display:block;margin-bottom:12px;"></i>No notifications found.</div>`;
+          return;
+        }
+
+        // Group by date label
+        const groups = {};
+        filtered.forEach(n => {
+          const g = n.time.startsWith('Today') ? 'Today' : n.time.match(/^(Mar|Feb|Jan|Aug)\s+\d+,\s+\d+/) ? n.time.replace(/,.*/, ' 2026').slice(0, 12).trim() : n.time;
+          const key = n.time.startsWith('Today') ? 'Today' : n.time;
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(n);
+        });
+
+        feed.innerHTML = Object.entries(groups).map(([date, items]) => `
+        <div class="notif-group-label">${date}</div>
+        <div class="notif-card">
+          ${items.map(n => `
+            <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="markRead(${n.id})">
+              <div class="ni-icon ${n.iconClass}"><i class="${n.icon}"></i></div>
+              <div class="ni-body">
+                <div class="ni-title">${n.title}</div>
+                <div class="ni-desc">${n.desc}</div>
+                <div class="ni-meta">
+                  <span class="ni-tag ${n.tagClass}">${n.tag}</span>
+                  <span class="ni-time"><i class="fa-regular fa-clock"></i> ${n.time}</span>
+                </div>
+              </div>
+              ${n.unread ? '<div class="ni-dot"></div>' : ''}
+            </div>`).join('')}
+        </div>
+      `).join('');
+      }
+
+      function markRead(id) {
+        const n = allNotifs.find(x => x.id === id);
+        if (n && n.unread) {
+          n.unread = false;
+          const unreadCount = allNotifs.filter(x => x.unread).length;
+          document.getElementById('s-unread').textContent = unreadCount;
+          if (unreadCount === 0) {
+            const badge = document.getElementById('notif-badge');
+            if (badge) badge.style.display = 'none';
+          }
+          render();
+        }
+      }
+
+      render();
+    </script>
+</body>
+
+</html>

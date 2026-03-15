@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management — CIPRMS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: #eef2f9; color: #1a1a2e; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    .top-header { background: #fff; border-bottom: 1px solid #e2e8f0; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px 0 18px; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
+    .header-title { font-size: 19px; font-weight: 700; color: #0d1b3e; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+
+    .layout { display: flex; margin-top: 64px; height: calc(100vh - 64px); }
+    .sidebar { width: 62px; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; align-items: center; padding: 16px 0 14px; position: fixed; left: 0; top: 64px; bottom: 0; z-index: 50; }
+    .sidebar-top-icons { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+    .sidebar-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; color: #64748b; font-size: 17px; transition: all .2s; text-decoration: none; }
+    .sidebar-icon:hover { background: #f1f5f9; color: #1e3a5f; }
+    .sidebar-icon.active { background: #e8f0fe; color: #1e3a8a; }
+    .sidebar-bottom { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+    .main-content { margin-left: 62px; flex: 1; padding: 20px 22px 20px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+    /* Stats */
+    .stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .stat-card { background: #fff; border: 1.5px solid #d8e2f0; border-radius: 12px; padding: 14px 16px; }
+
+    /* Add button */
+    .add-user-btn { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .add-user-btn:hover { background: #1e40af; }
+
+    /* Tables */
+    .table-card { background: #fff; border: 1.5px solid #d8e2f0; border-radius: 12px; overflow: hidden; }
+    .tc-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px 10px; border-bottom: 1px solid #e2e8f0; }
+    .tc-title { font-size: 15px; font-weight: 700; color: #0d1b3e; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f8faff; }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+    td { padding: 11px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tbody tr:hover { background: #f8faff; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* Action buttons */
+    .act-btn  { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid; transition: all .15s; }
+    .act-edit { background: transparent; color: #1e3a8a; border-color: #1e3a8a; }
+    .act-edit:hover { background: #e8f0fe; }
+    .act-deact { background: transparent; color: #b91c1c; border-color: #b91c1c; }
+    .act-deact:hover { background: #fee2e2; }
+    .act-reactivate { background: transparent; color: #15803d; border-color: #15803d; }
+    .act-reactivate:hover { background: #dcfce7; }
+
+    /* RBAC */
+    .perm-yes { color: #15803d; font-weight: 800; }
+    .perm-no  { color: #cbd5e1; }
+
+    /* Users table scroll */
+    .users-scroll { overflow-y: auto; max-height: 260px; }
+    .users-scroll thead th { position: sticky; top: 0; background: #f8faff; z-index: 1; }
+
+    /* RBAC fills remaining space */
+    .bottom-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 20px; }
+    .bottom-card .rbac-scroll { flex: 1; overflow-y: auto; }
+    .bottom-card thead th { position: sticky; top: 0; background: #f8faff; z-index: 1; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 16px; width: 480px; max-width: 95vw; box-shadow: 0 12px 40px rgba(0,0,0,.2); overflow: hidden; }
+    .m-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid #e2e8f0; }
+    .m-title { font-size: 16px; font-weight: 700; color: #0d1b3e; }
+    .m-close { background: none; border: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
+    .m-close:hover { color: #1e293b; }
+    .m-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+    .m-actions { padding: 12px 20px 18px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid #f1f5f9; }
+    .m-btn { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px; }
+    .m-btn.primary { background: #1e3a8a; color: #fff; }
+    .m-btn.primary:hover { background: #1e40af; }
+    .m-btn.secondary { background: #f1f5f9; color: #64748b; }
+    .m-btn.secondary:hover { background: #e2e8f0; }
+
+    /* Form */
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-label { font-size: 12px; font-weight: 600; color: #475569; }
+    .form-input, .form-select { padding: 8px 12px; border: 1.5px solid #d8e2f0; border-radius: 8px; font-size: 13px; font-family: inherit; color: #1e293b; outline: none; transition: border .15s; }
+    .form-input:focus, .form-select:focus { border-color: #1e3a8a; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Toast */
+    #usr-toast { position: fixed; bottom: 28px; right: 28px; z-index: 9999; padding: 12px 20px; border-radius: 10px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.18); opacity: 0; transition: opacity .3s; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+<%- include('partials/header') %>
+<div class="layout">
+  <%- include('partials/sidebar') %>
+  <main class="main-content">
+
+    <!-- Page header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <h1 style="font-size:22px;font-weight:800;color:#0d1b3e;">
+          <i class="fa-solid fa-users" style="color:#1e3a8a;margin-right:8px;"></i>User Management
+        </h1>
+        <p style="font-size:13px;color:#64748b;margin-top:2px;">Manage system users, roles, and access permissions</p>
+      </div>
+      <button class="add-user-btn" onclick="openAddUser()"><i class="fa-solid fa-plus"></i> Add User</button>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div style="font-size:20px;color:#1e3a8a;margin-bottom:6px;"><i class="fa-solid fa-users"></i></div>
+        <div id="stat-total" style="font-size:26px;font-weight:800;color:#0d1b3e;">0</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:20px;color:#1e40af;margin-bottom:6px;"><i class="fa-solid fa-shield-halved"></i></div>
+        <div id="stat-admin" style="font-size:26px;font-weight:800;color:#1e40af;">0</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">Administrators</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:20px;color:#d97706;margin-bottom:6px;"><i class="fa-solid fa-user-tie"></i></div>
+        <div id="stat-staff" style="font-size:26px;font-weight:800;color:#d97706;">0</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">Auth. Personnel</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size:20px;color:#64748b;margin-bottom:6px;"><i class="fa-regular fa-eye"></i></div>
+        <div id="stat-view" style="font-size:26px;font-weight:800;color:#64748b;">0</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px;">View-Only</div>
+      </div>
+    </div>
+
+    <!-- System Users table -->
+    <div class="table-card">
+      <div class="tc-header">
+        <span class="tc-title"><i class="fa-solid fa-id-badge" style="color:#1e3a8a;margin-right:6px;"></i>System Users</span>
+        <span id="usr-count" style="font-size:12px;color:#64748b;"></span>
+      </div>
+      <div class="users-scroll">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Role</th><th>Unit</th><th>Last Login</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="usr-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RBAC table -->
+    <div class="table-card bottom-card">
+      <div class="tc-header">
+        <span class="tc-title"><i class="fa-solid fa-lock" style="color:#1e3a8a;margin-right:6px;"></i>Role Permissions Matrix (RBAC)</span>
+      </div>
+      <div class="rbac-scroll">
+        <table>
+          <thead>
+            <tr><th>Permission</th><th>Administrator</th><th>Auth. Personnel</th><th>View-Only</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>View Partnerships</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td></tr>
+            <tr><td>Submit Partnership Request</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
+            <tr><td>Approve / Reject Requests</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
+            <tr><td>Add / Edit Records</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
+            <tr><td>Generate & Export Reports</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
+            <tr><td>Manage Users & Roles</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
+            <tr><td>View Audit Trail</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
+            <tr><td>Export Audit Log</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Add / Edit User Modal -->
+<div class="modal-overlay" id="usr-modal" onclick="closeUsrModal(event)">
+  <div class="modal-box">
+    <div class="m-header">
+      <span class="m-title" id="usr-modal-title">Add User</span>
+      <button class="m-close" onclick="document.getElementById('usr-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="m-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-input" id="u-name" placeholder="e.g. Dr. Santos">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" id="u-email" placeholder="user@cspc.edu.ph">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select class="form-select" id="u-role">
+            <option value="Administrator">Administrator</option>
+            <option value="Auth. Personnel" selected>Auth. Personnel</option>
+            <option value="View-Only">View-Only</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unit / Department</label>
+          <input type="text" class="form-input" id="u-unit" placeholder="e.g. CCS, CIRL, CETE">
+        </div>
+      </div>
+    </div>
+    <div class="m-actions">
+      <button class="m-btn secondary" onclick="document.getElementById('usr-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i> Cancel</button>
+      <button class="m-btn primary" onclick="saveUser()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="usr-toast"></div>
+
+<script>
+  // ── Data ────────────────────────────────────────────────────────────────────
+  let editingId = null;
+  const users = [
+    { id: 1, name: 'Admin Rivera',    email: 'rivera@cspc.edu.ph',    role: 'Administrator',  unit: 'CIRL',  login: 'Mar 11, 2026', status: 'Active'   },
+    { id: 2, name: 'Dr. Santos',      email: 'santos@cspc.edu.ph',    role: 'Auth. Personnel',unit: 'CCS',   login: 'Mar 10, 2026', status: 'Active'   },
+    { id: 3, name: 'Prof. Reyes',     email: 'reyes@cspc.edu.ph',     role: 'Auth. Personnel',unit: 'CETE',  login: 'Mar 9, 2026',  status: 'Active'   },
+    { id: 4, name: 'Engr. Cruz',      email: 'cruz@cspc.edu.ph',      role: 'View-Only',      unit: 'CAMS',  login: 'Mar 7, 2026',  status: 'Active'   },
+    { id: 5, name: 'Dr. Garcia',      email: 'garcia@cspc.edu.ph',    role: 'Auth. Personnel',unit: 'CNAS',  login: 'Mar 6, 2026',  status: 'Active'   },
+    { id: 6, name: 'Prof. Dela Cruz', email: 'delacruz@cspc.edu.ph',  role: 'Auth. Personnel',unit: 'CILS',  login: 'Mar 5, 2026',  status: 'Active'   },
+    { id: 7, name: 'Ms. Alcantara',   email: 'alcantara@cspc.edu.ph', role: 'Auth. Personnel',unit: 'CIRL',  login: 'Mar 3, 2026',  status: 'Active'   },
+    { id: 8, name: 'Engr. Mendoza',   email: 'mendoza@cspc.edu.ph',   role: 'View-Only',      unit: 'CCS',   login: 'Feb 28, 2026', status: 'Active'   },
+    { id: 9, name: 'Dr. Limbo',       email: 'limbo@cspc.edu.ph',     role: 'Auth. Personnel',unit: 'CETE',  login: 'Feb 25, 2026', status: 'Inactive' },
+    { id:10, name: 'Ms. Bautista',    email: 'bautista@cspc.edu.ph',  role: 'View-Only',      unit: 'CNAS',  login: 'Feb 20, 2026', status: 'Active'   },
+  ];
+  let nextId = 11;
+
+  // ── Colors ──────────────────────────────────────────────────────────────────
+  const roleColor  = { 'Administrator': '#1e40af', 'Auth. Personnel': '#92400e', 'View-Only': '#475569' };
+  const statusColor= { 'Active': '#15803d', 'Inactive': '#b91c1c' };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  function renderUsers() {
+    const counts = { total: users.length, admin: 0, staff: 0, view: 0 };
+    users.forEach(u => {
+      if (u.role === 'Administrator')   counts.admin++;
+      if (u.role === 'Auth. Personnel') counts.staff++;
+      if (u.role === 'View-Only')       counts.view++;
+    });
+    document.getElementById('stat-total').textContent = counts.total;
+    document.getElementById('stat-admin').textContent = counts.admin;
+    document.getElementById('stat-staff').textContent = counts.staff;
+    document.getElementById('stat-view').textContent  = counts.view;
+    document.getElementById('usr-count').textContent  = `${users.length} users`;
+
+    document.getElementById('usr-tbody').innerHTML = users.map(u => `
+      <tr>
+        <td style="font-weight:700;">${u.name}</td>
+        <td style="color:#64748b;">${u.email}</td>
+        <td style="font-weight:600;color:${roleColor[u.role]}">${u.role}</td>
+        <td>${u.unit}</td>
+        <td style="color:#64748b;">${u.login}</td>
+        <td style="font-weight:700;color:${statusColor[u.status]}">${u.status}</td>
+        <td>
+          <div style="display:flex;gap:6px;">
+            <button class="act-btn act-edit" onclick="openEditUser(${u.id})"><i class="fa-solid fa-pen"></i> Edit</button>
+            ${u.status === 'Active'
+              ? `<button class="act-btn act-deact" onclick="toggleStatus(${u.id})"><i class="fa-solid fa-ban"></i> Deactivate</button>`
+              : `<button class="act-btn act-reactivate" onclick="toggleStatus(${u.id})"><i class="fa-solid fa-rotate-right"></i> Reactivate</button>`
+            }
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  // ── Add User ────────────────────────────────────────────────────────────────
+  function openAddUser() {
+    editingId = null;
+    document.getElementById('usr-modal-title').innerHTML = '<i class="fa-solid fa-user-plus" style="color:#1e3a8a;margin-right:6px;"></i>Add User';
+    document.getElementById('u-name').value  = '';
+    document.getElementById('u-email').value = '';
+    document.getElementById('u-role').value  = 'Auth. Personnel';
+    document.getElementById('u-unit').value  = '';
+    document.getElementById('usr-modal').classList.add('open');
+  }
+
+  // ── Edit User ───────────────────────────────────────────────────────────────
+  function openEditUser(id) {
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+    editingId = id;
+    document.getElementById('usr-modal-title').innerHTML = `<i class="fa-solid fa-user-pen" style="color:#1e3a8a;margin-right:6px;"></i>Edit — ${u.name}`;
+    document.getElementById('u-name').value  = u.name;
+    document.getElementById('u-email').value = u.email;
+    document.getElementById('u-role').value  = u.role;
+    document.getElementById('u-unit').value  = u.unit;
+    document.getElementById('usr-modal').classList.add('open');
+  }
+
+  // ── Save (Add or Edit) ───────────────────────────────────────────────────────
+  function saveUser() {
+    const name  = document.getElementById('u-name').value.trim();
+    const email = document.getElementById('u-email').value.trim();
+    const role  = document.getElementById('u-role').value;
+    const unit  = document.getElementById('u-unit').value.trim();
+
+    // Basic validation
+    [document.getElementById('u-name'), document.getElementById('u-email'), document.getElementById('u-unit')]
+      .forEach(el => el.style.borderColor = el.value.trim() ? '#d8e2f0' : '#ef4444');
+    if (!name || !email || !unit) return;
+
+    if (editingId) {
+      // Edit existing
+      const u = users.find(x => x.id === editingId);
+      u.name = name; u.email = email; u.role = role; u.unit = unit;
+      showUsrToast(`<i class="fa-solid fa-circle-check"></i> ${name} updated successfully.`, '#1e3a8a');
+    } else {
+      // Add new
+      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      users.unshift({ id: nextId++, name, email, role, unit, login: 'Never', status: 'Active' });
+      showUsrToast(`<i class="fa-solid fa-circle-check"></i> ${name} added to the system.`, '#15803d');
+    }
+
+    document.getElementById('usr-modal').classList.remove('open');
+    renderUsers();
+  }
+
+  // ── Toggle Status ────────────────────────────────────────────────────────────
+  function toggleStatus(id) {
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+    u.status = u.status === 'Active' ? 'Inactive' : 'Active';
+    renderUsers();
+    const isNowActive = u.status === 'Active';
+    showUsrToast(
+      `<i class="fa-solid fa-${isNowActive ? 'rotate-right' : 'ban'}"></i> ${u.name} ${isNowActive ? 'reactivated' : 'deactivated'}.`,
+      isNowActive ? '#15803d' : '#b91c1c'
+    );
+  }
+
+  // ── Toast ────────────────────────────────────────────────────────────────────
+  function showUsrToast(msg, color = '#1e3a8a') {
+    const t = document.getElementById('usr-toast');
+    t.style.background = color;
+    t.style.opacity = '1';
+    t.innerHTML = msg;
+    clearTimeout(t._to);
+    t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+  }
+
+  // ── Modal close ──────────────────────────────────────────────────────────────
+  function closeUsrModal(e) {
+    if (e.target === document.getElementById('usr-modal'))
+      document.getElementById('usr-modal').classList.remove('open');
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('usr-modal').classList.remove('open');
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  renderUsers();
+</script>
+</body>
+</html>

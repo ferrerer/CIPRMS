@@ -1,0 +1,775 @@
+﻿ï»¿
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports & Analytics — CSPC-CIRL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #eef2f9;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px 0 18px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .header-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .layout {
+      display: flex;
+      margin-top: 64px;
+      height: calc(100vh - 64px);
+    }
+
+    .sidebar {
+      width: 62px;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0 14px;
+      position: fixed;
+      left: 0;
+      top: 64px;
+      bottom: 0;
+      z-index: 50;
+    }
+
+    .sidebar-top-icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sidebar-icon {
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #64748b;
+      font-size: 17px;
+      transition: all .2s;
+      text-decoration: none;
+    }
+
+    .sidebar-icon:hover {
+      background: #f1f5f9;
+      color: #1e3a5f;
+    }
+
+    .sidebar-icon.active {
+      background: #e8f0fe;
+      color: #1e3a8a;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #e2e8f0;
+      cursor: pointer;
+    }
+
+    .main-content {
+      margin-left: 62px;
+      flex: 1;
+      padding: 10px 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 5px;
+      width: fit-content;
+    }
+
+    .tab-btn {
+      padding: 7px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: #64748b;
+    }
+
+    .tab-btn.active {
+      background: #1e3a8a;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(30, 58, 138, .25);
+    }
+
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    /* Audit tab fills remaining height */
+    #content-audit.active {
+      flex: 1;
+      min-height: 0;
+    }
+
+    #content-audit .table-card {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 30px;
+    }
+
+    #content-audit .table-card thead th {
+      position: sticky;
+      top: 0;
+      background: #f8faff;
+      z-index: 1;
+    }
+
+    #content-audit .audit-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    .report-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .report-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .r-icon {
+      font-size: 32px;
+      flex-shrink: 0;
+    }
+
+    .r-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #0d1b3e;
+      margin-bottom: 5px;
+    }
+
+    .r-desc {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .r-btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-pdf {
+      padding: 7px 16px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-pdf:hover {
+      background: #1e40af;
+    }
+
+    .btn-xls {
+      padding: 7px 16px;
+      background: transparent;
+      color: #1e3a8a;
+      border: 1.5px solid #1e3a8a;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-xls:hover {
+      background: #e8f0fe;
+    }
+
+    .custom-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .custom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .f-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 5px;
+    }
+
+    .f-select,
+    .f-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      background: #f8faff;
+      outline: none;
+    }
+
+    .gen-btn {
+      padding: 9px 20px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .stat-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .add-user-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: #f8faff;
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #1e293b;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: #f8faff;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-admin {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-staff {
+      background: #fef9c3;
+      color: #854d0e;
+      border: 1px solid #fef08a;
+    }
+
+    .badge-view {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .act-btn {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid;
+      transition: all .15s;
+    }
+
+    .act-edit {
+      background: transparent;
+      color: #1e3a8a;
+      border-color: #1e3a8a;
+    }
+
+    .act-deact {
+      background: transparent;
+      color: #b91c1c;
+      border-color: #b91c1c;
+    }
+
+    .perm-yes {
+      color: #15803d;
+      font-weight: 800;
+    }
+
+    .perm-no {
+      color: #cbd5e1;
+    }
+
+    .table-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .tc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .tc-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+  </style>
+</head>
+
+<body>
+
+  <%- include('partials/header') %>
+    <div class="layout">
+      <%- include('partials/sidebar') %>
+        <main class="main-content">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <h1 style="font-size:22px;font-weight:800;color:#0d1b3e;">Reports & Analytics</h1>
+              <p style="font-size:13px;color:#64748b;margin-top:2px;">Generate institutional reports and manage system
+                access</p>
+            </div>
+            <div class="tab-bar">
+              <button class="tab-btn active" id="tab-rep" onclick="switchTab('rep')"><i
+                  class="fa-solid fa-chart-bar"></i> Reports</button>
+              <button class="tab-btn" id="tab-audit" onclick="switchTab('audit')"><i
+                  class="fa-solid fa-clock-rotate-left"></i> Audit Trail</button>
+            </div>
+          </div>
+
+          <!-- REPORTS -->
+          <div class="tab-content active" id="content-rep">
+            <div class="report-grid">
+              <div class="report-card">
+                <div class="r-icon" style="color:#1e3a8a;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Partnership Summary Report</div>
+                  <div class="r-desc">Complete overview of all active and inactive partnerships, categorized by type,
+                    region, and college unit.</div>
+                  <div class="r-btns"><button class="btn-pdf"><i class="fa-solid fa-file-pdf"></i> Export
+                      PDF</button><button class="btn-xls"><i class="fa-solid fa-table"></i> Export Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#d97706;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Expiring Agreements Report</div>
+                  <div class="r-desc">List of agreements expiring within a selected timeframe with renewal status and
+                    responsible units.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#d97706;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#d97706;border-color:#d97706;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#15803d;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Active Partnerships List</div>
+                  <div class="r-desc">Full list of currently active MOA/MOU agreements including responsible unit,
+                    coordinator, and expiry date.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#15803d;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#15803d;border-color:#15803d;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#b91c1c;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Expired Partnerships List</div>
+                  <div class="r-desc">All expired agreements with last known details and recommended renewal actions.
+                  </div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#b91c1c;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#b91c1c;border-color:#b91c1c;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#d97706;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Expiring Soon List</div>
+                  <div class="r-desc">Partnerships expiring within 90 days, prioritized for renewal. Ideal for CHED
+                    reporting and audit prep.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#d97706;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#d97706;border-color:#d97706;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#1a7fa8;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Mid-Year Output Report</div>
+                  <div class="r-desc">Summary of partnership activity for the first half of the academic year, including
+                    new, renewed, and expired agreements.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#1a7fa8;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#1a7fa8;border-color:#1a7fa8;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#6d28d9;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Yearly Output Report</div>
+                  <div class="r-desc">Annual summary of all partnership records for the full academic/calendar year.
+                    Suitable for CHED submission and board reporting.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#6d28d9;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#6d28d9;border-color:#6d28d9;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+              <div class="report-card">
+                <div class="r-icon" style="color:#15803d;"></div>
+                <div style="flex:1;">
+                  <div class="r-title">Compliance / Audit Report</div>
+                  <div class="r-desc">Structured report for accreditation bodies (QS Stars, AUN-QA, WURI) and regulatory
+                    audits.</div>
+                  <div class="r-btns"><button class="btn-pdf" style="background:#15803d;"><i
+                        class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn-xls"
+                      style="color:#15803d;border-color:#15803d;"><i class="fa-solid fa-table"></i> Export
+                      Excel</button></div>
+                </div>
+              </div>
+            </div>
+            <div class="custom-card">
+              <div style="font-size:15px;font-weight:700;color:#0d1b3e;margin-bottom:7px;"><i
+                  class="fa-solid fa-sliders"></i> Custom Report Builder</div>
+              <div class="custom-grid">
+                <div>
+                  <div class="f-label">Report Type</div><select class="f-select">
+                    <option>Summary</option>
+                    <option>Expiration</option>
+                    <option>Active List</option>
+                    <option>Expired List</option>
+                    <option>Expiring Soon</option>
+                    <option>Mid-Year</option>
+                    <option>Yearly</option>
+                    <option>Audit</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="f-label">Category</div><select class="f-select">
+                    <option>All</option>
+                    <option>International</option>
+                    <option>Local</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="f-label">Date From</div><input type="date" class="f-input">
+                </div>
+                <div>
+                  <div class="f-label">Date To</div><input type="date" class="f-input">
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+                <div>
+                  <div class="f-label">College/Unit</div><select class="f-select">
+                    <option>All Units</option>
+                    <option>CCS</option>
+                    <option>CILS</option>
+                    <option>CETE</option>
+                    <option>CNAS</option>
+                    <option>CAMS</option>
+                    <option>CIRL</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="f-label">Agreement Type</div><select class="f-select">
+                    <option>All</option>
+                    <option>MOA</option>
+                    <option>MOU</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="f-label">Region</div><select class="f-select">
+                    <option>All</option>
+                    <option>Asia</option>
+                    <option>Europe</option>
+                    <option>Americas</option>
+                    <option>Oceania</option>
+                    <option>Local</option>
+                  </select>
+                </div>
+                <div>
+                  <div class="f-label">Status</div><select class="f-select">
+                    <option>All</option>
+                    <option>Active</option>
+                    <option>Expiring Soon</option>
+                    <option>Expired</option>
+                  </select>
+                </div>
+              </div>
+              <button class="gen-btn"><i class="fa-solid fa-file-export"></i> Generate Report</button>
+            </div>
+          </div>
+
+          <!-- AUDIT TRAIL -->
+          <div class="tab-content" id="content-audit">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+              <div>
+                <div style="font-size:15px;font-weight:700;color:#0d1b3e;"><i class="fa-solid fa-clock-rotate-left"
+                    style="color:#1e3a8a;margin-right:6px;"></i>Activity / Audit Trail</div>
+                <div style="font-size:12px;color:#64748b;margin-top:2px;">All system actions logged for transparency and
+                  accountability</div>
+              </div>
+              <button class="btn-pdf" style="font-size:13px;"><i class="fa-solid fa-file-pdf"></i> Export Log
+                PDF</button>
+            </div>
+            <div class="table-card">
+              <div class="tc-header">
+                <span class="tc-title">Audit Log</span>
+                <span style="font-size:12px;color:#64748b;" id="audit-count">Showing 35 entries (Jan â Mar
+                  2026)</span>
+              </div>
+              <div class="audit-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Action</th>
+                      <th>Record / Details</th>
+                      <th>Performed By</th>
+                      <th>Role</th>
+                      <th>Created / Edited Date</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+    </div>
+
+    </main>
+    </div>
+    <script>
+      function switchTab(tab) {
+        ['rep', 'audit'].forEach(t => {
+          document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+          document.getElementById(`content-${t}`).classList.toggle('active', t === tab);
+        });
+      }
+
+      // Audit trail demo data
+      const auditLog = [
+        { action: 'ADD', record: 'Osaka University — MOU added to registry', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Mar 13, 2026 09:12 AM' },
+        { action: 'EDIT', record: 'Ateneo de Manila MOA — updated end date to Apr 12, 2027', by: 'Admin Rivera', role: 'Administrator', date: 'Mar 12, 2026 03:45 PM' },
+        { action: 'ADD', record: 'Kyoto University — MOA added to registry', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Mar 11, 2026 10:20 AM' },
+        { action: 'RENEW', record: 'TESDA Region V MOA — renewed; new end date Jan 1, 2030', by: 'Admin Rivera', role: 'Administrator', date: 'Mar 10, 2026 02:00 PM' },
+        { action: 'VIEW', record: 'NTU Singapore MOU — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Mar 9, 2026  11:05 AM' },
+        { action: 'EDIT', record: 'De La Salle MOA — updated coordinator to Dr. Santos', by: 'Admin Rivera', role: 'Administrator', date: 'Mar 8, 2026  08:30 AM' },
+        { action: 'ADD', record: 'Mapua University — MOA added to registry', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Mar 7, 2026  04:15 PM' },
+        { action: 'DELETE', record: 'Old PSRP MOU — obsolete record removed', by: 'Admin Rivera', role: 'Administrator', date: 'Mar 6, 2026  09:50 AM' },
+        { action: 'EDIT', record: 'Chonnam National Univ. MOU — updated remarks field', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Mar 5, 2026  01:40 PM' },
+        { action: 'ADD', record: 'University of Macau — MOA added to registry', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Mar 4, 2026  10:00 AM' },
+        { action: 'APPROVE', record: 'Partnership request from Bulacan State Univ. — approved', by: 'Admin Rivera', role: 'Administrator', date: 'Mar 3, 2026  02:30 PM' },
+        { action: 'EDIT', record: 'NUS Singapore MOA — updated document link (Google Drive)', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Mar 2, 2026  11:00 AM' },
+        { action: 'VIEW', record: 'University of Melbourne MOU — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Mar 1, 2026  09:15 AM' },
+        { action: 'RENEW', record: 'NTU Singapore MOU — renewed; new end date Aug 10, 2028', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 28, 2026 03:00 PM' },
+        { action: 'REJECT', record: 'Partnership request from Univ. of Cebu — rejected (incomplete docs)', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Feb 27, 2026 10:45 AM' },
+        { action: 'ADD', record: 'Hiroshima University — MOA added to registry', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Feb 26, 2026 01:20 PM' },
+        { action: 'EDIT', record: 'DOST Region V MOA — updated nature to Joint Research', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 25, 2026 08:55 AM' },
+        { action: 'VIEW', record: 'Chonnam National University MOU — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Feb 24, 2026 02:10 PM' },
+        { action: 'APPROVE', record: 'Partnership request from Hiroshima University — approved', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 23, 2026 11:30 AM' },
+        { action: 'EDIT', record: 'University of Santo Tomas MOA — changed unit from CCS to CILS', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Feb 22, 2026 03:40 PM' },
+        { action: 'RENEW', record: 'Ateneo de Manila MOA — renewal in progress; draft submitted', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Feb 21, 2026 10:00 AM' },
+        { action: 'DELETE', record: 'Duplicate MOU entry for Osaka University — removed', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 20, 2026 09:30 AM' },
+        { action: 'ADD', record: 'University of Cebu — MOU added to registry', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Feb 19, 2026 02:00 PM' },
+        { action: 'VIEW', record: 'TESDA Region V MOA — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Feb 18, 2026 11:20 AM' },
+        { action: 'EDIT', record: 'Kyoto University MOA — partner email updated', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Feb 17, 2026 01:00 PM' },
+        { action: 'APPROVE', record: 'Partnership request from Mapua University — approved', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 14, 2026 02:45 PM' },
+        { action: 'VIEW', record: 'De La Salle University MOA — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Feb 13, 2026 10:10 AM' },
+        { action: 'EDIT', record: 'Osaka University MOU — start date corrected to May 3, 2022', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 12, 2026 03:15 PM' },
+        { action: 'REJECT', record: 'Partnership request from Hanyang University — rejected (missing MOA template)', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Feb 11, 2026 09:00 AM' },
+        { action: 'ADD', record: 'Hanyang University — MOA added after resubmission', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Feb 10, 2026 11:45 AM' },
+        { action: 'RENEW', record: 'De La Salle University MOA — renewed; new end date Feb 2028', by: 'Admin Rivera', role: 'Administrator', date: 'Feb 7,  2026 02:00 PM' },
+        { action: 'VIEW', record: 'Kyoto University MOA — record viewed', by: 'Engr. Cruz', role: 'View-Only', date: 'Feb 5,  2026 09:50 AM' },
+        { action: 'EDIT', record: 'University of Melbourne MOU — updated region to Oceania', by: 'Dr. Santos', role: 'Auth. Personnel', date: 'Feb 3,  2026 01:30 PM' },
+        { action: 'ADD', record: 'AUN-QA Institutional Agreement — added to registry', by: 'Admin Rivera', role: 'Administrator', date: 'Jan 30, 2026 10:00 AM' },
+        { action: 'EDIT', record: 'DOST Region V MOA — remarks updated: renewal 2026 Q2', by: 'Prof. Reyes', role: 'Auth. Personnel', date: 'Jan 27, 2026 03:10 PM' },
+        { action: 'APPROVE', record: 'Partnership request from University of Cebu — approved', by: 'Admin Rivera', role: 'Administrator', date: 'Jan 24, 2026 11:00 AM' },
+      ];
+      const actionColors = { ADD: '#15803d', EDIT: '#1e3a8a', RENEW: '#d97706', VIEW: '#64748b', DELETE: '#b91c1c', APPROVE: '#0369a1', REJECT: '#9f1239' };
+      const actionBg = { ADD: '#dcfce7', EDIT: '#dbeafe', RENEW: '#fef3c7', VIEW: '#f1f5f9', DELETE: '#fee2e2', APPROVE: '#e0f2fe', REJECT: '#ffe4e6' };
+      const roleColors = { 'Administrator': '#1e40af', 'Auth. Personnel': '#92400e', 'View-Only': '#475569' };
+      function renderAudit() {
+        document.getElementById('audit-tbody').innerHTML = auditLog.map((a, i) => `
+    <tr>
+      <td style="color:#94a3b8;font-weight:600;">${i + 1}</td>
+      <td style="font-weight:800;font-size:12.5px;color:${actionColors[a.action]};">${a.action}</td>
+      <td style="font-size:12.5px;color:#1e293b;font-weight:500;">${a.record}</td>
+      <td style="font-weight:700;">${a.by}</td>
+      <td style="font-size:12.5px;font-weight:600;color:${roleColors[a.role] || '#475569'}">${a.role}</td>
+      <td style="font-size:12px;color:#64748b;">${a.date}</td>
+    </tr>`).join('');
+      }
+      renderAudit();
+    </script>
+</body>
+
+</html>

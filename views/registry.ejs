@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Partnership Registry — CSPC-CIRL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #eef2f9;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px 0 18px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .header-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .add-btn-hdr {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .add-btn-hdr:hover {
+      background: #1e40af;
+    }
+
+    .layout {
+      display: flex;
+      margin-top: 64px;
+      height: calc(100vh - 64px);
+    }
+
+    .sidebar {
+      width: 62px;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0 14px;
+      position: fixed;
+      left: 0;
+      top: 64px;
+      bottom: 0;
+      z-index: 50;
+    }
+
+    .sidebar-top-icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sidebar-icon {
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #64748b;
+      font-size: 17px;
+      transition: all .2s;
+      text-decoration: none;
+    }
+
+    .sidebar-icon:hover {
+      background: #f1f5f9;
+      color: #1e3a5f;
+    }
+
+    .sidebar-icon.active {
+      background: #e8f0fe;
+      color: #1e3a8a;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #e2e8f0;
+      cursor: pointer;
+    }
+
+    .main-content {
+      margin-left: 62px;
+      flex: 1;
+      padding: 20px 22px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    /* Stat mini-cards */
+    .stats-mini {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .sm-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .sm-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .sm-val {
+      font-size: 30px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    /* Filters */
+    .filter-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .filter-row {
+      display: grid;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    .filter-row-1 {
+      grid-template-columns: 1fr 130px 130px 130px 130px 130px auto;
+    }
+
+    .filter-row-2 {
+      grid-template-columns: 130px 130px auto;
+    }
+
+    .f-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 4px;
+    }
+
+    .f-input,
+    .f-select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      background: #f8faff;
+      outline: none;
+    }
+
+    .f-input:focus,
+    .f-select:focus {
+      border-color: #1e3a8a;
+    }
+
+    .f-btn {
+      padding: 9px 18px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .f-btn:hover {
+      background: #1e40af;
+    }
+
+    .f-btn-clear {
+      padding: 9px 14px;
+      background: transparent;
+      color: #64748b;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .f-btn-clear:hover {
+      background: #f1f5f9;
+    }
+
+    /* Table */
+    .table-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      overflow: hidden;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .table-scroll-wrap {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+      min-height: 0;
+    }
+
+    .table-scroll-wrap thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f8faff;
+    }
+
+    .tc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .tc-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+
+    .tc-count {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: #f8faff;
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #1e293b;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: #f8faff;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .badge-expiring {
+      background: #fef3c7;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .badge-expired {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .badge-intl {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-local {
+      background: #fef9c3;
+      color: #854d0e;
+      border: 1px solid #fef08a;
+    }
+
+    .act-btn {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid;
+      transition: all .15s;
+    }
+
+    .act-view {
+      background: #1e3a8a;
+      color: #fff;
+      border-color: #1e3a8a;
+    }
+
+    .act-view:hover {
+      background: #1e40af;
+    }
+
+    .act-edit {
+      background: transparent;
+      color: #1e3a8a;
+      border-color: #1e3a8a;
+    }
+
+    .act-edit:hover {
+      background: #e8f0fe;
+    }
+
+    .act-renew {
+      background: #15803d;
+      color: #fff;
+      border-color: #15803d;
+    }
+
+    .act-renew:hover {
+      background: #166534;
+    }
+
+    .pg-info {
+      font-size: 12px;
+      color: #64748b;
+      padding: 8px 20px;
+      border-top: 1px solid #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .45);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 16px;
+      width: 780px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .18);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px 14px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0d1b3e;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: #94a3b8;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+
+    .modal-close:hover {
+      color: #1e293b;
+    }
+
+    .modal-body {
+      padding: 20px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .form-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .form-label span {
+      color: #dc2626;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      padding: 9px 12px;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      background: #f8faff;
+      outline: none;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      border-color: #1e3a8a;
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 70px;
+    }
+
+    .form-section-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: #1e3a8a;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #e8f0fe;
+      margin-top: 4px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 14px 24px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .m-btn {
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+    }
+
+    .m-btn.primary {
+      background: #1e3a8a;
+      color: #fff;
+    }
+
+    .m-btn.primary:hover {
+      background: #1e40af;
+    }
+
+    .m-btn.secondary {
+      background: #f1f5f9;
+      color: #334155;
+      border: 1.5px solid #d8e2f0;
+    }
+
+    .m-btn.secondary:hover {
+      background: #e2e8f0;
+    }
+
+    /* View-detail modal */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .kv-item {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .kv-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+
+    .kv-val {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .kv-val a {
+      color: #1e3a8a;
+      word-break: break-all;
+    }
+
+    /* ── Institution Autocomplete ─────────────────────── */
+    .ac-wrapper {
+      position: relative;
+    }
+
+    .ac-spinner {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 13px;
+      color: #94a3b8;
+      display: none;
+      animation: ac-spin 1s linear infinite;
+    }
+
+    @keyframes ac-spin {
+      to {
+        transform: translateY(-50%) rotate(360deg);
+      }
+    }
+
+    .ac-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+      z-index: 1100;
+      max-height: 240px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .ac-dropdown.open {
+      display: block;
+    }
+
+    .ac-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 14px;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background .12s;
+    }
+
+    .ac-item:last-child {
+      border-bottom: none;
+    }
+
+    .ac-item:hover,
+    .ac-item.highlighted {
+      background: #eff6ff;
+    }
+
+    .ac-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+      flex: 1;
+    }
+
+    .ac-country {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      background: #f1f5f9;
+      border-radius: 20px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .ac-empty {
+      padding: 14px;
+      font-size: 13px;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    .ac-badge-api {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #3b82f6;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 20px;
+      padding: 2px 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <%- include('partials/header', {
+    headerAction: '<button class="add-btn-hdr" onclick="openAddModal()"><i class="fa-solid fa-plus"></i> Add Partnership</button>'
+    }) %>
+    <div class="layout">
+      <%- include('partials/sidebar') %>
+        <main class="main-content">
+          <div>
+            <h1 style="font-size:22px;font-weight:800;color:#0d1b3e;">Partnership Registry</h1>
+            <p style="font-size:13px;color:#64748b;margin-top:2px;">Centralized records of all institutional
+              partnerships (MOA/MOU)</p>
+          </div>
+
+          <!-- STAT MINI CARDS -->
+          <div class="stats-mini">
+            <div class="sm-card">
+              <div class="sm-label">Total</div>
+              <div class="sm-val" style="color:#0d1b3e;" id="cnt-total">0</div>
+            </div>
+            <div class="sm-card">
+              <div class="sm-label">Active</div>
+              <div class="sm-val" style="color:#15803d;" id="cnt-active">0</div>
+            </div>
+            <div class="sm-card">
+              <div class="sm-label">Expiring Soon</div>
+              <div class="sm-val" style="color:#d97706;" id="cnt-expiring">0</div>
+            </div>
+            <div class="sm-card">
+              <div class="sm-label">Expired</div>
+              <div class="sm-val" style="color:#b91c1c;" id="cnt-expired">0</div>
+            </div>
+          </div>
+
+          <!-- FILTERS -->
+          <div class="filter-card">
+            <div class="filter-row filter-row-1">
+              <div>
+                <div class="f-label">Search Institution</div>
+                <input class="f-input" id="reg-search" placeholder="Institution name or country…"
+                  oninput="applyFilter()">
+              </div>
+              <div>
+                <div class="f-label">Type</div>
+                <select class="f-select" id="reg-type" onchange="applyFilter()">
+                  <option value="">All</option>
+                  <option>MOA</option>
+                  <option>MOU</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">Category</div>
+                <select class="f-select" id="reg-cat" onchange="applyFilter()">
+                  <option value="">All</option>
+                  <option>International</option>
+                  <option>Local</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">Status</div>
+                <select class="f-select" id="reg-status" onchange="applyFilter()">
+                  <option value="">All</option>
+                  <option>Active</option>
+                  <option>Expiring Soon</option>
+                  <option>Expired</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">Region</div>
+                <select class="f-select" id="reg-region" onchange="applyFilter()">
+                  <option value="">All</option>
+                  <option>Asia</option>
+                  <option>Europe</option>
+                  <option>Americas</option>
+                  <option>Oceania</option>
+                  <option>Africa</option>
+                  <option>Local</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">College / Unit</div>
+                <select class="f-select" id="reg-unit" onchange="applyFilter()">
+                  <option value="">All</option>
+                  <option>CCS</option>
+                  <option>CILS</option>
+                  <option>CETE</option>
+                  <option>CNAS</option>
+                  <option>CAMS</option>
+                  <option>CIRL</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-row filter-row-2" style="border-top:1px solid #f1f5f9;padding-top:10px;">
+              <div>
+                <div class="f-label">Year Signed</div>
+                <select class="f-select" id="reg-yr-signed" onchange="applyFilter()">
+                  <option value="">All Years</option>
+                  <option>2019</option>
+                  <option>2020</option>
+                  <option>2021</option>
+                  <option>2022</option>
+                  <option>2023</option>
+                  <option>2024</option>
+                  <option>2025</option>
+                  <option>2026</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">Year Expiring</div>
+                <select class="f-select" id="reg-yr-exp" onchange="applyFilter()">
+                  <option value="">All Years</option>
+                  <option>2024</option>
+                  <option>2025</option>
+                  <option>2026</option>
+                  <option>2027</option>
+                  <option>2028</option>
+                  <option>2029</option>
+                  <option>2030</option>
+                </select>
+              </div>
+              <button class="f-btn-clear" onclick="clearFilters()"><i class="fa-solid "></i> Clear
+                Filters</button>
+            </div>
+          </div>
+
+          <!-- TABLE -->
+          <div class="table-card">
+            <div class="tc-header">
+              <span class="tc-title">All Partnerships</span>
+              <span class="tc-count" id="reg-count"></span>
+            </div>
+            <div class="table-scroll-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Institution</th>
+                    <th>Country / Region</th>
+                    <th>Type</th>
+                    <th>Nature</th>
+                    <th>Responsible Unit</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="reg-tbody"></tbody>
+              </table>
+            </div>
+            <span class="pg-info" id="pg-info"></span>
+          </div>
+
+        </main>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- ADD PARTNERSHIP MODAL                                   -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="add-modal">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title"><i class="fa-solid fa-circle-plus" style="color:#1e3a8a;margin-right:6px;"></i>Add
+            New Partnership</span>
+          <button class="modal-close" onclick="closeModal('add-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-section-label">Partner Information</div>
+          <div class="form-grid-2">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">
+                Partnership Institution Name <span>*</span>
+                <span class="ac-badge-api" style="margin-left:8px;vertical-align:middle;">
+                  <i class="fa-solid fa-globe"></i> Worldwide DB
+                </span>
+              </label>
+              <div class="ac-wrapper">
+                <input class="form-input" id="f-inst" placeholder="Type to search worldwide universities…"
+                  autocomplete="off" oninput="instSearch(this.value)" onkeydown="instKeyNav(event)">
+                <i class="fa-solid fa-circle-notch ac-spinner" id="ac-spinner"></i>
+                <div class="ac-dropdown" id="ac-dropdown"></div>
+              </div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:3px;">
+                <i class="fa-solid fa-circle-info"></i> Searches 9,000+ institutions worldwide. Country &amp; region
+                auto-fill on select.
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Country <span>*</span></label>
+              <input class="form-input" id="f-country" placeholder="e.g. Japan">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Region <span>*</span></label>
+              <select class="form-select" id="f-region">
+                <option value="">Select region…</option>
+                <option>Asia</option>
+                <option>Europe</option>
+                <option>Americas</option>
+                <option>Oceania</option>
+                <option>Africa</option>
+                <option>Local</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Partner Contact Email</label>
+              <input class="form-input" id="f-partner-email" type="email" placeholder="contact@institution.edu">
+            </div>
+          </div>
+
+          <div class="form-section-label">Agreement Details</div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Type (MOA/MOU) <span>*</span></label>
+              <select class="form-select" id="f-type">
+                <option value="">Select…</option>
+                <option>MOA</option>
+                <option>MOU</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nature of Partnership <span>*</span></label>
+              <select class="form-select" id="f-nature">
+                <option value="">Select…</option>
+                <option>Research</option>
+                <option>Student Exchange</option>
+                <option>Training</option>
+                <option>Conference</option>
+                <option>Faculty Exchange</option>
+                <option>Joint Program</option>
+                <option>Internship</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="f-cat">
+                <option>International</option>
+                <option>Local</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Start Date <span>*</span></label>
+              <input class="form-input" id="f-start" type="date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Date <span>*</span></label>
+              <input class="form-input" id="f-end" type="date" onchange="computeStatus()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status (Auto-computed)</label>
+              <input class="form-input" id="f-status" readonly style="background:#f1f5f9;color:#64748b;"
+                placeholder="Set end date to compute">
+            </div>
+          </div>
+
+          <div class="form-section-label">CSPC-CIRL Details</div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Responsible Unit (College/Dept) <span>*</span></label>
+              <select class="form-select" id="f-unit">
+                <option value="">Select unit…</option>
+                <option>CCS</option>
+                <option>CILS</option>
+                <option>CETE</option>
+                <option>CNAS</option>
+                <option>CAMS</option>
+                <option>CIRL</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">CIRL Coordinator / Contact Person</label>
+              <input class="form-input" id="f-coordinator" placeholder="e.g. Dr. Santos">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Link to Scanned Document (Google Drive Link)</label>
+              <input class="form-input" id="f-doc-link" type="url" placeholder="https://drive.google.com/…">
+            </div>
+          </div>
+
+          <div class="form-section-label">Additional Notes</div>
+          <div class="form-group">
+            <label class="form-label">Remarks (e.g. renewed, for renewal, notes)</label>
+            <textarea class="form-textarea" id="f-remarks"
+              placeholder="e.g. Renewed in 2024, pending 2nd extension…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="m-btn secondary" onclick="closeModal('add-modal')">Cancel</button>
+          <button class="m-btn primary" onclick="submitPartnership()"><i class="fa-solid fa-floppy-disk"></i> Save
+            Partnership</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- VIEW DETAIL MODAL                                       -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="view-modal">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title" id="view-title">Partnership Details</span>
+          <button class="modal-close" onclick="closeModal('view-modal')">✕</button>
+        </div>
+        <div class="modal-body" id="view-body"></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- EDIT PARTNERSHIP MODAL                                  -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="edit-modal">
+      <div class="modal-box">
+        <div class="modal-header">
+          <span class="modal-title"><i class="fa-solid fa-pen-to-square"
+              style="color:#1e3a8a;margin-right:6px;"></i>Edit Partnership</span>
+          <button class="modal-close" onclick="closeModal('edit-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-section-label">Partner Information</div>
+          <div class="form-grid-2">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Institution Name <span>*</span></label>
+              <input class="form-input" id="e-inst" placeholder="Institution name">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Country <span>*</span></label>
+              <input class="form-input" id="e-country" placeholder="e.g. Japan">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Region <span>*</span></label>
+              <select class="form-select" id="e-region">
+                <option value="">Select region…</option>
+                <option>Asia</option>
+                <option>Europe</option>
+                <option>Americas</option>
+                <option>Oceania</option>
+                <option>Africa</option>
+                <option>Local</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Partner Contact Email</label>
+              <input class="form-input" id="e-partner-email" type="email" placeholder="contact@institution.edu">
+            </div>
+          </div>
+
+          <div class="form-section-label">Agreement Details</div>
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Type (MOA/MOU) <span>*</span></label>
+              <select class="form-select" id="e-type">
+                <option value="">Select…</option>
+                <option>MOA</option>
+                <option>MOU</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nature of Partnership <span>*</span></label>
+              <select class="form-select" id="e-nature">
+                <option value="">Select…</option>
+                <option>Research</option>
+                <option>Student Exchange</option>
+                <option>Training</option>
+                <option>Conference</option>
+                <option>Faculty Exchange</option>
+                <option>Joint Program</option>
+                <option>Internship</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="e-cat">
+                <option>International</option>
+                <option>Local</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Start Date <span>*</span></label>
+              <input class="form-input" id="e-start" type="date">
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Date <span>*</span></label>
+              <input class="form-input" id="e-end" type="date" onchange="computeEditStatus()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status (Auto-computed)</label>
+              <input class="form-input" id="e-status" readonly style="background:#f1f5f9;color:#64748b;"
+                placeholder="Set end date to compute">
+            </div>
+          </div>
+
+          <div class="form-section-label">CSPC-CIRL Details</div>
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Responsible Unit <span>*</span></label>
+              <select class="form-select" id="e-unit">
+                <option value="">Select unit…</option>
+                <option>CIRL</option>
+                <option>CCS</option>
+                <option>CETE</option>
+                <option>CNAS</option>
+                <option>CILS</option>
+                <option>All</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">CIRL Coordinator</label>
+              <input class="form-input" id="e-coordinator" placeholder="e.g. Dr. Santos">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Document Link (Google Drive)</label>
+              <input class="form-input" id="e-doclink" type="url" placeholder="Paste Drive link">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Remarks</label>
+              <textarea class="form-textarea" id="e-remarks" placeholder="Any additional remarks…"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="m-btn secondary" onclick="closeModal('edit-modal')">Cancel</button>
+          <button class="m-btn primary" onclick="saveEdit()"><i class="fa-solid fa-floppy-disk"
+              style="margin-right:5px;"></i>Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- RENEW PARTNERSHIP MODAL                                 -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="renew-modal">
+      <div class="modal-box" style="max-width:520px;">
+        <div class="modal-header">
+          <span class="modal-title"><i class="fa-solid fa-arrows-rotate"
+              style="color:#15803d;margin-right:6px;"></i>Renew Partnership</span>
+          <button class="modal-close" onclick="closeModal('renew-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div id="renew-inst-display"
+            style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 16px;margin-bottom:18px;">
+            <div
+              style="font-size:12px;font-weight:700;color:#15803d;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px;">
+              Renewing Partnership</div>
+            <div style="font-size:15px;font-weight:800;color:#0d1b3e;" id="renew-inst-name">—</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px;" id="renew-inst-sub">—</div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Previous End Date</label>
+              <input class="form-input" id="renew-prev-end" readonly style="background:#f1f5f9;color:#64748b;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">New End Date <span>*</span></label>
+              <input class="form-input" id="renew-new-end" type="date" onchange="computeRenewStatus()">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Validity Period (Auto-computed)</label>
+              <input class="form-input" id="renew-validity" readonly
+                style="background:#f1f5f9;color:#334155;font-weight:600;">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">New Status (Auto-computed)</label>
+              <input class="form-input" id="renew-status" readonly style="background:#f1f5f9;color:#64748b;">
+            </div>
+            <div class="form-group" style="grid-column:1/-1;">
+              <label class="form-label">Renewal Remarks</label>
+              <textarea class="form-textarea" id="renew-remarks"
+                placeholder="e.g. Extended for 3 years — signed Apr 2026…"></textarea>
+            </div>
+          </div>
+
+          <div
+            style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;margin-top:4px;">
+            <i class="fa-solid fa-triangle-exclamation" style="margin-right:5px;"></i>
+            This will update the partnership record status to <strong>Active</strong> and record the new end date.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="m-btn secondary" onclick="closeModal('renew-modal')">Cancel</button>
+          <button class="m-btn primary" style="background:#15803d;border-color:#15803d;" onclick="saveRenew()"><i
+              class="fa-solid fa-rotate" style="margin-right:5px;"></i>Confirm Renewal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="reg-toast"
+      style="position:fixed;bottom:18px;right:20px; background: transparent;color:#1e3a8a;padding:12px 15px;border-radius:10px;font-size:13px;font-weight:600;display:none;align-items:center;gap:10px;z-index:9999;padding-left: 15px">
+      <span id="reg-toast-msg"></span>
+    </div>
+
+    <script>
+      // ──────────────────────────────────────────────────────────
+      // DATA (demo — replace with real DB calls later)
+      // ──────────────────────────────────────────────────────────
+      let partnerships = [
+        { id: 1, inst: "Ateneo de Manila University", country: "Philippines", region: "Local", type: "MOA", nature: "Research", cat: "Local", unit: "CCS", coordinator: "Dr. Santos", partnerEmail: "ateneo@admu.edu.ph", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2026, start: "Apr 12, 2021", end: "Apr 12, 2026", status: "Expiring Soon", remarks: "Up for renewal Q2 2026" },
+        { id: 2, inst: "Osaka University", country: "Japan", region: "Asia", type: "MOU", nature: "Student Exchange", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "intl@osaka-u.ac.jp", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2026, start: "May 3, 2022", end: "May 3, 2026", status: "Expiring Soon", remarks: "" },
+        { id: 3, inst: "University of Santo Tomas", country: "Philippines", region: "Local", type: "MOA", nature: "Joint Program", cat: "Local", unit: "CILS", coordinator: "Dr. Santos", partnerEmail: "oir@ust.edu.ph", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2026, start: "Dec 15, 2021", end: "Dec 15, 2026", status: "Active", remarks: "" },
+        { id: 4, inst: "Chonnam National University", country: "South Korea", region: "Asia", type: "MOU", nature: "Research", cat: "International", unit: "CETE", coordinator: "Prof. Reyes", partnerEmail: "global@jnu.ac.kr", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2027, start: "Mar 30, 2022", end: "Mar 30, 2027", status: "Active", remarks: "" },
+        { id: 5, inst: "TESDA Region V", country: "Philippines", region: "Local", type: "MOA", nature: "Training", cat: "Local", unit: "CETE", coordinator: "Admin Rivera", partnerEmail: "regionv@tesda.gov.ph", docLink: "", startYear: 2020, endYear: 2025, start: "Jan 1, 2020", end: "Jan 1, 2025", status: "Expired", remarks: "Needs renewal" },
+        { id: 6, inst: "University of Macau", country: "China", region: "Asia", type: "MOA", nature: "Student Exchange", cat: "International", unit: "CILS", coordinator: "Dr. Santos", partnerEmail: "admo@um.edu.mo", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2027, start: "Jul 22, 2022", end: "Jul 22, 2027", status: "Active", remarks: "" },
+        { id: 7, inst: "De La Salle University", country: "Philippines", region: "Local", type: "MOA", nature: "Faculty Exchange", cat: "Local", unit: "CCS", coordinator: "Admin Rivera", partnerEmail: "iro@dlsu.edu.ph", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Feb 1, 2023", end: "Feb 1, 2028", status: "Active", remarks: "" },
+        { id: 8, inst: "NTU Singapore", country: "Singapore", region: "Asia", type: "MOU", nature: "Research", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "global@ntu.edu.sg", docLink: "", startYear: 2022, endYear: 2025, start: "Aug 10, 2022", end: "Aug 10, 2025", status: "Expired", remarks: "Renewal under review" },
+        { id: 9, inst: "University of Melbourne", country: "Australia", region: "Oceania", type: "MOU", nature: "Research", cat: "International", unit: "CNAS", coordinator: "Dr. Santos", partnerEmail: "partnerships@unimelb.edu.au", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Jun 5, 2023", end: "Jun 5, 2028", status: "Active", remarks: "" },
+        { id: 10, inst: "DOST Region V", country: "Philippines", region: "Local", type: "MOA", nature: "Research", cat: "Local", unit: "CNAS", coordinator: "Admin Rivera", partnerEmail: "regionv@dost.gov.ph", docLink: "", startYear: 2022, endYear: 2026, start: "Nov 15, 2022", end: "Nov 15, 2026", status: "Active", remarks: "" },
+        { id: 11, inst: "Kyoto University", country: "Japan", region: "Asia", type: "MOA", nature: "Research", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "oia@kyoto-u.ac.jp", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2027, start: "Jan 20, 2021", end: "Jan 20, 2027", status: "Active", remarks: "" },
+        { id: 12, inst: "Mapua University", country: "Philippines", region: "Local", type: "MOA", nature: "Joint Program", cat: "Local", unit: "CCS", coordinator: "Dr. Santos", partnerEmail: "iro@mapua.edu.ph", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Mar 1, 2023", end: "Mar 1, 2028", status: "Active", remarks: "" },
+      ];
+
+      // ──────────────────────────────────────────────────────────
+      // FILTER & RENDER
+      // ──────────────────────────────────────────────────────────
+      let filtered = [...partnerships];
+
+      function applyFilter() {
+        const q = document.getElementById('reg-search').value.toLowerCase();
+        const typ = document.getElementById('reg-type').value;
+        const cat = document.getElementById('reg-cat').value;
+        const st = document.getElementById('reg-status').value;
+        const reg = document.getElementById('reg-region').value;
+        const unt = document.getElementById('reg-unit').value;
+        const yrs = document.getElementById('reg-yr-signed').value;
+        const yre = document.getElementById('reg-yr-exp').value;
+
+        filtered = partnerships.filter(p =>
+          (!q || p.inst.toLowerCase().includes(q) || p.country.toLowerCase().includes(q)) &&
+          (!typ || p.type === typ) &&
+          (!cat || p.cat === cat) &&
+          (!st || p.status === st) &&
+          (!reg || p.region === reg) &&
+          (!unt || p.unit === unt) &&
+          (!yrs || p.startYear == yrs) &&
+          (!yre || p.endYear == yre)
+        );
+        page = 1;
+        renderTable();
+      }
+
+      function clearFilters() {
+        ['reg-search', 'reg-type', 'reg-cat', 'reg-status', 'reg-region', 'reg-unit', 'reg-yr-signed', 'reg-yr-exp']
+          .forEach(id => {
+            const el = document.getElementById(id);
+            if (el.tagName === 'INPUT') el.value = ''; else el.value = '';
+          });
+        applyFilter();
+      }
+
+      function sbadge(s) {
+        const m = { 'Active': 'badge-active', 'Expiring Soon': 'badge-expiring', 'Expired': 'badge-expired' };
+        return `<span class="badge ${m[s] || 'badge-active'}">${s}</span>`;
+      }
+      function cbadge(c) {
+        return `<span class="badge ${c === 'Local' ? 'badge-local' : 'badge-intl'}">${c}</span>`;
+      }
+
+      function renderTable() {
+        // header counts
+        document.getElementById('cnt-total').textContent = partnerships.length;
+        document.getElementById('cnt-active').textContent = partnerships.filter(p => p.status === 'Active').length;
+        document.getElementById('cnt-expiring').textContent = partnerships.filter(p => p.status === 'Expiring Soon').length;
+        document.getElementById('cnt-expired').textContent = partnerships.filter(p => p.status === 'Expired').length;
+        document.getElementById('reg-count').textContent = `Showing ${filtered.length} of ${partnerships.length}`;
+        document.getElementById('pg-info').textContent = `${filtered.length} record${filtered.length !== 1 ? 's' : ''} shown`;
+
+        document.getElementById('reg-tbody').innerHTML = filtered.map((p, i) => `
+    <tr>
+      <td style="color:#94a3b8;font-weight:600;">${i + 1}</td>
+      <td>
+        <div style="font-weight:700;color:#0d1b3e;">${p.inst}</div>
+        ${p.coordinator ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;"><i class="fa-solid fa-user-tie fa-xs"></i> ${p.coordinator}</div>` : ''}
+      </td>
+      <td>
+        <div>${p.country}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:1px;"><i class="fa-solid fa-earth-asia fa-xs"></i> ${p.region}</div>
+      </td>
+      <td style="font-weight:700;font-size:13px;color:#3730a3;">${p.type}</td>
+      <td style="font-size:12px;color:#64748b;">${p.nature}</td>
+      <td style="font-size:13px;font-weight:600;color:#15803d;">${p.unit}</td>
+      <td style="color:#64748b;font-size:12px;">${p.start}</td>
+      <td style="font-weight:600;font-size:12px;color:${p.status === 'Expired' ? '#b91c1c' : p.status === 'Expiring Soon' ? '#d97706' : '#15803d'};">${p.end}</td>
+      <td style="font-weight:700;font-size:13px;color:${p.status === 'Expired' ? '#b91c1c' : p.status === 'Expiring Soon' ? '#d97706' : '#15803d'}">${p.status}</td>
+      <td>
+        <div style="display:flex;gap:5px;">
+          <button class="act-btn act-view" onclick="openViewModal(${p.id})">View</button>
+          ${p.status === 'Expired'
+            ? `<button class="act-btn act-renew" onclick="openRenewModal(${p.id})">Renew</button>`
+            : `<button class="act-btn act-edit" onclick="openEditModal(${p.id})">Edit</button>`
+          }
+          ${p.status === 'Expiring Soon'
+            ? `<button class="act-btn act-renew" onclick="openRenewModal(${p.id})" style="font-size:11px;padding:3px 8px;">Renew</button>`
+            : ''}
+        </div>
+      </td>
+    </tr>`).join('');
+
+        if (!filtered.length) {
+          document.getElementById('reg-tbody').innerHTML =
+            `<tr><td colspan="10" style="text-align:center;padding:30px;color:#94a3b8;">No records found.</td></tr>`;
+        }
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // MODAL HELPERS
+      // ──────────────────────────────────────────────────────────
+      function openAddModal() {
+        document.getElementById('add-modal').classList.add('open');
+      }
+
+      function openViewModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('view-title').textContent = p.inst;
+        document.getElementById('view-body').innerHTML = `
+    <div class="kv-grid">
+      <div class="kv-item"><div class="kv-label">Institution</div><div class="kv-val">${p.inst}</div></div>
+      <div class="kv-item"><div class="kv-label">Country</div><div class="kv-val">${p.country}</div></div>
+      <div class="kv-item"><div class="kv-label">Region</div><div class="kv-val">${p.region}</div></div>
+      <div class="kv-item"><div class="kv-label">Type</div><div class="kv-val">${p.type}</div></div>
+      <div class="kv-item"><div class="kv-label">Nature of Partnership</div><div class="kv-val">${p.nature}</div></div>
+      <div class="kv-item"><div class="kv-label">Category</div><div class="kv-val">${p.cat}</div></div>
+      <div class="kv-item"><div class="kv-label">Start Date</div><div class="kv-val">${p.start}</div></div>
+      <div class="kv-item"><div class="kv-label">End Date</div><div class="kv-val">${p.end}</div></div>
+      <div class="kv-item"><div class="kv-label">Status</div><div class="kv-val">${p.status}</div></div>
+      <div class="kv-item"><div class="kv-label">Responsible Unit</div><div class="kv-val">${p.unit}</div></div>
+      <div class="kv-item"><div class="kv-label">CIRL Coordinator</div><div class="kv-val">${p.coordinator || '—'}</div></div>
+      <div class="kv-item"><div class="kv-label">Partner Contact Email</div><div class="kv-val">${p.partnerEmail ? `<a href="mailto:${p.partnerEmail}">${p.partnerEmail}</a>` : '—'}</div></div>
+      <div class="kv-item" style="grid-column:1/-1;"><div class="kv-label">Document Link (Google Drive)</div><div class="kv-val">${p.docLink ? `<a href="${p.docLink}" target="_blank">${p.docLink}</a>` : '— Not uploaded'}</div></div>
+      <div class="kv-item" style="grid-column:1/-1;"><div class="kv-label">Remarks</div><div class="kv-val">${p.remarks || '—'}</div></div>
+    </div>`;
+        document.getElementById('view-modal').classList.add('open');
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).classList.remove('open');
+      }
+
+      // ── Edit Modal ────────────────────────────────────────────
+      let editingId = null;
+
+      function openEditModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        editingId = id;
+        // Pre-fill fields
+        document.getElementById('e-inst').value = p.inst;
+        document.getElementById('e-country').value = p.country;
+        document.getElementById('e-region').value = p.region;
+        document.getElementById('e-partner-email').value = p.partnerEmail || '';
+        document.getElementById('e-type').value = p.type;
+        document.getElementById('e-nature').value = p.nature;
+        document.getElementById('e-cat').value = p.cat;
+        // Convert "Apr 12, 2021" → "2021-04-12" for date inputs
+        const toISO = s => { const d = new Date(s); return isNaN(d) ? '' : d.toISOString().slice(0, 10); };
+        document.getElementById('e-start').value = toISO(p.start);
+        document.getElementById('e-end').value = toISO(p.end);
+        document.getElementById('e-status').value = p.status;
+        document.getElementById('e-unit').value = p.unit;
+        document.getElementById('e-coordinator').value = p.coordinator || '';
+        document.getElementById('e-doclink').value = p.docLink || '';
+        document.getElementById('e-remarks').value = p.remarks || '';
+        document.getElementById('edit-modal').classList.add('open');
+      }
+
+      function computeEditStatus() {
+        const endVal = document.getElementById('e-end').value;
+        if (!endVal) return;
+        const diff = Math.ceil((new Date(endVal) - new Date()) / 86400000);
+        document.getElementById('e-status').value = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+      }
+
+      function saveEdit() {
+        const inst = document.getElementById('e-inst').value.trim();
+        const end = document.getElementById('e-end').value;
+        if (!inst || !end) { alert('Institution name and End Date are required.'); return; }
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const p = partnerships.find(x => x.id === editingId);
+        if (!p) return;
+        p.inst = inst;
+        p.country = document.getElementById('e-country').value.trim();
+        p.region = document.getElementById('e-region').value;
+        p.partnerEmail = document.getElementById('e-partner-email').value.trim();
+        p.type = document.getElementById('e-type').value;
+        p.nature = document.getElementById('e-nature').value;
+        p.cat = document.getElementById('e-cat').value;
+        p.start = fmtDate(document.getElementById('e-start').value);
+        p.end = fmtDate(end);
+        p.endYear = new Date(end).getFullYear();
+        p.status = document.getElementById('e-status').value;
+        p.unit = document.getElementById('e-unit').value;
+        p.coordinator = document.getElementById('e-coordinator').value.trim();
+        p.docLink = document.getElementById('e-doclink').value.trim();
+        p.remarks = document.getElementById('e-remarks').value.trim();
+        closeModal('edit-modal');
+        applyFilter();
+        showToast(`"${p.inst}" updated successfully.`);
+      }
+
+      // ── Renew Modal ───────────────────────────────────────────
+      let renewingId = null;
+
+      function openRenewModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        renewingId = id;
+        document.getElementById('renew-inst-name').textContent = p.inst;
+        document.getElementById('renew-inst-sub').textContent = `${p.type} · ${p.country} · Previously expired: ${p.end}`;
+        document.getElementById('renew-prev-end').value = p.end;
+        document.getElementById('renew-new-end').value = '';
+        document.getElementById('renew-validity').value = '';
+        document.getElementById('renew-status').value = '';
+        document.getElementById('renew-remarks').value = '';
+        document.getElementById('renew-modal').classList.add('open');
+      }
+
+      function computeRenewStatus() {
+        const endVal = document.getElementById('renew-new-end').value;
+        if (!endVal) return;
+        const endDate = new Date(endVal);
+        const diff = Math.ceil((endDate - new Date()) / 86400000);
+        document.getElementById('renew-status').value = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+        // Compute validity in years+months from today
+        const now = new Date();
+        const yrs = endDate.getFullYear() - now.getFullYear();
+        const mos = endDate.getMonth() - now.getMonth();
+        const total = yrs * 12 + mos;
+        const y = Math.floor(total / 12), m = total % 12;
+        document.getElementById('renew-validity').value = (y > 0 ? y + ' yr' + (y > 1 ? 's' : '') : '') + (m > 0 ? (y > 0 ? ' ' : '') + m + ' mo' : '') || '< 1 month';
+      }
+
+      function saveRenew() {
+        const newEnd = document.getElementById('renew-new-end').value;
+        if (!newEnd) { alert('Please set a new end date.'); return; }
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const p = partnerships.find(x => x.id === renewingId);
+        if (!p) return;
+        p.end = fmtDate(newEnd);
+        p.endYear = new Date(newEnd).getFullYear();
+        const diff = Math.ceil((new Date(newEnd) - new Date()) / 86400000);
+        p.status = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+        const rmk = document.getElementById('renew-remarks').value.trim();
+        if (rmk) p.remarks = rmk;
+        closeModal('renew-modal');
+        applyFilter();
+        showToast(`"${p.inst}" renewed — new end date: ${p.end}.`);
+      }
+
+      // ── Toast ─────────────────────────────────────────────────
+      let toastTimer = null;
+      function showToast(msg) {
+        const t = document.getElementById('reg-toast');
+        document.getElementById('reg-toast-msg').textContent = msg;
+        t.style.display = 'flex';
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3500);
+      }
+
+      // close on overlay click
+      document.querySelectorAll('.modal-overlay').forEach(el => {
+        el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+      });
+
+      // ──────────────────────────────────────────────────────────
+      // AUTO-COMPUTE STATUS FROM END DATE
+      // ──────────────────────────────────────────────────────────
+      function computeStatus() {
+        const endVal = document.getElementById('f-end').value;
+        if (!endVal) return;
+        const today = new Date();
+        const endDate = new Date(endVal);
+        const diff = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+        let status = 'Active';
+        if (diff < 0) status = 'Expired';
+        else if (diff <= 90) status = 'Expiring Soon';
+        document.getElementById('f-status').value = status;
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // SUBMIT (demo)
+      // ──────────────────────────────────────────────────────────
+      function submitPartnership() {
+        const inst  = document.getElementById('f-inst').value.trim();
+        const type  = document.getElementById('f-type').value;
+        const start = document.getElementById('f-start').value;
+        const end   = document.getElementById('f-end').value;
+        const unit  = document.getElementById('f-unit').value;
+        const region = document.getElementById('f-region').value;
+
+        // Validation
+        if (!inst)   { highlight('f-inst',   true); }
+        if (!type)   { highlight('f-type',   true); }
+        if (!start)  { highlight('f-start',  true); }
+        if (!end)    { highlight('f-end',    true); }
+        if (!unit)   { highlight('f-unit',   true); }
+        if (!inst || !type || !start || !end || !unit) {
+          return;
+        }
+
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const diff    = Math.ceil((new Date(end) - new Date()) / 86400000);
+        const status  = document.getElementById('f-status').value ||
+                        (diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active');
+
+        const newP = {
+          id:           partnerships.length + 1,
+          inst,
+          country:      document.getElementById('f-country').value.trim() || '—',
+          region:       region || '—',
+          type,
+          nature:       document.getElementById('f-nature').value || '—',
+          cat:          document.getElementById('f-cat').value || 'International',
+          unit,
+          coordinator:  document.getElementById('f-coordinator').value.trim(),
+          partnerEmail: document.getElementById('f-partner-email').value.trim(),
+          docLink:      document.getElementById('f-doc-link').value.trim(),
+          startYear:    new Date(start).getFullYear(),
+          endYear:      new Date(end).getFullYear(),
+          start:        fmtDate(start),
+          end:          fmtDate(end),
+          status,
+          remarks:      document.getElementById('f-remarks').value.trim(),
+        };
+
+        partnerships.push(newP);
+        applyFilter();
+        closeModal('add-modal');
+        showToast(`"${newP.inst}" added to the registry.`);
+
+        // Reset form fields
+        ['f-inst', 'f-country', 'f-partner-email', 'f-coordinator', 'f-doc-link',
+         'f-remarks', 'f-status'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        ['f-region', 'f-type', 'f-nature', 'f-unit', 'f-cat'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        ['f-start', 'f-end'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        // Clear institution autocomplete tags
+        if (typeof instSelected !== 'undefined') instSelected.length = 0;
+        const tagsEl = document.getElementById('inst-tags');
+        if (tagsEl) tagsEl.innerHTML = '';
+        const ddEl = document.getElementById('add-inst-dd');
+        if (ddEl) ddEl.innerHTML = '';
+      }
+
+      function highlight(id, on) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.borderColor = on ? '#dc2626' : '';
+        el.addEventListener('input', () => { el.style.borderColor = ''; }, { once: true });
+      }
+
+
+      // ──────────────────────────────────────────────────────────
+      // INSTITUTION AUTOCOMPLETE — Hipolabs Universities API
+      // ──────────────────────────────────────────────────────────
+      const COUNTRY_REGION_MAP = {
+        // Asia
+        'Japan': 'Asia', 'China': 'Asia', 'South Korea': 'Asia', 'Singapore': 'Asia',
+        'Philippines': 'Asia', 'India': 'Asia', 'Thailand': 'Asia', 'Vietnam': 'Asia',
+        'Malaysia': 'Asia', 'Indonesia': 'Asia', 'Taiwan': 'Asia', 'Hong Kong': 'Asia',
+        'Bangladesh': 'Asia', 'Pakistan': 'Asia', 'Sri Lanka': 'Asia', 'Nepal': 'Asia',
+        'Myanmar': 'Asia', 'Cambodia': 'Asia', 'Laos': 'Asia', 'Mongolia': 'Asia',
+        'Macau': 'Asia', 'Brunei': 'Asia',
+        // Europe
+        'United Kingdom': 'Europe', 'Germany': 'Europe', 'France': 'Europe', 'Italy': 'Europe',
+        'Spain': 'Europe', 'Netherlands': 'Europe', 'Sweden': 'Europe', 'Norway': 'Europe',
+        'Denmark': 'Europe', 'Finland': 'Europe', 'Switzerland': 'Europe', 'Austria': 'Europe',
+        'Belgium': 'Europe', 'Portugal': 'Europe', 'Poland': 'Europe', 'Czech Republic': 'Europe',
+        'Hungary': 'Europe', 'Romania': 'Europe', 'Greece': 'Europe', 'Russia': 'Europe',
+        'Turkey': 'Europe', 'Ukraine': 'Europe', 'Ireland': 'Europe',
+        // Americas
+        'United States': 'Americas', 'Canada': 'Americas', 'Brazil': 'Americas',
+        'Mexico': 'Americas', 'Argentina': 'Americas', 'Colombia': 'Americas',
+        'Chile': 'Americas', 'Peru': 'Americas', 'Venezuela': 'Americas', 'Ecuador': 'Americas',
+        'Bolivia': 'Americas', 'Paraguay': 'Americas', 'Uruguay': 'Americas',
+        'Cuba': 'Americas', 'Dominican Republic': 'Americas',
+        // Oceania
+        'Australia': 'Oceania', 'New Zealand': 'Oceania', 'Papua New Guinea': 'Oceania',
+        'Fiji': 'Oceania',
+        // Africa
+        'South Africa': 'Africa', 'Nigeria': 'Africa', 'Kenya': 'Africa', 'Egypt': 'Africa',
+        'Ethiopia': 'Africa', 'Ghana': 'Africa', 'Tanzania': 'Africa', 'Uganda': 'Africa',
+        'Zimbabwe': 'Africa', 'Morocco': 'Africa', 'Tunisia': 'Africa',
+      };
+
+      // ──────────────────────────────────────────────────────────
+      // PHILIPPINE HEIs — Built-in Local Dataset (CHED-registered)
+      // ──────────────────────────────────────────────────────────
+      const PH_INSTITUTIONS = [
+        // SUCs — National
+        { name: 'University of the Philippines System', city: 'Quezon City', region5: false, domain: 'up.edu.ph' },
+        { name: 'University of the Philippines Diliman', city: 'Quezon City', region5: false, domain: 'upd.edu.ph' },
+        { name: 'University of the Philippines Manila', city: 'Manila', region5: false, domain: 'upm.edu.ph' },
+        { name: 'University of the Philippines Los Baños', city: 'Los Baños, Laguna', region5: false, domain: 'uplb.edu.ph' },
+        { name: 'University of the Philippines Visayas', city: 'Miag-ao, Iloilo', region5: false, domain: 'upv.edu.ph' },
+        { name: 'University of the Philippines Mindanao', city: 'Davao City', region5: false, domain: 'upm.edu.ph' },
+        { name: 'University of the Philippines Baguio', city: 'Baguio City', region5: false, domain: 'upb.edu.ph' },
+        { name: 'Polytechnic University of the Philippines', city: 'Manila', region5: false, domain: 'pup.edu.ph' },
+        { name: 'Mindanao State University', city: 'Marawi City', region5: false, domain: 'msuiit.edu.ph' },
+        { name: 'Bicol University', city: 'Legazpi City, Albay', region5: true, domain: 'bicol-u.edu.ph' },
+        { name: 'Partido State University', city: 'Goa, Camarines Sur', region5: true, domain: 'psu.edu.ph' },
+        { name: 'Camarines Norte State College', city: 'Daet, Camarines Norte', region5: true, domain: 'cnsc.edu.ph' },
+        { name: 'Camarines Sur Polytechnic Colleges', city: 'Nabua, Camarines Sur', region5: true, domain: 'cspc.edu.ph' },
+        { name: 'Central Bicol State University of Agriculture', city: 'Pili, Camarines Sur', region5: true, domain: 'cbsua.edu.ph' },
+        { name: 'Sorsogon State University', city: 'Sorsogon City', region5: true, domain: 'sorsogon.edu.ph' },
+        { name: 'Catanduanes State University', city: 'Virac, Catanduanes', region5: true, domain: 'csu.edu.ph' },
+        { name: 'Masbate Colleges', city: 'Masbate City', region5: true, domain: '' },
+        // Metro Manila
+        { name: 'De La Salle University', city: 'Manila', region5: false, domain: 'dlsu.edu.ph' },
+        { name: 'Ateneo de Manila University', city: 'Quezon City', region5: false, domain: 'ateneo.edu' },
+        { name: 'University of Santo Tomas', city: 'Manila', region5: false, domain: 'ust.edu.ph' },
+        { name: 'Far Eastern University', city: 'Manila', region5: false, domain: 'feu.edu.ph' },
+        { name: 'Mapúa University', city: 'Manila', region5: false, domain: 'mapua.edu.ph' },
+        { name: 'Adamson University', city: 'Manila', region5: false, domain: 'adamson.edu.ph' },
+        { name: 'San Beda University', city: 'Manila', region5: false, domain: 'sanbeda.edu.ph' },
+        { name: 'Letran College', city: 'Manila', region5: false, domain: 'letran.edu' },
+        { name: 'Arellano University', city: 'Manila', region5: false, domain: 'arellano.edu.ph' },
+        { name: 'Lyceum of the Philippines University', city: 'Manila', region5: false, domain: 'lpu.edu.ph' },
+        { name: 'National University Philippines', city: 'Manila', region5: false, domain: 'nu.edu.ph' },
+        { name: 'Centro Escolar University', city: 'Manila', region5: false, domain: 'ceu.edu.ph' },
+        { name: 'Philippine Normal University', city: 'Manila', region5: false, domain: 'pnu.edu.ph' },
+        { name: 'Technological University of the Philippines', city: 'Manila', region5: false, domain: 'tup.edu.ph' },
+        { name: 'Manuel L. Quezon University', city: 'Manila', region5: false, domain: 'mlqu.edu.ph' },
+        { name: 'University of the East', city: 'Manila', region5: false, domain: 'ue.edu.ph' },
+        { name: 'University of Manila', city: 'Manila', region5: false, domain: 'um.edu.ph' },
+        { name: 'La Salle College Antipolo', city: 'Antipolo City', region5: false, domain: '' },
+        { name: 'Miriam College', city: 'Quezon City', region5: false, domain: 'mc.edu.ph' },
+        { name: 'Philippine Women\'s University', city: 'Manila', region5: false, domain: 'pwu.edu.ph' },
+        { name: 'St. Scholastica\'s College Manila', city: 'Manila', region5: false, domain: 'ssc.edu.ph' },
+        { name: 'Assumption College', city: 'Makati City', region5: false, domain: 'assumption.edu.ph' },
+        { name: 'Ateneo de Manila Law School', city: 'Rockwell, Makati', region5: false, domain: 'ateneo.edu' },
+        // Luzon
+        { name: 'Saint Louis University Baguio', city: 'Baguio City', region5: false, domain: 'slu.edu.ph' },
+        { name: 'University of Baguio', city: 'Baguio City', region5: false, domain: 'ubaguio.edu' },
+        { name: 'Benguet State University', city: 'La Trinidad, Benguet', region5: false, domain: 'bsu.edu.ph' },
+        { name: 'Don Mariano Marcos Memorial State University', city: 'San Fernando, La Union', region5: false, domain: 'dmmmsu.edu.ph' },
+        { name: 'Batangas State University', city: 'Batangas City', region5: false, domain: 'batstate-u.edu.ph' },
+        { name: 'Laguna State Polytechnic University', city: 'San Pablo City, Laguna', region5: false, domain: 'lspu.edu.ph' },
+        { name: 'Pamantasan ng Lungsod ng Maynila', city: 'Manila', region5: false, domain: 'plm.edu.ph' },
+        { name: 'Bulacan State University', city: 'Malolos, Bulacan', region5: false, domain: 'bulsu.edu.ph' },
+        { name: 'Cavite State University', city: 'Indang, Cavite', region5: false, domain: 'cvsu.edu.ph' },
+        { name: 'Nueva Ecija University of Science and Technology', city: 'Cabanatuan City', region5: false, domain: '' },
+        { name: 'Central Luzon State University', city: 'Science City of Muñoz', region5: false, domain: 'clsu.edu.ph' },
+        { name: 'Pampanga State Agricultural University', city: 'Magalang, Pampanga', region5: false, domain: '' },
+        { name: 'Pangasinan State University', city: 'Lingayen, Pangasinan', region5: false, domain: 'psu.edu.ph' },
+        { name: 'Tarlac Agricultural University', city: 'Camiling, Tarlac', region5: false, domain: '' },
+        { name: 'University of Pangasinan', city: 'Dagupan City', region5: false, domain: 'upang.edu.ph' },
+        { name: 'Holy Angel University', city: 'Angeles City, Pampanga', region5: false, domain: 'hau.edu.ph' },
+        // Visayas
+        { name: 'University of the Visayas', city: 'Cebu City', region5: false, domain: 'uv.edu.ph' },
+        { name: 'University of Cebu', city: 'Cebu City', region5: false, domain: 'uc.edu.ph' },
+        { name: 'Cebu Normal University', city: 'Cebu City', region5: false, domain: 'cnu.edu.ph' },
+        { name: 'Cebu Technological University', city: 'Cebu City', region5: false, domain: 'ctu.edu.ph' },
+        { name: 'University of San Carlos', city: 'Cebu City', region5: false, domain: 'usc.edu.ph' },
+        { name: 'Southwestern University PHINMA', city: 'Cebu City', region5: false, domain: 'swu.edu.ph' },
+        { name: 'West Visayas State University', city: 'Iloilo City', region5: false, domain: 'wvsu.edu.ph' },
+        { name: 'University of San Agustin', city: 'Iloilo City', region5: false, domain: 'usa.edu.ph' },
+        { name: 'Central Philippine University', city: 'Iloilo City', region5: false, domain: 'cpu.edu.ph' },
+        { name: 'Iloilo Science and Technology University', city: 'Iloilo City', region5: false, domain: 'isat-u.edu.ph' },
+        { name: 'Eastern Visayas State University', city: 'Tacloban City', region5: false, domain: 'evsu.edu.ph' },
+        { name: 'Samar State University', city: 'Catbalogan City', region5: false, domain: 'ssu.edu.ph' },
+        { name: 'University of Eastern Philippines', city: 'Catarman, N. Samar', region5: false, domain: 'uep.edu.ph' },
+        // Mindanao
+        { name: 'Ateneo de Davao University', city: 'Davao City', region5: false, domain: 'addu.edu.ph' },
+        { name: 'University of Mindanao', city: 'Davao City', region5: false, domain: 'umindanao.edu.ph' },
+        { name: 'Davao Oriental State University', city: 'Mati City', region5: false, domain: 'dorsu.edu.ph' },
+        { name: 'Mindanao State University – Iligan Institute of Technology', city: 'Iligan City', region5: false, domain: 'msuiit.edu.ph' },
+        { name: 'Xavier University – Ateneo de Cagayan', city: 'Cagayan de Oro City', region5: false, domain: 'xu.edu.ph' },
+        { name: 'Capitol University', city: 'Cagayan de Oro City', region5: false, domain: 'cu.edu.ph' },
+        { name: 'Bukidnon State University', city: 'Malaybalay City', region5: false, domain: 'buksu.edu.ph' },
+        { name: 'University of Southern Mindanao', city: 'Kabacan, Cotabato', region5: false, domain: 'usm.edu.ph' },
+        { name: 'Notre Dame of Marbel University', city: 'Koronadal City', region5: false, domain: 'ndmu.edu.ph' },
+        { name: 'Western Mindanao State University', city: 'Zamboanga City', region5: false, domain: 'wmsu.edu.ph' },
+        { name: 'Zamboanga State College of Marine Sciences and Technology', city: 'Zamboanga City', region5: false, domain: 'zcmst.edu.ph' },
+        // Region V specifics (CSPC context)
+        { name: 'Ateneo de Naga University', city: 'Naga City, Camarines Sur', region5: true, domain: 'adnu.edu.ph' },
+        { name: 'University of Nueva Caceres', city: 'Naga City, Camarines Sur', region5: true, domain: 'unc.edu.ph' },
+        { name: 'Holy Cross of Davao College', city: 'Davao City', region5: false, domain: 'hcdc.edu.ph' },
+        { name: 'Colegio de la Purisima Concepcion', city: 'Roxas City, Capiz', region5: false, domain: '' },
+        { name: 'Saint Joseph\'s Institute of Technology', city: 'Butuan City', region5: false, domain: 'sjit.edu.ph' },
+        { name: 'Columban College', city: 'Olongapo City', region5: false, domain: '' },
+        { name: 'La Consolacion College Manila', city: 'Manila', region5: false, domain: '' },
+        { name: 'Emilio Aguinaldo College', city: 'Manila', region5: false, domain: 'eac.edu.ph' },
+        { name: 'Philippine Christian University', city: 'Manila', region5: false, domain: 'pcu.edu.ph' },
+        { name: 'Southville International School and Colleges', city: 'Las Piñas City', region5: false, domain: 'southville.edu.ph' },
+        { name: 'AMA Computer University', city: 'Quezon City', region5: false, domain: 'amaes.edu.ph' },
+        { name: 'STI College', city: 'Manila', region5: false, domain: 'sti.edu' },
+        { name: 'FEU Institute of Technology', city: 'Manila', region5: false, domain: 'feutech.edu.ph' },
+        { name: 'University of Asia and the Pacific', city: 'Pasig City', region5: false, domain: 'uap.asia' },
+        { name: 'Asian Institute of Management', city: 'Makati City', region5: false, domain: 'aim.edu' },
+        { name: 'Ateneo School of Medicine and Public Health', city: 'Pasig City', region5: false, domain: 'ateneo.edu' },
+        { name: 'UPOU – University of the Philippines Open University', city: 'Los Baños, Laguna', region5: false, domain: 'upou.edu.ph' },
+        { name: 'Philippine Military Academy', city: 'Fort del Pilar, Baguio', region5: false, domain: 'pma.edu.ph' },
+        { name: 'Philippine Merchant Marine Academy', city: 'San Narciso, Zambales', region5: false, domain: 'pmma.edu.ph' },
+        { name: 'Philippine National Police Academy', city: 'Silang, Cavite', region5: false, domain: 'pnpa.edu.ph' },
+        { name: 'TESDA', city: 'Taguig City', region5: false, domain: 'tesda.gov.ph' },
+        { name: 'Technical Education and Skills Development Authority', city: 'Taguig City', region5: false, domain: 'tesda.gov.ph' },
+        // DOST Research Institutes
+        { name: 'Philippine Science High School System', city: 'Quezon City', region5: false, domain: 'pshs.edu.ph' },
+        { name: 'DOST-ASTI (Advanced Science and Technology Institute)', city: 'Quezon City', region5: false, domain: 'asti.dost.gov.ph' },
+        { name: 'Philippine Institute of Volcanology and Seismology', city: 'Quezon City', region5: false, domain: 'phivolcs.dost.gov.ph' },
+      ];
+
+      function searchPHInstitutions(q) {
+        if (!q || q.length < 2) return [];
+        const lower = q.toLowerCase();
+        return PH_INSTITUTIONS
+          .filter(i => i.name.toLowerCase().includes(lower) || i.city.toLowerCase().includes(lower))
+          .slice(0, 8)
+          .map(i => ({
+            name: i.name,
+            country: 'Philippines',
+            domains: i.domain ? [i.domain] : [],
+            city: i.city,
+            'alpha_two_code': 'PH',
+            _isLocal: true,
+          }));
+      }
+
+      function countryToRegion(country) {
+        return COUNTRY_REGION_MAP[country] || 'Local';
+      }
+
+      let acDebounce = null;
+      let acResults = [];
+      let acIndex = -1;
+
+      function instSearch(val) {
+        const dd = document.getElementById('ac-dropdown');
+        const sp = document.getElementById('ac-spinner');
+        acIndex = -1;
+
+        if (!val || val.trim().length < 2) {
+          dd.classList.remove('open');
+          dd.innerHTML = '';
+          return;
+        }
+
+        // ── 1. Show local PH results instantly (no API wait) ───────
+        const localMatches = searchPHInstitutions(val.trim());
+        if (localMatches.length) {
+          acResults = localMatches;
+          dd.innerHTML = renderAcItems(acResults);
+          dd.classList.add('open');
+        }
+
+        // ── 2. Also fetch API results and merge ────────────────────
+        clearTimeout(acDebounce);
+        acDebounce = setTimeout(async () => {
+          sp.style.display = 'block';
+          try {
+            const url = `/api/institutions?name=${encodeURIComponent(val.trim())}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            sp.style.display = 'none';
+
+            // Deduplicate: skip names already in local results
+            const existingNames = new Set(acResults.map(r => r.name.toLowerCase()));
+            const apiResults = data.filter(u => !existingNames.has(u.name.toLowerCase())).slice(0, 10);
+
+            // Merge: local PH first, then foreign API results
+            acResults = [...localMatches, ...apiResults];
+
+            if (!acResults.length) {
+              dd.innerHTML = `<div class="ac-empty"><i class="fa-solid fa-magnifying-glass"></i> No results found for "<strong>${val}</strong>"</div>`;
+              dd.classList.add('open');
+              return;
+            }
+
+            dd.innerHTML = renderAcItems(acResults);
+            dd.classList.add('open');
+          } catch (e) {
+            sp.style.display = 'none';
+            // API failed — local PH results already shown, that's fine
+            if (!acResults.length) {
+              dd.innerHTML = `<div class="ac-empty"><i class="fa-solid fa-wifi-slash"></i> Could not reach API. Enter manually.</div>`;
+              dd.classList.add('open');
+            }
+          }
+        }, 350);
+      }
+
+      function renderAcItems(results) {
+        return results.map((u, i) => {
+          const badge = u._isLocal
+            ? `<span class="ac-country" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">🇵🇭 Local</span>`
+            : `<span class="ac-country"><i class="fa-solid fa-location-dot fa-xs"></i> ${u.country}</span>`;
+          const sub = u._isLocal && u.city
+            ? `<span style="font-size:11px;color:#94a3b8;margin-left:4px;">· ${u.city}</span>`
+            : '';
+          return `<div class="ac-item" data-idx="${i}" onclick="instSelect(${i})">
+        <span class="ac-name">${u.name}${sub}</span>
+        ${badge}
+      </div>`;
+        }).join('');
+      }
+
+      function instSelect(idx) {
+        const u = acResults[idx];
+        if (!u) return;
+        document.getElementById('f-inst').value = u.name;
+        document.getElementById('f-country').value = u.country;
+        // Auto-set Region
+        const regionSel = document.getElementById('f-region');
+        const region = countryToRegion(u.country);
+        for (let i = 0; i < regionSel.options.length; i++) {
+          if (regionSel.options[i].value === region) {
+            regionSel.selectedIndex = i; break;
+          }
+        }
+        // Auto-set Category
+        const catSel = document.getElementById('f-cat');
+        const isLocal = (u.country === 'Philippines');
+        for (let i = 0; i < catSel.options.length; i++) {
+          if (catSel.options[i].value === (isLocal ? 'Local' : 'International')) {
+            catSel.selectedIndex = i; break;
+          }
+        }
+        // Auto-suggest partner email from domain
+        if (u.domains && u.domains.length) {
+          const emailField = document.getElementById('f-partner-email');
+          if (!emailField.value) emailField.value = `partnerships@${u.domains[0]}`;
+        }
+        // Close dropdown
+        const dd = document.getElementById('ac-dropdown');
+        dd.classList.remove('open');
+        dd.innerHTML = '';
+        acResults = [];
+        acIndex = -1;
+      }
+
+      function instKeyNav(e) {
+        const dd = document.getElementById('ac-dropdown');
+        const items = dd.querySelectorAll('.ac-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          acIndex = Math.min(acIndex + 1, items.length - 1);
+          items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+          items[acIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          acIndex = Math.max(acIndex - 1, 0);
+          items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+          items[acIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && acIndex >= 0) {
+          e.preventDefault();
+          instSelect(acIndex);
+        } else if (e.key === 'Escape') {
+          dd.classList.remove('open');
+          dd.innerHTML = '';
+          acIndex = -1;
+        }
+      }
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', e => {
+        if (!e.target.closest('.ac-wrapper')) {
+          const dd = document.getElementById('ac-dropdown');
+          if (dd) { dd.classList.remove('open'); dd.innerHTML = ''; }
+          acIndex = -1;
+        }
+      });
+
+      // ──────────────────────────────────────────────────────────
+      // INIT
+      // ──────────────────────────────────────────────────────────
+      renderTable();
+
+    </script>
+</body>
+
+</html>

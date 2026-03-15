@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Request Management — CSPC-CIRL</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #eef2f9;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-header {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px 0 18px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .header-title {
+      font-size: 19px;
+      font-weight: 700;
+      color: #0d1b3e;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .add-btn-hdr {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: #1e3a8a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .add-btn-hdr:hover {
+      background: #1e40af;
+    }
+
+    .layout {
+      display: flex;
+      margin-top: 64px;
+      height: calc(100vh - 64px);
+    }
+
+    .sidebar {
+      width: 62px;
+      background: #fff;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0 14px;
+      position: fixed;
+      left: 0;
+      top: 64px;
+      bottom: 0;
+      z-index: 50;
+    }
+
+    .sidebar-top-icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+    }
+
+    .sidebar-icon {
+      width: 42px;
+      height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      cursor: pointer;
+      color: #64748b;
+      font-size: 17px;
+      transition: all .2s;
+      text-decoration: none;
+    }
+
+    .sidebar-icon:hover {
+      background: #f1f5f9;
+      color: #1e3a5f;
+    }
+
+    .sidebar-icon.active {
+      background: #e8f0fe;
+      color: #1e3a8a;
+    }
+
+    .sidebar-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid #e2e8f0;
+      cursor: pointer;
+    }
+
+    .main-content {
+      margin-left: 62px;
+      flex: 1;
+      padding: 20px 22px 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    /* Admin tab fills remaining viewport height */
+    #content-admin {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #content-admin .req-table-card {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1px;
+    }
+
+    #content-admin .req-table-card .req-table-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    #content-admin .req-table-card thead th {
+      position: sticky;
+      top: 0;
+      background: #f8faff;
+      z-index: 1;
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 5px;
+      width: fit-content;
+    }
+
+    .tab-btn {
+      padding: 7px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      color: #64748b;
+    }
+
+    .tab-btn.active {
+      background: #1e3a8a;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(30, 58, 138, .25);
+    }
+
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    .card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0d1b3e;
+      margin-bottom: 14px;
+    }
+
+    .filter-tab-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ft {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 10px;
+      padding: 10px 18px;
+      cursor: pointer;
+      text-align: center;
+      min-width: 90px;
+      transition: all .15s;
+    }
+
+    .ft:hover {
+      border-color: #1e3a8a;
+    }
+
+    .ft.active {
+      border-color: #1e3a8a;
+      background: #e8f0fe;
+    }
+
+    .ft-num {
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .ft-label {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: #f8faff;
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #1e293b;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover {
+      background: #f8faff;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-pending {
+      background: #fef3c7;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    .badge-review {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .badge-approved {
+      background: #dcfce7;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .badge-rejected {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .act-btn {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid;
+      transition: all .15s;
+    }
+
+    .act-view {
+      background: #1e3a8a;
+      color: #fff;
+      border-color: #1e3a8a;
+    }
+
+    .act-approve {
+      background: #15803d;
+      color: #fff;
+      border-color: #15803d;
+    }
+
+    .act-reject {
+      background: transparent;
+      color: #b91c1c;
+      border-color: #b91c1c;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 5px;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      color: #1e293b;
+      background: #f8faff;
+      outline: none;
+      transition: border .2s;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      border-color: #1e3a8a;
+    }
+
+    .form-textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .upload-zone {
+      border: 2px dashed #d8e2f0;
+      border-radius: 10px;
+      padding: 22px;
+      text-align: center;
+      background: #f9fafb;
+      cursor: pointer;
+    }
+
+    .upload-zone:hover {
+      border-color: #1e3a8a;
+    }
+
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #1e40af;
+      margin-top: 10px;
+    }
+
+    .wf-steps {
+      display: flex;
+      gap: 0;
+      margin-top: 8px;
+    }
+
+    .wf-step {
+      flex: 1;
+      text-align: center;
+    }
+
+    .wf-bar {
+      height: 4px;
+      margin-bottom: 5px;
+    }
+
+    .wf-step:first-child .wf-bar {
+      border-radius: 4px 0 0 4px;
+    }
+
+    .wf-step:last-child .wf-bar {
+      border-radius: 0 4px 4px 0;
+    }
+
+    .wf-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+    }
+
+    .wf-date {
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    .req-card {
+      background: #fff;
+      border: 1.5px solid #d8e2f0;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .35);
+      backdrop-filter: blur(3px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 18px;
+      width: 620px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .18);
+      animation: mIn .22s ease;
+    }
+
+    @keyframes mIn {
+      from {
+        transform: scale(.92);
+        opacity: 0
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 1
+      }
+    }
+
+    .m-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px 0;
+    }
+
+    .m-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0d1b3e;
+    }
+
+    .m-close {
+      background: #f1f5f9;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      font-size: 15px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .m-body {
+      padding: 18px 24px 24px;
+    }
+
+    .m-actions {
+      display: flex;
+      gap: 8px;
+      padding: 0 24px 24px;
+    }
+
+    .m-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .m-btn.primary {
+      background: #1e3a8a;
+      color: #fff;
+    }
+
+    .m-btn.success {
+      background: #15803d;
+      color: #fff;
+    }
+
+    .m-btn.danger {
+      background: transparent;
+      color: #b91c1c;
+      border: 1.5px solid #b91c1c;
+    }
+
+    .m-btn.secondary {
+      background: #f1f5f9;
+      color: #334155;
+    }
+
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .kv-key {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 3px;
+    }
+
+    .kv-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+  </style>
+</head>
+
+<body>
+
+  <%- include('partials/header') %>
+    <div class="layout">
+      <%- include('partials/sidebar') %>
+        <main class="main-content">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <h1 style="font-size:22px;font-weight:800;color:#0d1b3e;">Request Management</h1>
+              <p style="font-size:13px;color:#64748b;margin-top:2px;">Submit, track, and manage partnership requests</p>
+            </div>
+          </div>
+
+          <!-- ADMIN VIEW -->
+          <div class="tab-content active" id="content-admin">
+            <div class="filter-tab-row">
+              <div class="ft active" onclick="filterReq('All',this)">
+                <div class="ft-num" style="color:#0d1b3e;">15</div>
+                <div class="ft-label">All</div>
+              </div>
+              <div class="ft" onclick="filterReq('Pending',this)">
+                <div class="ft-num" style="color:#d97706;">5</div>
+                <div class="ft-label">Pending</div>
+              </div>
+              <div class="ft" onclick="filterReq('Under Review',this)">
+                <div class="ft-num" style="color:#1e40af;">5</div>
+                <div class="ft-label">Under Review</div>
+              </div>
+              <div class="ft" onclick="filterReq('Approved',this)">
+                <div class="ft-num" style="color:#15803d;">3</div>
+                <div class="ft-label">Approved</div>
+              </div>
+              <div class="ft" onclick="filterReq('Rejected',this)">
+                <div class="ft-num" style="color:#b91c1c;">2</div>
+                <div class="ft-label">Rejected</div>
+              </div>
+            </div>
+            <div class="req-table-card">
+              <div class="req-table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Request ID</th>
+                      <th>Requestor</th>
+                      <th>Institution</th>
+                      <th>Type</th>
+                      <th>Submitted</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="req-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </main>
+    </div>
+
+    <div class="modal-overlay" id="req-modal" onclick="closeModal(event)">
+      <div class="modal-box">
+        <div class="m-header"><span class="m-title" id="rm-title">Request Detail</span><button class="m-close"
+            onclick="document.getElementById('req-modal').classList.remove('open')"><i
+              class="fa-solid fa-xmark"></i></button></div>
+        <div class="m-body" id="rm-body"></div>
+        <div class="m-actions" id="rm-actions"></div>
+      </div>
+    </div>
+
+    <script>
+      const requests = [
+        { id: "REQ-2026-015", by: "Dr. Santos", inst: "Hiroshima University", type: "MOU", date: "Mar 13, 2026", status: "Pending", purpose: "Faculty research exchange and joint symposium on environmental science." },
+        { id: "REQ-2026-014", by: "Prof. Espino", inst: "Hanyang University", type: "MOA", date: "Mar 11, 2026", status: "Pending", purpose: "Engineering innovation lab collaboration and student internship program." },
+        { id: "REQ-2026-013", by: "Ms. Alcantara", inst: "University of Macau", type: "MOA", date: "Mar 10, 2026", status: "Under Review", purpose: "Academic exchange and joint degree program in business administration." },
+        { id: "REQ-2026-012", by: "Dr. Garcia", inst: "Bulacan State University", type: "MOA", date: "Mar 9, 2026", status: "Pending", purpose: "Teacher training and curriculum development partnership." },
+        { id: "REQ-2026-011", by: "Dr. Santos", inst: "Mapua University", type: "MOA", date: "Mar 8, 2026", status: "Pending", purpose: "Joint research in engineering and student exchange program." },
+        { id: "REQ-2026-010", by: "Prof. Reyes", inst: "Chonnam Natl. Univ.", type: "MOU", date: "Mar 5, 2026", status: "Under Review", purpose: "Student mobility and faculty development programs across campuses." },
+        { id: "REQ-2026-009", by: "Ms. Alcantara", inst: "DOST Region V", type: "MOA", date: "Feb 28, 2026", status: "Approved", purpose: "Training programs and technology transfer for industry partners." },
+        { id: "REQ-2026-008", by: "Engr. Cruz", inst: "NTU Singapore", type: "MOU", date: "Feb 20, 2026", status: "Under Review", purpose: "Graduate research collaboration and joint publication initiatives." },
+        { id: "REQ-2026-007", by: "Dr. Limbo", inst: "University of Cebu", type: "MOA", date: "Feb 12, 2026", status: "Rejected", purpose: "Student exchange and academic partnership program. Returned due to incomplete documentation." },
+        { id: "REQ-2026-006", by: "Prof. Dela Cruz", inst: "Ateneo de Manila Univ.", type: "MOA", date: "Feb 10, 2026", status: "Approved", purpose: "Joint research in social sciences and collaborative community outreach." },
+        { id: "REQ-2026-005", by: "Dr. Santos", inst: "De La Salle University", type: "MOU", date: "Feb 5, 2026", status: "Under Review", purpose: "STEM curriculum partnership and faculty exchange between colleges." },
+        { id: "REQ-2026-004", by: "Engr. Mendoza", inst: "Osaka University", type: "MOU", date: "Feb 1, 2026", status: "Under Review", purpose: "ICT research and technology-based learning collaboration program." },
+        { id: "REQ-2026-003", by: "Prof. Reyes", inst: "University of Melbourne", type: "MOA", date: "Jan 27, 2026", status: "Approved", purpose: "International research mobility and dual supervision of graduate students." },
+        { id: "REQ-2026-002", by: "Ms. Bautista", inst: "TESDA Region V", type: "MOA", date: "Jan 20, 2026", status: "Pending", purpose: "Skills training and livelihood program partnership for community outreach." },
+        { id: "REQ-2026-001", by: "Dr. Limbo", inst: "Kyoto University", type: "MOU", date: "Jan 15, 2026", status: "Rejected", purpose: "Initial MOA proposal for exchange program — closed; resubmission under new template required." },
+      ];
+      function statusBadge(s) { const m = { Pending: 'badge-pending', 'Under Review': 'badge-review', Approved: 'badge-approved', Rejected: 'badge-rejected' }; return `<span class="badge ${m[s] || 'badge-pending'}">${s}</span>`; }
+      function renderAdminTable(filter = 'All') { const rows = requests.filter(r => filter === 'All' || r.status === filter); document.getElementById('req-tbody').innerHTML = rows.map(r => `<tr><td style="font-weight:700;color:#1e3a8a;">${r.id}</td><td>${r.by}</td><td style="font-weight:600;">${r.inst}</td><td><span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">${r.type}</span></td><td style="color:#64748b;">${r.date}</td><td>${statusBadge(r.status)}</td><td><button class="act-btn act-view" onclick="openReqDetail('${r.id}')">${r.status === 'Pending' || r.status === 'Under Review' ? 'Review' : 'View'}</button></td></tr>`).join(''); }
+      function renderAdminTimeline() { const steps = [{ label: "Submission Received", date: "Mar 8, 2026", done: true, note: "Request REQ-2026-011" }, { label: "CIRL Staff Review", date: "Pending", active: true }, { label: "Director Coordination", date: "—" }, { label: "Final Approval", date: "—" }]; document.getElementById('admin-timeline').innerHTML = steps.map((s, i) => `<div style="display:flex;gap:12px;margin-bottom:14px;"><div style="display:flex;flex-direction:column;align-items:center;gap:2px;"><div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;background:${s.done ? '#15803d' : s.active ? '#d97706' : '#e2e8f0'};color:${s.done || s.active ? '#fff' : '#94a3b8'};">${s.done ? '✓' : i + 1}</div>${i < steps.length - 1 ? `<div style="width:2px;background:#e2e8f0;flex:1;min-height:14px;margin:0 auto;"></div>` : ''}</div><div style="padding-top:3px;"><div style="font-size:13px;font-weight:700;color:${s.active ? '#d97706' : s.done ? '#15803d' : '#94a3b8'}">${s.label}</div><div style="font-size:11px;color:#94a3b8;">${s.date}</div>${s.note ? `<div style="font-size:11px;background:#f1f5f9;padding:3px 8px;border-radius:4px;margin-top:3px;">${s.note}</div>` : ''}</div></div>`).join(''); }
+      function renderMyRequests() { const myReqs = requests.slice(0, 3); document.getElementById('my-req-list').innerHTML = myReqs.map(r => `<div class="req-card"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;"><div><div style="font-weight:800;color:#0d1b3e;font-size:15px;">${r.inst}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">${r.id} · ${r.type} · Submitted ${r.date}</div></div>${statusBadge(r.status)}</div><div style="display:flex;gap:20px;align-items:flex-start;"><div style="flex:1;"><div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px;letter-spacing:.5px;">WORKFLOW PROGRESS</div><div class="wf-steps">${r.steps.map(s => `<div class="wf-step"><div class="wf-bar" style="background:${s.done ? '#15803d' : s.active ? '#d97706' : '#e2e8f0'}"></div><div class="wf-label" style="color:${s.active ? '#d97706' : s.done ? '#15803d' : '#94a3b8'};font-weight:${s.active || s.done ? 700 : 400}">${s.l}</div><div class="wf-date">${s.d}</div></div>`).join('')}</div></div><button class="act-btn act-view" onclick="openReqDetail('${r.id}')">View Details →</button></div></div>`).join(''); }
+      function openReqDetail(id) {
+        const r = requests.find(x => x.id === id);
+        if (!r) return;
+        const isReview = r.status === 'Pending' || r.status === 'Under Review';
+        document.getElementById('rm-title').innerHTML =
+          `<i class="fa-solid fa-${isReview ? 'magnifying-glass' : 'eye'}" style="color:#1e3a8a;margin-right:6px;"></i>${r.id} — ${r.inst}`;
+
+        const statusColors = { Pending: '#d97706', 'Under Review': '#1e40af', Approved: '#15803d', Rejected: '#b91c1c' };
+        const statusBg = { Pending: '#fef3c7', 'Under Review': '#dbeafe', Approved: '#dcfce7', Rejected: '#fee2e2' };
+
+        document.getElementById('rm-body').innerHTML = `
+          <div class="kv-grid">
+            <div><div class="kv-key">Request ID</div><div class="kv-val">${r.id}</div></div>
+            <div><div class="kv-key">Submitted By</div><div class="kv-val">${r.by}</div></div>
+            <div><div class="kv-key">Institution</div><div class="kv-val">${r.inst}</div></div>
+            <div><div class="kv-key">Type</div><div class="kv-val"><span class="badge" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;">${r.type}</span></div></div>
+            <div><div class="kv-key">Submitted On</div><div class="kv-val">${r.date}</div></div>
+            <div><div class="kv-key">Status</div><div class="kv-val"><span style="font-weight:700;color:${statusColors[r.status]}">${r.status}</span></div></div>
+          </div>
+          <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Purpose</div>
+          <div style="background:#f8faff;border-radius:8px;padding:12px;font-size:13px;line-height:1.7;margin-bottom:16px;">${r.purpose}</div>
+          ${isReview ? `
+            <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Review Notes</div>
+            <textarea class="form-textarea" id="review-notes" placeholder="Write review notes or reason for decision…" style="min-height:80px;"></textarea>
+          ` : `
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:${statusBg[r.status]};border-radius:10px;border:1.5px solid ${statusColors[r.status]}33;">
+              <i class="fa-solid fa-${r.status === 'Approved' ? 'circle-check' : 'circle-xmark'}" style="color:${statusColors[r.status]};font-size:20px;"></i>
+              <div>
+                <div style="font-weight:700;color:${statusColors[r.status]};font-size:13px;">Request ${r.status}</div>
+                <div style="font-size:12px;color:#64748b;margin-top:1px;">This request has been processed and is now read-only.</div>
+              </div>
+            </div>
+          `}`;
+
+        document.getElementById('rm-actions').innerHTML = `
+          <button class="m-btn secondary" onclick="document.getElementById('req-modal').classList.remove('open')">
+            <i class="fa-solid fa-xmark"></i> Close
+          </button>
+          ${isReview ? `
+            <button class="m-btn success" onclick="resolveRequest('${r.id}','Approved')">
+              <i class="fa-solid fa-check"></i> Approve
+            </button>
+            <button class="m-btn danger" onclick="resolveRequest('${r.id}','Rejected')">
+              <i class="fa-solid fa-ban"></i> Reject
+            </button>
+          ` : ''}`;
+
+        document.getElementById('req-modal').classList.add('open');
+      }
+
+      function resolveRequest(id, decision) {
+        const r = requests.find(x => x.id === id);
+        if (!r) return;
+        r.status = decision;
+        document.getElementById('req-modal').classList.remove('open');
+        renderAdminTable();
+        // Update filter counts from actual data
+        const counts = { All: requests.length, Pending: 0, 'Under Review': 0, Approved: 0, Rejected: 0 };
+        requests.forEach(x => counts[x.status] = (counts[x.status] || 0) + 1);
+        document.querySelectorAll('.ft').forEach(ft => {
+          const label = ft.querySelector('.ft-label')?.textContent;
+          if (label && counts[label] !== undefined) ft.querySelector('.ft-num').textContent = counts[label];
+        });
+        showReqToast(decision === 'Approved'
+          ? `<i class="fa-solid fa-circle-check"></i> ${id} approved successfully.`
+          : `<i class="fa-solid fa-circle-xmark"></i> ${id} rejected.`,
+          decision === 'Approved' ? '#15803d' : '#b91c1c');
+      }
+
+      function showReqToast(msg, color = '#1e3a8a') {
+        let t = document.getElementById('req-toast');
+        if (!t) {
+          t = document.createElement('div');
+          t.id = 'req-toast';
+          t.style.cssText = 'position:fixed;bottom:28px;right:28px;z-index:9999;padding:12px 20px;border-radius:10px;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.18);transition:opacity .3s;';
+          document.body.appendChild(t);
+        }
+        t.style.background = color;
+        t.style.opacity = '1';
+        t.innerHTML = msg;
+        clearTimeout(t._to);
+        t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+      }
+      function filterReq(filter, el) { document.querySelectorAll('.ft').forEach(f => f.classList.remove('active')); el.classList.add('active'); renderAdminTable(filter); }
+      function switchTab(tab) { ['admin'].forEach(t => { document.getElementById(`tab-${t}`).classList.toggle('active', t === tab); document.getElementById(`content-${t}`).classList.toggle('active', t === tab); }); }
+      function closeModal(event) { if (event.target === document.getElementById('req-modal')) document.getElementById('req-modal').classList.remove('open'); }
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('req-modal').classList.remove('open'); });
+      renderAdminTable();
+    </script>
+</body>
+
+</html>

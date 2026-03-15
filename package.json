@@ -1,0 +1,20 @@
+{
+  "name": "cirlv7",
+  "version": "1.0.7",
+  "description": "calendar",
+  "keywords": [],
+  "license": "ISC",
+  "author": "Briñas_Golpe",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "ejs": "^5.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0"
+  }
+}
