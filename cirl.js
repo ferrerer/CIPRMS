@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
@@ -16,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  secret: 'lu1b3g13lu1b3g13', // Replace with a secure secret in production
+  secret: '130fbe881d6eec6c8f29d4624839d2a5436802bf79d235252e9337facb72d2de', // Replace with a secure secret in production
   resave: false,
   saveUninitialized: true
 }));
@@ -25,9 +27,9 @@ app.use(passport.session());
 
 // ── PASSPORT CONFIG ───────────────────────────────────────────────────────────
 passport.use(new GoogleStrategy({
-    clientID: '691339229131-mp940eb5f19qq1kocotp7i0uh650k0vv.apps.googleusercontent.com', // Replace with your Google Client ID
-    clientSecret: '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', // Replace with your Google Client Secret
-    callbackURL: 'http://localhost:3000/auth/google/callback'
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET
+    // callbackURL removed - will be set dynamically per request
   },
   function(accessToken, refreshToken, profile, done) {
     // For simplicity, return the profile. In production, save to database.
@@ -57,17 +59,146 @@ app.get('/signup', (req, res) => {
 });
 
 // ── GOOGLE AUTH ROUTES ───────────────────────────────────────────────────────
-app.get('/auth/google',
-  passport.authenticate('google', { scope: ['profile', 'email'] })
-);
 
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/login' }),
-  function(req, res) {
-    // Successful authentication, redirect to dashboard.
-    res.redirect('/dashboard');
+function getCallbackUrl(req) {
+  // Get the current host from the request
+  const host = req.get('host') || 'localhost:3000';
+
+  // If accessing via localhost, use localhost callback
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
+    return `http://${host}/auth/google/callback`;
   }
-);
+
+  // If accessing via ngrok or other external host, use that host
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  return `${protocol}://${host}/auth/google/callback`;
+}
+
+app.get('/auth/google', (req, res, next) => {
+  const callbackUrl = getCallbackUrl(req);
+  console.log(`[AUTH] Redirecting to Google with callback URL: ${callbackUrl}`);
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    callbackURL: callbackUrl
+  })(req, res, next);
+});
+
+app.get('/auth/google/callback', (req, res, next) => {
+  const callbackUrl = getCallbackUrl(req);
+  console.log(`[CALLBACK] Received callback with URL: ${callbackUrl}`);
+  
+  passport.authenticate('google', {
+    failureRedirect: '/login',
+    callbackURL: callbackUrl
+  }, function(err, user, info) {
+    if (err) {
+      console.error('❌ OAuth Error:', err.message);
+      console.error('Full error:', err);
+      return next(err);
+    }
+    if (!user) {
+      console.warn('⚠️  No user returned from OAuth');
+      return res.redirect('/login');
+    }
+    console.log('✓ User authenticated:', user.displayName);
+    req.logIn(user, function(err) {
+      if (err) {
+        console.error('❌ Login error:', err);
+        return next(err);
+      }
+      console.log('✓ Session created for user:', user.displayName);
+      return res.redirect('/dashboard');
+    });
+  })(req, res, next);
+});
+
+
+// ── API ENDPOINTS FOR DYNAMIC DATA ──────────────────────────────────────
+app.get('/api/dashboard/stats', (req, res) => {
+  // Mock dashboard statistics - replace with real data from database
+  const stats = {
+    totalPartnerships: 28,
+    activePartnerships: 22,
+    expiringPartnerships: 4,
+    expiredPartnerships: 2,
+    totalRequests: 15,
+    pendingRequests: 8,
+    approvedRequests: 5,
+    rejectedRequests: 2,
+    countries: 8,
+    institutions: 28
+  };
+  res.json(stats);
+});
+
+app.get('/api/partnerships', (req, res) => {
+  // Partnership data - same as in dashboard but served via API
+  const partnerships = [
+    // Philippines (Local)
+    { name: 'CSPC - Main Campus', institution: 'Camarines Sur Polytechnic Colleges', lat: 13.6234, lng: 123.1945, country: 'Philippines', type: 'MOA', status: 'active' },
+    { name: 'De La Salle University', institution: 'De La Salle University', lat: 14.5627, lng: 120.9930, country: 'Philippines', type: 'MOA', status: 'active' },
+    { name: 'Ateneo de Manila University', institution: 'Ateneo de Manila University', lat: 14.6407, lng: 121.0778, country: 'Philippines', type: 'MOA', status: 'active' },
+    { name: 'University of Santo Tomas', institution: 'University of Santo Tomas', lat: 14.6096, lng: 120.9895, country: 'Philippines', type: 'MOU', status: 'active' },
+    { name: 'Bicol University', institution: 'Bicol University', lat: 13.1391, lng: 123.7438, country: 'Philippines', type: 'MOA', status: 'expiring' },
+    { name: 'Partido State University', institution: 'Partido State University', lat: 13.7791, lng: 123.7416, country: 'Philippines', type: 'MOU', status: 'active' },
+
+    // Japan
+    { name: 'Osaka University Partnership', institution: 'Osaka University', lat: 34.8219, lng: 135.5235, country: 'Japan', type: 'MOA', status: 'active' },
+    { name: 'University of Tokyo MOU', institution: 'University of Tokyo', lat: 35.7127, lng: 139.7613, country: 'Japan', type: 'MOU', status: 'active' },
+    { name: 'Kyoto University', institution: 'Kyoto University', lat: 35.0261, lng: 135.7804, country: 'Japan', type: 'MOU', status: 'active' },
+    { name: 'Tohoku University', institution: 'Tohoku University', lat: 38.2558, lng: 140.8421, country: 'Japan', type: 'MOA', status: 'expiring' },
+    { name: 'Nagoya University', institution: 'Nagoya University', lat: 35.1569, lng: 136.9237, country: 'Japan', type: 'MOA', status: 'active' },
+
+    // South Korea
+    { name: 'Seoul National University', institution: 'Seoul National University', lat: 37.4601, lng: 126.9522, country: 'South Korea', type: 'MOU', status: 'active' },
+    { name: 'KAIST', institution: 'Korea Advanced Inst. of Science', lat: 36.3715, lng: 127.3614, country: 'South Korea', type: 'MOU', status: 'active' },
+    { name: 'Yonsei University', institution: 'Yonsei University', lat: 37.5641, lng: 126.9381, country: 'South Korea', type: 'MOA', status: 'expiring' },
+
+    // United States
+    { name: 'MIT Partnership', institution: 'Massachusetts Institute of Technology', lat: 42.3601, lng: -71.0942, country: 'USA', type: 'MOA', status: 'active' },
+    { name: 'University of California', institution: 'University of California, Berkeley', lat: 37.8724, lng: -122.2595, country: 'USA', type: 'MOU', status: 'active' },
+    { name: 'Harvard University', institution: 'Harvard University', lat: 42.3770, lng: -71.1167, country: 'USA', type: 'MOA', status: 'expired' },
+    { name: 'Stanford University', institution: 'Stanford University', lat: 37.4275, lng: -122.1697, country: 'USA', type: 'MOU', status: 'active' },
+
+    // Australia
+    { name: 'University of Melbourne', institution: 'University of Melbourne', lat: -37.7963, lng: 144.9614, country: 'Australia', type: 'MOU', status: 'expiring' },
+    { name: 'Australia National University', institution: 'Australian National University', lat: -35.2777, lng: 149.1185, country: 'Australia', type: 'MOA', status: 'active' },
+
+    // China
+    { name: 'Tsinghua University', institution: 'Tsinghua University', lat: 40.0022, lng: 116.3260, country: 'China', type: 'MOU', status: 'active' },
+    { name: 'Peking University', institution: 'Peking University', lat: 39.9993, lng: 116.3073, country: 'China', type: 'MOA', status: 'active' },
+    { name: 'Fudan University', institution: 'Fudan University', lat: 31.2986, lng: 121.5032, country: 'China', type: 'MOU', status: 'expired' },
+
+    // Germany
+    { name: 'Technical University Munich', institution: 'Technical University of Munich', lat: 48.1499, lng: 11.5680, country: 'Germany', type: 'MOU', status: 'active' },
+    { name: 'Heidelberg University', institution: 'Heidelberg University', lat: 49.4083, lng: 8.6939, country: 'Germany', type: 'MOA', status: 'active' },
+  ];
+  res.json(partnerships);
+});
+
+app.get('/api/requests', (req, res) => {
+  // Mock requests data
+  const requests = [
+    { id: 1, title: 'Student Exchange Program', institution: 'University of Tokyo', status: 'pending', date: '2024-03-15', type: 'exchange' },
+    { id: 2, title: 'Research Collaboration', institution: 'MIT', status: 'approved', date: '2024-03-10', type: 'research' },
+    { id: 3, title: 'Faculty Development', institution: 'Seoul National University', status: 'pending', date: '2024-03-08', type: 'training' },
+    { id: 4, title: 'Joint Degree Program', institution: 'University of Melbourne', status: 'rejected', date: '2024-03-05', type: 'academic' },
+    { id: 5, title: 'Cultural Exchange', institution: 'Peking University', status: 'approved', date: '2024-03-01', type: 'cultural' },
+  ];
+  res.json(requests);
+});
+
+app.get('/api/notifications', (req, res) => {
+  // Mock notifications data
+  const notifications = [
+    { id: 1, color: '#b91c1c', text: 'Ateneo MOA expires in 12 days', time: 'Today', read: false },
+    { id: 2, color: '#d97706', text: 'Osaka MOU — 21 days remaining', time: 'Today', read: false },
+    { id: 3, color: '#1e40af', text: 'REQ-2026-011 submitted by Dr. Santos', time: 'Mar 8, 2026', read: false },
+    { id: 4, color: '#15803d', text: 'REQ-2026-009 approved by Admin Rivera', time: 'Mar 2, 2026', read: true },
+    { id: 5, color: '#b91c1c', text: 'TESDA Region V MOA has expired', time: 'Jan 2, 2025', read: true },
+  ];
+  res.json(notifications);
+});
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
 app.get('/dashboard', (req, res) => {
@@ -163,6 +294,14 @@ app.use((req, res) => {
 });
 
 // ── START ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-    console.log(`CIPRMS server running → http://localhost:${PORT}`);
+app.listen(PORT, async () => {
+    const url = `http://localhost:${PORT}`;
+    console.log(`CIPRMS server running → ${url}`);
+    // Auto-open browser for localhost testing
+    try {
+      const { default: open } = await import('open');
+      open(url);
+    } catch (err) {
+      console.log('Could not auto-open browser, but server is running');
+    }
 });

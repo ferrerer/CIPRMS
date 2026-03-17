@@ -1,12 +1,16 @@
 <header class="top-header">
   <div class="header-left">
     <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL Logo" class="header-logo">
-    <span class="header-title">CSPC-CIRL Management System</span>
+    <span class="header-title">CIPRMS-CSPC-CIRL</span>
   </div>
   <div class="header-right">
     <% if (typeof headerAction !=='undefined' && headerAction) { %>
       <%- headerAction %>
     <% } else if (typeof activePage !== 'undefined' && activePage === 'dashboard') { %>
+      <!-- Refresh Button (Dashboard only) -->
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshDashboard()" title="Refresh Data (F5)">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
       <!-- Global Search Trigger (Dashboard only) -->
       <button class="gs-trigger-btn" id="gs-trigger-btn" onclick="openPalette()" title="Search (Ctrl+K)">
         <i class="fa-solid fa-magnifying-glass"></i>
@@ -37,6 +41,32 @@
 </div>
 
 <style>
+  /* ── Refresh Button ───────────────────────────────────────────── */
+  .refresh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: #f1f5f9;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .2s;
+    margin-right: 8px;
+  }
+  .refresh-btn:hover {
+    background: #e8f0fe;
+    border-color: #93c5fd;
+    color: #1e3a8a;
+    transform: rotate(180deg);
+  }
+  .refresh-btn:active {
+    transform: rotate(180deg) scale(0.95);
+  }
+
   /* ── Global Search Trigger Button ─────────────────────────────── */
   .gs-trigger-btn {
     display: flex;

@@ -1,5 +1,4 @@
 <%
-// Nav items: [route, fontawesome-icon-class, tooltip-label, activePage-key]
 const navTop = [
   { href: '/dashboard', icon: 'fa-solid fa-house',           label: 'Dashboard', key: 'dashboard' },
   { href: '/calendar',  icon: 'fa-regular fa-calendar-days', label: 'Calendar',  key: 'calendar'  },
@@ -11,13 +10,7 @@ const navBottom = [
   { href: '/reports', icon: 'fa-solid fa-chart-bar', label: 'Reports', key: 'reports' },
   { href: '/users',   icon: 'fa-solid fa-users',     label: 'Users',   key: 'users'   },
 ];
-const notifications = [
-  { color: '#b91c1c', text: 'Ateneo MOA expires in 12 days',            time: 'Today'       },
-  { color: '#d97706', text: 'Osaka MOU — 21 days remaining',            time: 'Today'       },
-  { color: '#1e40af', text: 'REQ-2026-011 submitted by Dr. Santos',     time: 'Mar 8, 2026' },
-  { color: '#15803d', text: 'REQ-2026-009 approved by Admin Rivera',    time: 'Mar 2, 2026' },
-  { color: '#b91c1c', text: 'TESDA Region V MOA has expired',           time: 'Jan 2, 2025' },
-];
+// Notifications will be loaded dynamically via JavaScript
 %>
 
 <style>
@@ -262,18 +255,52 @@ const notifications = [
     <span class="np-title"><i class="fa-regular fa-bell"></i> Notifications</span>
     <button class="np-clear" onclick="clearNotifs()">Mark all read</button>
   </div>
-  <% notifications.forEach(n => { %>
-  <div class="np-row">
-    <div class="np-dot" style="background:<%= n.color %>;"></div>
-    <div class="np-text"><%= n.text %></div>
-    <div class="np-time"><%= n.time %></div>
+  <div id="notifications-container">
+    <!-- Notifications will be loaded dynamically -->
+    <div class="np-row">
+      <div class="np-text" style="text-align: center; color: #64748b; padding: 20px;">Loading notifications...</div>
+    </div>
   </div>
-  <% }); %>
   <div class="np-footer"><a href="/notifications">View all notifications →</a></div>
 </div>
 
 <script>
   // ── Notification panel ──────────────────────────
+  async function loadNotifications() {
+    try {
+      const response = await fetch('/api/notifications');
+      const notifications = await response.json();
+      
+      const container = document.getElementById('notifications-container');
+      container.innerHTML = '';
+      
+      notifications.forEach(n => {
+        const row = document.createElement('div');
+        row.className = 'np-row';
+        row.innerHTML = `
+          <div class="np-dot" style="background:${n.color};"></div>
+          <div class="np-text">${n.text}</div>
+          <div class="np-time">${n.time}</div>
+        `;
+        container.appendChild(row);
+      });
+      
+      // Update notification badge
+      const unreadCount = notifications.filter(n => !n.read).length;
+      const badge = document.getElementById('notif-badge');
+      if (unreadCount > 0) {
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+      
+    } catch (error) {
+      console.error('Error loading notifications:', error);
+      document.getElementById('notifications-container').innerHTML = 
+        '<div class="np-row"><div class="np-text" style="text-align: center; color: #64748b; padding: 20px;">Failed to load notifications</div></div>';
+    }
+  }
+  
   function toggleNotifPanel(e) {
     e.stopPropagation();
     const panel = document.getElementById('notif-panel');
@@ -305,4 +332,7 @@ const notifications = [
       if (icon) icon.className = 'fa-solid fa-sun';
     }
   })();
+  
+  // ── Load notifications on page load ─────────────
+  loadNotifications();
 </script>
