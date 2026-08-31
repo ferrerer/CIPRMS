@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Requests | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        /* ── Section Switcher Tabs (same convention as administrator/partnership_requests.ejs) ── */
+        .section-tabs { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+        .section-tab {
+            padding: .45rem 1.15rem; border-radius: 20px; font-size: .82rem; font-weight: 600;
+            cursor: pointer; border: 2px solid transparent; transition: all .18s;
+            display: flex; align-items: center; gap: .4rem; background: #f3f4fa; color: #495057;
+        }
+        .section-tab:hover { background: #e8eaf6; color: #405189; }
+        .section-tab.active { background: #405189; color: #fff; border-color: #405189; }
+
+        /* ── CSPC-F-CIRL-04 "Documents Request Form" — styled to resemble the
+           official paper form (bordered label/value rows) instead of a generic
+           Bootstrap two-column grid. ── */
+        .dr-form-header {
+            display: flex; align-items: center; gap: 12px;
+            padding-bottom: 14px; margin-bottom: 4px; border-bottom: 3px solid #405189;
+        }
+        .dr-form-header img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+        .dr-form-header .dr-form-title { font-weight: 700; color: #405189; font-size: 1rem; margin: 0; letter-spacing: .3px; }
+        .dr-form-header .dr-form-subtitle { font-size: .75rem; color: #878a99; margin: 0; }
+        .dr-form-header .dr-form-code { margin-left: auto; font-size: .72rem; font-weight: 700; color: #405189; text-align: right; }
+
+        .dr-form-table { border: 1px solid #dfe3ea; border-radius: 6px; overflow: hidden; margin-top: 16px; }
+        .dr-row { display: flex; border-bottom: 1px solid #dfe3ea; }
+        .dr-row:last-child { border-bottom: none; }
+        .dr-label {
+            flex: 0 0 230px; background: #f8f9fb; font-weight: 600; font-size: .78rem;
+            text-transform: uppercase; letter-spacing: .3px; color: #495057;
+            padding: 12px 16px; display: flex; align-items: center; border-right: 1px solid #dfe3ea;
+        }
+        .dr-value { flex: 1; padding: 10px 16px; display: flex; align-items: center; min-width: 0; }
+        .dr-row-tall .dr-value { align-items: flex-start; padding-top: 12px; }
+        .dr-readonly {
+            color: #313a46; font-weight: 500; font-size: .875rem;
+            background: #fbfbfc; border: 1px dashed #dfe3ea; border-radius: 4px;
+            padding: 6px 10px; width: 100%;
+        }
+        .dr-readonly small { display: block; color: #878a99; font-weight: 400; font-size: .68rem; margin-top: 2px; }
+        .dr-value .form-control, .dr-value .form-select { font-size: .875rem; }
+        .dr-radio-group { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+        .dr-radio { display: flex; align-items: center; gap: 6px; font-size: .875rem; font-weight: 500; color: #495057; cursor: pointer; margin: 0; }
+        .dr-radio input { width: 16px; height: 16px; cursor: pointer; }
+
+        @media (max-width: 576px) {
+            .dr-row { flex-direction: column; }
+            .dr-label { border-right: none; border-bottom: 1px solid #dfe3ea; flex: 1 1 auto; }
+            .dr-form-header { flex-wrap: wrap; }
+            .dr-form-header .dr-form-code { margin-left: 0; text-align: left; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0">Requests</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Requests</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section switcher — Partnership Request / Document Request share this page but
+                     remain fully independent forms; only one panel is visible at a time. -->
+                <div class="section-tabs">
+                    <a class="section-tab active" id="tab-pr" href="#" onclick="switchSection('pr');return false;">
+                        <i class="ri-building-4-line"></i> Partnership Request
+                    </a>
+                    <a class="section-tab" id="tab-dr" href="#" onclick="switchSection('dr');return false;">
+                        <i class="ri-file-shield-2-line"></i> Document Request
+                    </a>
+                </div>
+
+                <!-- ═══════════ PANEL: PARTNERSHIP REQUEST ═══════════ -->
+                <div id="panel-pr">
+                    <div class="card" id="request-form-card">
+                        <div class="card-header d-flex align-items-center">
+                            <h4 class="card-title mb-0 flex-grow-1" id="form-title">New Partnership Request</h4>
+                            <button type="button" class="btn btn-sm btn-light" onclick="openNewRequestForm()"><i class="ri-add-line me-1"></i>Start New</button>
+                        </div>
+                        <div class="card-body">
+
+                            <!-- OCR auto-fill from a supporting document -->
+                            <div class="card border border-primary-subtle mb-4">
+                                <div class="card-body">
+                                    <h6 class="mb-2"><i class="ri-scan-2-line text-primary me-1"></i>Auto-fill from Document (OCR) — Optional</h6>
+                                    <p class="text-muted fs-13 mb-3">Upload a proposal, MOA/MOU draft, or letter of intent (PDF, JPG, or PNG — max 10MB). The system extracts text and suggests values below, and the file itself becomes your request's supporting document attachment.</p>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <input type="file" class="form-control" id="ocr-file-input" accept=".pdf,.jpg,.jpeg,.png" style="max-width:360px">
+                                        <button type="button" class="btn btn-primary text-nowrap" onclick="startOcrExtraction()"><i class="ri-magic-line me-1"></i>Extract & Attach</button>
+                                    </div>
+                                    <div id="ocr-progress-wrap" class="mt-3" style="display:none">
+                                        <div class="d-flex justify-content-between fs-12 text-muted mb-1"><span id="ocr-stage-text">Uploading…</span><span id="ocr-percent-text">0%</span></div>
+                                        <div class="progress" style="height:6px"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" id="ocr-progress-bar" style="width:0%"></div></div>
+                                    </div>
+                                    <div id="ocr-result-box" class="mt-3" style="display:none">
+                                        <span class="badge bg-success-subtle text-success"><i class="ri-checkbox-circle-line me-1"></i>Document attached — form auto-filled below</span>
+                                        <button type="button" class="btn btn-sm btn-light ms-2" onclick="applyOcrToForm()">Re-apply suggested values</button>
+                                        <div id="ocr-idp-panel" class="mt-3" style="display:none"></div>
+                                    </div>
+                                    <div id="ocr-error-box" class="alert alert-danger mt-3 mb-0 py-2 fs-13" style="display:none"></div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-lg-6 mb-3">
+                                    <label class="form-label" for="f-inst">Institution Name <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="f-inst" placeholder="e.g. Naga City State University">
+                                </div>
+                                <div class="col-lg-6 mb-3">
+                                    <label class="form-label" for="f-country">Country <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="f-country" placeholder="e.g. Philippines">
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-type">Agreement Type <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="f-type">
+                                        <option value="">Select…</option>
+                                        <option>MOA</option><option>MOU</option><option>LOI</option><option>JVA</option><option>Other</option>
+                                    </select>
+                                    <div class="form-text text-warning fs-12" id="f-type-warn" style="display:none"></div>
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-nature">Nature of Partnership <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="f-nature">
+                                        <option value="">Select…</option>
+                                        <option>Research</option><option>Student Exchange</option><option>Joint Program</option>
+                                        <option>Faculty Development</option><option>Technology Transfer</option><option>Community Outreach</option><option>Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-cat">Category</label>
+                                    <select class="form-select" id="f-cat">
+                                        <option value="">Select…</option>
+                                        <option value="International">International</option>
+                                        <option value="Local">Local</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-region">Region</label>
+                                    <select class="form-select" id="f-region">
+                                        <option value="">Select…</option>
+                                        <option>Asia</option><option>Europe</option><option>Americas</option><option>Oceania</option><option>Africa</option><option>Local</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-unit">Responsible CSPC Unit</label>
+                                    <select class="form-select" id="f-unit">
+                                        <option value="">Select…</option>
+                                        <option>CCS</option><option>CILS</option><option>CETE</option><option>CNAS</option><option>CAMS</option><option>CIRL</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-start">Proposed Start Date</label>
+                                    <input type="date" class="form-control" id="f-start">
+                                </div>
+                                <div class="col-lg-4 mb-3">
+                                    <label class="form-label" for="f-end">Proposed End Date</label>
+                                    <input type="date" class="form-control" id="f-end">
+                                </div>
+                                <div class="col-12 mb-3">
+                                    <label class="form-label" for="f-notes">Additional Details</label>
+                                    <textarea class="form-control" id="f-notes" rows="4" placeholder="Purpose, objectives, expected benefits, or any other details relevant to your request…"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-light" onclick="saveDraft()"><i class="ri-save-line me-1"></i>Save as Draft</button>
+                                <button type="button" class="btn btn-success" onclick="submitRequest()"><i class="ri-send-plane-line me-1"></i>Submit Request</button>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/partner/monitoring">Monitoring</a> page.</p>
+                </div>
+
+                <!-- ═══════════ PANEL: DOCUMENT REQUEST ═══════════ -->
+                <div id="panel-dr" style="display:none">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-4">
+                            <div class="dr-form-header">
+                                <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL">
+                                <div>
+                                    <p class="dr-form-title">Documents Request Form</p>
+                                    <p class="dr-form-subtitle">Center for International Relations and Linkages — CSPC</p>
+                                </div>
+                                <div class="dr-form-code">CSPC-F-CIRL-04</div>
+                            </div>
+                            <p class="text-muted fs-13 mt-2 mb-0">Request MOA, MOU, or Accreditation documents from CSPC-CIRL — to propose a new partnership, use Partnership Request instead.</p>
+                            <form id="drForm">
+                                <div class="dr-form-table">
+                                    <div class="dr-row">
+                                        <div class="dr-label">Name of Requestor</div>
+                                        <div class="dr-value"><div class="dr-readonly"><%= user.name %></div></div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-label">Office / College / Institution</div>
+                                        <div class="dr-value">
+                                            <input type="text" class="form-control" id="dr-f-inst" placeholder="Enter your organization...">
+                                            <small class="text-muted d-none mt-1" id="dr-inst-autofill-hint">Auto-filled from your profile</small>
+                                        </div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-label">Date / Time</div>
+                                        <div class="dr-value"><div class="dr-readonly" id="dr-datetime-display">—</div></div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-label">Contact No.</div>
+                                        <div class="dr-value"><input type="text" class="form-control" id="dr-f-contact" placeholder="e.g. 0917-000-0000"></div>
+                                    </div>
+                                    <div class="dr-row dr-row-tall">
+                                        <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
+                                        <div class="dr-value" style="display:block">
+                                            <select class="form-select" id="dr-f-type">
+                                                <option value="">Select type...</option>
+                                                <option>MOA</option>
+                                                <option>MOU</option>
+                                                <option>Accreditation</option>
+                                            </select>
+                                            <small class="text-muted d-block mt-2">CSPC-CIRL issues MOA, MOU, or Accreditation documents.</small>
+                                        </div>
+                                    </div>
+                                    <div class="dr-row dr-row-tall">
+                                        <div class="dr-label">Purpose</div>
+                                        <div class="dr-value" style="display:block">
+                                            <textarea class="form-control" id="dr-f-notes" rows="4" placeholder="Describe what's needed and why..."></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-label">Document Form</div>
+                                        <div class="dr-value dr-radio-group">
+                                            <label class="dr-radio"><input type="radio" name="dr-f-form" value="Printed Copy"> Printed Copy</label>
+                                            <label class="dr-radio"><input type="radio" name="dr-f-form" value="Digital Copy"> Digital Copy</label>
+                                        </div>
+                                    </div>
+                                    <div class="dr-row">
+                                        <div class="dr-label">Email Address</div>
+                                        <div class="dr-value"><div class="dr-readonly"><%= user.email %></div></div>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-end gap-2 mt-4">
+                                    <button type="button" class="btn btn-light px-4" onclick="resetDocRequestForm()">Clear</button>
+                                    <button type="button" class="btn btn-success px-5 fw-bold" id="dr-submit-btn" onclick="submitDocRequest()">
+                                        Submit Request
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/partner/monitoring">Monitoring</a> page.</p>
+                </div>
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<!-- Toast (shared by both panels) -->
+<div id="reg-toast" style="display:none;position:fixed;bottom:20px;right:20px;z-index:9999" class="alert alert-dark shadow-lg align-items-center">
+    <span id="reg-toast-msg"></span>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script src="/velzon/assets/js/pages/idp-ocr-widget.js"></script>
+<script>
+    /* ─── SECTION SWITCHER ─── */
+    function switchSection(sec) {
+        document.getElementById('panel-pr').style.display = sec === 'pr' ? '' : 'none';
+        document.getElementById('panel-dr').style.display = sec === 'dr' ? '' : 'none';
+        document.getElementById('tab-pr').classList.toggle('active', sec === 'pr');
+        document.getElementById('tab-dr').classList.toggle('active', sec === 'dr');
+    }
+
+    function showToast(msg) {
+        var t = document.getElementById('reg-toast');
+        document.getElementById('reg-toast-msg').textContent = msg;
+        t.style.display = 'flex';
+        setTimeout(function () { t.style.display = 'none'; }, 3500);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       PARTNERSHIP REQUEST (unchanged from the previous
+       standalone page — same fields, same /api/requests
+       endpoints, same OCR auto-fill and draft-resume logic)
+       ═══════════════════════════════════════════════════ */
+    var myRequests = [];
+    var editingId = null;
+    var ocrExtractedResult = null;
+
+    function loadHistory() {
+        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (data) {
+            myRequests = data;
+        });
+    }
+
+    function resetForm() {
+        editingId = null;
+        ['f-inst', 'f-country', 'f-notes'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['f-type', 'f-nature', 'f-cat', 'f-region', 'f-unit'].forEach(function (id) { document.getElementById(id).value = ''; });
+        document.getElementById('f-start').value = '';
+        document.getElementById('f-end').value = '';
+        ocrExtractedResult = null;
+        document.getElementById('ocr-file-input').value = '';
+        document.getElementById('ocr-progress-wrap').style.display = 'none';
+        document.getElementById('ocr-result-box').style.display = 'none';
+        document.getElementById('ocr-error-box').style.display = 'none';
+        document.getElementById('ocr-idp-panel').style.display = 'none';
+        document.getElementById('f-type-warn').style.display = 'none';
+    }
+
+    function openNewRequestForm() {
+        resetForm();
+        document.getElementById('form-title').textContent = 'New Partnership Request';
+    }
+
+    function editDraft(id) {
+        var r = myRequests.find(function (x) { return x.id === id; });
+        if (!r) return;
+        resetForm();
+        editingId = id;
+        document.getElementById('form-title').textContent = 'Edit Draft Request';
+        document.getElementById('f-inst').value = r.institution || '';
+        document.getElementById('f-country').value = r.country || '';
+        document.getElementById('f-type').value = r.type || '';
+        document.getElementById('f-nature').value = r.nature || '';
+        document.getElementById('f-cat').value = r.category || '';
+        document.getElementById('f-region').value = r.region || '';
+        document.getElementById('f-unit').value = r.unit || '';
+        document.getElementById('f-start').value = r.startDate || '';
+        document.getElementById('f-end').value = r.endDate || '';
+        document.getElementById('f-notes').value = r.notes || '';
+    }
+
+    function collectFormData() {
+        return {
+            institution: document.getElementById('f-inst').value.trim(),
+            country: document.getElementById('f-country').value.trim(),
+            type: document.getElementById('f-type').value,
+            nature: document.getElementById('f-nature').value,
+            category: document.getElementById('f-cat').value,
+            region: document.getElementById('f-region').value,
+            unit: document.getElementById('f-unit').value,
+            startDate: document.getElementById('f-start').value,
+            endDate: document.getElementById('f-end').value,
+            notes: document.getElementById('f-notes').value.trim(),
+            attachmentLink: (ocrExtractedResult && ocrExtractedResult.fileLink) || undefined
+        };
+    }
+
+    function saveDraft() {
+        var payload = collectFormData();
+        if (editingId) {
+            fetch('/api/requests/' + editingId + '/edit', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Draft updated.'); loadHistory(); }
+                else showToast(data.error || 'Failed to update draft.');
+            });
+        } else {
+            payload.isDraft = true;
+            fetch('/api/requests', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Saved as draft.'); editingId = data.request.id; loadHistory(); }
+                else showToast(data.error || 'Failed to save draft.');
+            });
+        }
+    }
+
+    function submitRequest() {
+        var payload = collectFormData();
+        if (!payload.institution || !payload.country || !payload.type || !payload.nature) {
+            showToast('Institution, country, agreement type, and nature are required to submit.');
+            return;
+        }
+        if (editingId) {
+            fetch('/api/requests/' + editingId + '/edit', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function () {
+                return fetch('/api/requests/' + editingId + '/submit', { method: 'POST' });
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Request submitted.'); openNewRequestForm(); loadHistory(); }
+                else showToast(data.error || 'Failed to submit request.');
+            });
+        } else {
+            payload.isDraft = false;
+            fetch('/api/requests', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Request submitted.'); openNewRequestForm(); loadHistory(); }
+                else showToast(data.error || 'Failed to submit request.');
+            });
+        }
+    }
+
+    // ── OCR auto-fill (reuses the same /api/ocr endpoints as the Registry module) ──
+    function startOcrExtraction() {
+        var file = document.getElementById('ocr-file-input').files[0];
+        if (!file) { showToast('Choose a file first.'); return; }
+
+        document.getElementById('ocr-error-box').style.display = 'none';
+        document.getElementById('ocr-result-box').style.display = 'none';
+        document.getElementById('ocr-progress-wrap').style.display = '';
+        document.getElementById('ocr-progress-bar').style.width = '0%';
+
+        var formData = new FormData();
+        formData.append('document', file);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/ocr/extract');
+        xhr.upload.addEventListener('progress', function (e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round((e.loaded / e.total) * 100);
+            document.getElementById('ocr-progress-bar').style.width = pct + '%';
+        });
+        xhr.onload = function () {
+            var data;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+            if (xhr.status !== 202 || !data || !data.success) { ocrFail((data && data.error) || 'Failed to start OCR.'); return; }
+            document.getElementById('ocr-stage-text').textContent = 'OCR Processing…';
+            pollOcrStatus(data.jobId);
+        };
+        xhr.onerror = function () { ocrFail('Network error while uploading.'); };
+        xhr.send(formData);
+    }
+
+    function pollOcrStatus(jobId) {
+        fetch('/api/ocr/status/' + jobId).then(function (r) { return r.json(); }).then(function (data) {
+            if (!data.success) { ocrFail(data.error || 'Job not found.'); return; }
+            document.getElementById('ocr-progress-bar').style.width = (data.progress || 0) + '%';
+            if (data.status === 'error') { ocrFail(data.error || 'OCR failed.'); return; }
+            if (data.status === 'done') { ocrSucceed(data.result); return; }
+            setTimeout(function () { pollOcrStatus(jobId); }, 700);
+        }).catch(function () { ocrFail('Lost connection while checking OCR progress.'); });
+    }
+
+    function ocrFail(message) {
+        document.getElementById('ocr-progress-wrap').style.display = 'none';
+        var box = document.getElementById('ocr-error-box');
+        box.textContent = message;
+        box.style.display = '';
+    }
+
+    function ocrSucceed(result) {
+        ocrExtractedResult = result;
+        document.getElementById('ocr-progress-wrap').style.display = 'none';
+        document.getElementById('ocr-result-box').style.display = '';
+        if (window.IDP) {
+            IDP.renderResult('ocr-idp-panel', result, {
+                onCancelDuplicate: function (documentId) {
+                    if (!documentId) return;
+                    fetch('/api/documents/' + documentId + '/organize', {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true })
+                    }).then(function () { showToast('Upload archived — removed from the active Document Library.'); });
+                },
+                onViewDuplicate: function (fileLink) { window.open(fileLink, '_blank'); }
+            });
+        }
+        // 2026-07-29: auto-fill immediately — no manual "Apply" click required.
+        // applyOcrToForm() only ever sets a field when OCR actually found a
+        // value for it, shows its own confirmation toast, and remains safe to
+        // re-run from the "Re-apply suggested values" button afterward.
+        applyOcrToForm();
+    }
+
+    function ocrIsoDate(str) {
+        if (!str) return '';
+        var d = new Date(str);
+        if (isNaN(d.getTime())) return '';
+        // Use LOCAL date parts, not toISOString() (which converts to UTC) —
+        // a date-only string like "March 3, 2026" parses as local midnight,
+        // and toISOString() can roll that back to March 2 in UTC+ timezones.
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dd = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + mm + '-' + dd;
+    }
+
+    function applyOcrToForm() {
+        if (!ocrExtractedResult) return;
+        var r = ocrExtractedResult;
+        var filled = []; // { id, confidence }
+        function set(id, value, confidence) {
+            if (value === null || value === undefined || value === '') return;
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.value = value;
+            filled.push({ id: id, confidence: confidence });
+        }
+
+        if (r.institution) set('f-inst', r.partner || r.institution, r.institutionConfidence);
+        set('f-country', r.country, r.countryConfidence);
+        set('f-cat', r.category, r.categoryConfidence);
+        set('f-region', r.region, r.regionConfidence);
+        set('f-unit', r.unit, r.unitConfidence);
+        if (r.nature) set('f-nature', r.nature, r.natureConfidence);
+
+        var typeWarn = document.getElementById('f-type-warn');
+        var mappedType = window.IDP ? IDP.mapDocumentType(r.documentType, ['MOA', 'MOU', 'LOI', 'JVA', 'Other']) : null;
+        if (mappedType) {
+            set('f-type', mappedType, r.documentTypeConfidence);
+            if (typeWarn) typeWarn.style.display = 'none';
+        } else if (r.documentType && typeWarn) {
+            typeWarn.textContent = 'Detected "' + r.documentType + '" — please select the closest Agreement Type manually.';
+            typeWarn.style.display = '';
+        }
+
+        var startIso = ocrIsoDate(r.startDate), endIso = ocrIsoDate(r.endDate);
+        set('f-start', startIso, r.startDateConfidence);
+        set('f-end', endIso, r.endDateConfidence);
+
+        var extras = [];
+        if (r.purpose) extras.push('Purpose: ' + r.purpose);
+        if (r.objectives) extras.push('Objectives: ' + r.objectives);
+        if (r.scope) extras.push('Scope: ' + r.scope);
+        if (extras.length) {
+            var notesEl = document.getElementById('f-notes');
+            notesEl.value = (notesEl.value ? notesEl.value + '\n\n' : '') + '[From OCR] ' + extras.join(' | ');
+            filled.push({ id: 'f-notes', confidence: null });
+        }
+
+        if (window.IDP) filled.forEach(function (f) { IDP.markFilled(f.id, f.confidence); });
+        if (filled.length) {
+            var firstEl = document.getElementById(filled[0].id);
+            if (firstEl) firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        showToast('Suggested values applied — please review before saving.');
+    }
+
+    // Clicking "Requests" should land straight in the Partnership Request
+    // form — no extra "New Request" click needed. If a draft already exists,
+    // resume it instead of opening a blank form (avoids creating a duplicate
+    // draft). Request tracking/history now lives entirely on the Monitoring
+    // page, so notifications deep-link there instead of here.
+    function openFormOnEntry() {
+        var draft = myRequests.find(function (r) { return r.status === 'Draft'; });
+        if (draft) editDraft(draft.id);
+        else openNewRequestForm();
+    }
+
+    /* ═══════════════════════════════════════════════════
+       DOCUMENT REQUEST (reused verbatim from the previous
+       standalone partner_document_requests.ejs — same
+       /api/document-requests endpoints — with `dr-` prefixed
+       ids/function names so it can coexist on the same page
+       as the Partnership Request form above)
+       ═══════════════════════════════════════════════════ */
+    var drAutoInst = ''; // organization pulled from the partner's saved profile, if any
+
+    function setDrDateTimeDisplay() {
+        var el = document.getElementById('dr-datetime-display');
+        if (el) el.textContent = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    setDrDateTimeDisplay();
+
+    // Office/College/Institution auto-fills from the partner's saved profile
+    // (organization) when one exists — same /api/partner/profile endpoint the
+    // Settings page already uses. Falls back to a normal editable field when
+    // no organization has been saved yet.
+    fetch('/api/partner/profile').then(function (r) { return r.json(); }).then(function (profile) {
+        if (profile && profile.organization) {
+            drAutoInst = profile.organization;
+            var instEl = document.getElementById('dr-f-inst');
+            instEl.value = drAutoInst;
+            instEl.readOnly = true;
+            document.getElementById('dr-inst-autofill-hint').classList.remove('d-none');
+        }
+    }).catch(function () { /* profile fetch is a best-effort auto-fill, not required to use the form */ });
+
+    function resetDocRequestForm() {
+        document.getElementById('dr-f-inst').value = drAutoInst;
+        document.getElementById('dr-f-type').value = '';
+        document.getElementById('dr-f-notes').value = '';
+        document.getElementById('dr-f-contact').value = '';
+        document.querySelectorAll('input[name="dr-f-form"]').forEach(function (el) { el.checked = false; });
+    }
+
+    function submitDocRequest() {
+        var inst = document.getElementById('dr-f-inst').value.trim();
+        var type = document.getElementById('dr-f-type').value;
+        var notes = document.getElementById('dr-f-notes').value.trim();
+        var contactNumber = document.getElementById('dr-f-contact').value.trim();
+        var documentFormEl = document.querySelector('input[name="dr-f-form"]:checked');
+        var documentForm = documentFormEl ? documentFormEl.value : '';
+
+        if (!inst || !type) {
+            showToast('Please fill in all required fields.');
+            if (!inst) document.getElementById('dr-f-inst').classList.add('is-invalid');
+            if (!type) document.getElementById('dr-f-type').classList.add('is-invalid');
+            return;
+        }
+        document.querySelectorAll('#panel-dr .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+
+        var btn = document.getElementById('dr-submit-btn');
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line me-2"></i>Submitting...';
+
+        fetch('/api/document-requests', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ institution: inst, documentType: type, notes: notes, contactNumber: contactNumber, documentForm: documentForm })
+        }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (result) {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            if (result.ok && result.data.success) {
+                showToast('Document request submitted!');
+                resetDocRequestForm();
+            } else {
+                showToast(result.data.error || 'Error submitting request.');
+            }
+        }).catch(function (e) {
+            console.error(e);
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            showToast('Error submitting request.');
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadHistory().then(openFormOnEntry);
+    });
+</script>
+</body>
+</html>

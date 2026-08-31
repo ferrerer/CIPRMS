@@ -1,0 +1,187 @@
+<!-- ========== Staff Sidebar (2026-08-27 View-Only → Staff migration) ========== -->
+<div class="app-menu navbar-menu">
+    <div class="navbar-brand-box">
+        <a href="/staff/dashboard" class="logo logo-dark">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28"
+                    style="border-radius:50%;object-fit:cover;margin-right:8px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#405189;">CIPRMS</span>
+            </span>
+        </a>
+        <a href="/staff/dashboard" class="logo logo-light">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28"
+                    style="border-radius:50%;object-fit:cover;margin-right:8px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#fff;">CIPRMS</span>
+            </span>
+        </a>
+        <button type="button" class="btn btn-sm p-0 fs-20 header-item float-end btn-vertical-sm-hover"
+            id="vertical-hover">
+            <i class="ri-record-circle-line"></i>
+        </button>
+    </div>
+
+    <!-- Sidebar User Box (Velzon style) -->
+    <div class="dropdown sidebar-user m-1 rounded">
+        <button type="button" class="btn material-shadow-none" id="sidebar-user-dropdown" data-bs-toggle="dropdown"
+            aria-haspopup="true" aria-expanded="false">
+            <span class="d-flex align-items-center gap-2">
+                <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+                <span class="text-start">
+                    <span class="d-block fw-medium sidebar-user-name-text">
+                        <%= typeof user !=='undefined' && user ? user.name || 'Staff' : 'Staff' %>
+                    </span>
+                    <span class="d-block fs-14 sidebar-user-name-sub-text"><i
+                            class="ri ri-circle-fill fs-10 text-success align-baseline"></i> <span
+                            class="align-middle">Staff</span></span>
+                </span>
+            </span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end">
+            <h6 class="dropdown-header">Welcome!</h6>
+            <a class="dropdown-item" href="/staff/settings"><i
+                    class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Profile</span></a>
+            <a class="dropdown-item" href="/staff/notifications"><i
+                    class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Notifications</span></a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="/staff/settings"><i
+                    class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Settings</span></a>
+            <a class="dropdown-item" href="/logout"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i>
+                <span class="align-middle">Logout</span></a>
+        </div>
+    </div>
+
+    <div id="scrollbar">
+        <div class="container-fluid">
+            <div id="two-column-menu"></div>
+            <ul class="navbar-nav" id="navbar-nav">
+
+                <li class="menu-title"><span>Main Menu</span></li>
+
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'dashboard') ? 'active' : '' %>"
+                        href="/staff/dashboard">
+                        <i class="ri-dashboard-2-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'calendar') ? 'active' : '' %>"
+                        href="/staff/calendar">
+                        <i class="ri-calendar-2-line"></i>
+                        <span>Calendar</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'lifecycle') ? 'active' : '' %>"
+                        href="/staff/lifecycle">
+                        <i class="ri-refresh-line"></i>
+                        <span>Monitoring</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'access-requests') ? 'active' : '' %>"
+                        href="/staff/requests">
+                        <i class="ri-shield-user-line"></i>
+                        <span>Requests</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'registry') ? 'active' : '' %>"
+                        href="/staff/registry">
+                        <i class="ri-file-list-3-line"></i>
+                        <span>Registry</span>
+                    </a>
+                </li>
+
+                <!-- Document Library -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'documents') ? 'active' : '' %>"
+                        href="/staff/documents">
+                        <i class="ri-folder-zip-line"></i>
+                        <span>Document Library</span>
+                    </a>
+                </li>
+
+                <li class="menu-title"><span>Management</span></li>
+
+                <!-- Reports -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'reports') ? 'active' : '' %>"
+                        href="/staff/reports">
+                        <i class="ri-bar-chart-grouped-line"></i>
+                        <span>Reports & Analytics</span>
+                    </a>
+                </li>
+
+                <!-- Users -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'users') ? 'active' : '' %>"
+                        href="/staff/users">
+                        <i class="ri-group-line"></i>
+                        <span>User Management</span>
+                    </a>
+                </li>
+
+                <!-- Notifications -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'notifications') ? 'active' : '' %>"
+                        href="/staff/notifications">
+                        <i class="ri-notification-3-line"></i>
+                        <span>Notifications</span>
+                        <span class="badge bg-danger rounded-pill" id="sidebar-notif-badge"
+                            style="display:none;margin-left:auto;"></span>
+                    </a>
+                </li>
+
+                <li class="menu-title"><span>Account</span></li>
+
+                <!-- Settings -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'settings') ? 'active' : '' %>"
+                        href="/staff/settings">
+                        <i class="ri-settings-3-line"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+
+                <!-- Logout -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="/logout">
+                        <i class="ri-logout-box-r-line"></i>
+                        <span>Logout</span>
+                    </a>
+                </li>
+
+            </ul>
+        </div>
+    </div>
+
+    <div class="sidebar-background"></div>
+</div>
+<div class="vertical-overlay"></div>
+
+<script>
+    fetch('/api/notifications/unread-count')
+        .then(r => r.json())
+        .then(d => {
+            const badge = document.getElementById('sidebar-notif-badge');
+            if (badge && (d.count || 0) > 0) {
+                badge.textContent = d.count;
+                badge.style.display = '';
+            }
+        }).catch(() => { });
+</script>

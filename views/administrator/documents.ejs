@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Document Library | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <!-- Bootstrap Css -->
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <!-- Icons Css -->
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <!-- App Css -->
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <!-- Custom Css -->
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        .doc-card { transition: all 0.2s; border: 1px solid #e9ebec !important; }
+        .doc-card:hover { transform: translateY(-3px); border-color: #405189 !important; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .ocr-spinner { display: none; margin: 20px auto; }
+        .extracted-data { display: none; }
+        .folder-list .list-group-item { border: none; padding: 0.6rem 1.25rem; transition: all 0.2s; display: flex; align-items: center; }
+        .folder-list .list-group-item:hover { background-color: #f3f6f9; }
+        .folder-list .list-group-item.active { background-color: #e2e5ed; color: #405189; font-weight: 600; }
+        .folder-list .list-group-item i.folder-icon { font-size: 16px; width: 24px; }
+        .folder-actions { display: none; white-space: nowrap; }
+        .folder-list .list-group-item:hover .folder-actions { display: inline-block; }
+        .folder-actions i { cursor: pointer; padding: 2px 4px; }
+        .folder-actions i:hover { color: #405189; }
+        .stat-box { padding: 12px; border: 1px solid #e9ebec; border-radius: 8px; text-center: center; }
+        .tag-pills-container { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
+        .tag-pill { margin-right: 8px; cursor: pointer; }
+    </style>
+</head>
+
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <!-- page title -->
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0">Document Library (OCR)</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Document Library</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                    <!-- Left Sidebar Panel -->
+                    <div class="col-xl-3">
+                        <!-- Summary Card -->
+                        <div class="card">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-dashboard-line me-2 align-bottom"></i>Summary</h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2 text-center">
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-total">0</h5>
+                                            <p class="text-muted fs-11 mb-0">Total</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-moa">0</h5>
+                                            <p class="text-muted fs-11 mb-0">MOA</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-mou">0</h5>
+                                            <p class="text-muted fs-11 mb-0">MOU</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Type Filter -->
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="text-muted text-uppercase fw-semibold fs-11 mb-3">Type Filter</p>
+                                <div class="btn-group w-100 flex-wrap" role="group" id="type-filter-group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm active" onclick="filterType('All', this)">All</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('MOA', this)">MOA</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('MOU', this)">MOU</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('Accreditation', this)">Accreditation</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('Other', this)">Other</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Folders -->
+                        <div class="card">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1">Folders</h4>
+                                <button class="btn btn-soft-primary btn-sm" onclick="createFolderPrompt()"><i class="ri-add-line me-1"></i>New</button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="folder-list">
+                                    <div class="list-group list-group-flush" id="folder-list-group"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Grid Area -->
+                    <div class="col-xl-9">
+                        <div class="card">
+                            <div class="card-header border-0 pb-0">
+                                <div class="row align-items-center g-3">
+                                    <div class="col-md-3">
+                                        <h4 class="card-title mb-0"><i class="ri-file-list-3-line me-2"></i>Documents</h4>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="search-box">
+                                            <input type="text" class="form-control" placeholder="search by keywords..." id="searchLibrary">
+                                            <i class="ri-search-line search-icon"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-auto">
+                                        <div class="btn-group" role="group" aria-label="Grid or List view">
+                                            <button type="button" class="btn btn-outline-secondary" id="view-grid-btn" title="Grid View" onclick="setView('grid')">
+                                                <i class="ri-layout-grid-fill"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="view-list-btn" title="List View" onclick="setView('list')">
+                                                <i class="ri-list-check-2"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
+                                    <div class="col-md-auto">
+                                        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                                            <i class="ri-upload-cloud-2-line align-bottom me-1"></i> Upload & Extract
+                                        </button>
+                                    </div>
+                                    <% } %>
+                                </div>
+
+                                <!-- Tag Filters -->
+                                <div class="tag-pills-container mt-4 mb-2">
+                                    <button class="btn btn-sm btn-soft-primary rounded-pill px-3 active" onclick="filterTag('All', this)">All</button>
+                                    <button class="btn btn-sm btn-soft-info rounded-pill px-3" onclick="filterTag('Research', this)">Research</button>
+                                    <button class="btn btn-sm btn-soft-success rounded-pill px-3" onclick="filterTag('Student Exchange', this)">Student Exchange</button>
+                                    <button class="btn btn-sm btn-soft-primary rounded-pill px-3" onclick="filterTag('Foreign Exchange', this)">Foreign Exchange</button>
+                                    <button class="btn btn-sm btn-soft-warning rounded-pill px-3" onclick="filterTag('Training', this)">Training</button>
+                                    <button class="btn btn-sm btn-soft-danger rounded-pill px-3" onclick="filterTag('Conference', this)">Conference</button>
+                                    <button class="btn btn-sm btn-soft-secondary rounded-pill px-3" onclick="filterTag('Other', this)">Other</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row" id="document-grid">
+                                    <!-- Documents loaded here (Grid View) -->
+                                    <div class="col-12 text-center py-5" id="loading-docs">
+                                        <div class="spinner-border text-primary" role="status"></div>
+                                        <p class="mt-2 text-muted">Loading documents...</p>
+                                    </div>
+                                </div>
+
+                                <!-- List View (hidden unless selected) -->
+                                <div class="table-responsive" id="document-list" style="display:none">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width:48px"></th>
+                                                <th>Document Name</th>
+                                                <th>Institution</th>
+                                                <th>Document Type</th>
+                                                <th>Nature</th>
+                                                <th>Upload Date</th>
+                                                <th>Status</th>
+                                                <th>Folder</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="document-list-body">
+                                            <tr>
+                                                <td colspan="9" class="text-center py-5">
+                                                    <div class="spinner-border text-primary" role="status"></div>
+                                                    <p class="mt-2 text-muted mb-0">Loading documents...</p>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<!-- Upload & OCR Modal — Administrator only (removed for Auth. Personnel 2026-07-23) -->
+<% var isAdmin = typeof user !== 'undefined' && user && user.role === 'Administrator'; %>
+<% if (isAdmin) { %>
+<div class="modal fade zoomIn" id="uploadModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-light-subtle p-3">
+        <h5 class="modal-title">Upload Document & OCR Extraction</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" id="close-upload"></button>
+      </div>
+      <div class="modal-body">
+        <div id="upload-stage">
+            <div class="text-center p-5 border border-dashed rounded">
+                <i class="ri-upload-cloud-2-line fs-1 text-primary"></i>
+                <h5 class="mt-3">Drop file here or click to upload</h5>
+                <p class="text-muted">Supports PDF, JPG, JPEG, PNG (max 10MB). The system automatically extracts text and archives the file to this library.</p>
+                <input type="file" id="fileInput" class="form-control mt-3" accept=".pdf,.jpg,.jpeg,.png" onchange="startOcr()">
+            </div>
+        </div>
+
+        <div id="ocr-stage" class="text-center ocr-spinner">
+            <div class="spinner-border text-success" style="width: 3rem; height: 3rem;" role="status"></div>
+            <h5 class="mt-3" id="ocr-stage-heading">Extracting metadata via OCR...</h5>
+            <p class="text-muted fs-13" id="ocr-stage-detail">Analyzing document text. Please wait.</p>
+            <div class="progress mx-auto" style="height:6px;max-width:320px">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" id="ocr-modal-progress-bar" style="width:0%"></div>
+            </div>
+        </div>
+
+        <div id="result-stage" class="extracted-data">
+            <div class="alert alert-success"><i class="ri-checkbox-circle-line me-2"></i> <span id="result-alert-text">Extraction complete. This document has already been added to the library — edit anything below if needed.</span></div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Document Title</label>
+                    <input type="text" class="form-control" id="res-title">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Extracted Type</label>
+                    <input type="text" class="form-control" id="res-type">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Extracted Institution</label>
+                    <input type="text" class="form-control" id="res-inst">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Validity Period</label>
+                    <input type="text" class="form-control" id="res-validity">
+                </div>
+                <div class="col-12 mb-2">
+                    <span class="badge bg-success-subtle text-success" id="res-confidence-badge">Confidence: —</span>
+                    <span class="badge bg-warning-subtle text-warning ms-1" id="res-warning-badge" style="display:none">Low confidence — verify carefully</span>
+                </div>
+                <div class="col-12 mb-3">
+                    <label class="form-label">Full OCR Text (Preview)</label>
+                    <textarea class="form-control bg-light" rows="4" readonly id="res-rawtext"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div id="ocr-error-stage" class="alert alert-danger" style="display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="saveDocBtn" style="display:none;" onclick="saveDocument()">Save Edits</button>
+      </div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script>
+    let allDocs = [];
+    let allFolders = [];
+    let currentType = 'All';
+    let currentTag = 'All';
+    let currentSearch = '';
+    let currentFolder = 'all'; // 'all' | 'unfiled' | 'archived' | <folder id>
+    let currentView = localStorage.getItem('docLibraryView') === 'list' ? 'list' : 'grid';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        applyViewState(); // reflect the persisted view immediately, before data loads
+        loadFolders();
+        loadDocuments();
+
+        document.getElementById('searchLibrary').addEventListener('input', function(e) {
+            currentSearch = e.target.value.toLowerCase();
+            renderFiltered();
+        });
+
+        var uploadModalEl = document.getElementById('uploadModal');
+        if (uploadModalEl) {
+            uploadModalEl.addEventListener('hidden.bs.modal', function () {
+                currentDocId = null;
+                document.getElementById('fileInput').value = '';
+                document.getElementById('upload-stage').style.display = 'block';
+                document.getElementById('ocr-stage').style.display = 'none';
+                document.getElementById('result-stage').style.display = 'none';
+                document.getElementById('ocr-error-stage').style.display = 'none';
+                document.getElementById('saveDocBtn').style.display = 'none';
+            });
+        }
+    });
+
+    function loadDocuments() {
+        fetch('/api/documents')
+            .then(r => r.json())
+            .then(data => {
+                allDocs = data;
+                renderFiltered();
+                updateStats();
+            });
+    }
+
+    function updateStats() {
+        const total = allDocs.length;
+        const moa = allDocs.filter(d => d.type === 'MOA').length;
+        const mou = allDocs.filter(d => d.type === 'MOU').length;
+        
+        document.getElementById('stat-total').textContent = total;
+        document.getElementById('stat-moa').textContent = moa;
+        document.getElementById('stat-mou').textContent = mou;
+    }
+
+    // ── Grid/List view toggle ─────────────────────────────────────────────────
+    // Purely client-side: no fetch, no page reload. Both views are kept
+    // rendered in the DOM from the same `filtered` array (see renderFiltered),
+    // so switching is just an instant show/hide — search and filters already
+    // apply to both since they share one data source.
+    function setView(view) {
+        currentView = view;
+        localStorage.setItem('docLibraryView', view);
+        applyViewState();
+    }
+
+    function applyViewState() {
+        document.getElementById('view-grid-btn').classList.toggle('active', currentView === 'grid');
+        document.getElementById('view-list-btn').classList.toggle('active', currentView === 'list');
+        document.getElementById('document-grid').style.display = currentView === 'grid' ? '' : 'none';
+        document.getElementById('document-list').style.display = currentView === 'list' ? '' : 'none';
+    }
+
+    function filterType(type, el) {
+        currentType = type;
+        document.querySelectorAll('#type-filter-group .btn').forEach(btn => btn.classList.remove('active'));
+        el.classList.add('active');
+        renderFiltered();
+    }
+
+    function filterTag(tag, el) {
+        currentTag = tag;
+        document.querySelectorAll('.tag-pills-container .btn').forEach(btn => btn.classList.remove('active'));
+        el.classList.add('active');
+        renderFiltered();
+    }
+
+    // ── Folders — real, per-owner, backed by /api/document-folders* ─────────────
+    function loadFolders() {
+        return fetch('/api/document-folders/mine').then(r => r.json()).then(data => {
+            allFolders = Array.isArray(data) ? data : [];
+            renderFolderList();
+        });
+    }
+
+    function filterFolder(folder) {
+        currentFolder = folder;
+        renderFolderList();
+        renderFiltered();
+    }
+
+    function renderFolderList() {
+        const container = document.getElementById('folder-list-group');
+        const activeFolders = allFolders.filter(f => !f.archived);
+        const archivedCount = allFolders.filter(f => f.archived).length + allDocs.filter(d => d.archived).length;
+
+        let html = `
+          <a href="#" class="list-group-item list-group-item-action ${currentFolder === 'all' ? 'active' : ''}" onclick="filterFolder('all');return false;">
+            <i class="ri-folder-open-fill text-warning folder-icon"></i> All Documents
+          </a>
+          <a href="#" class="list-group-item list-group-item-action ${currentFolder === 'unfiled' ? 'active' : ''}" onclick="filterFolder('unfiled');return false;">
+            <i class="ri-file-3-line text-muted folder-icon"></i> Unfiled
+          </a>`;
+        activeFolders.forEach(f => {
+            html += `
+          <a href="#" class="list-group-item list-group-item-action ${currentFolder === f.id ? 'active' : ''}" onclick="filterFolder(${f.id});return false;">
+            <i class="ri-folder-2-fill text-info folder-icon"></i>
+            <span class="flex-grow-1 text-truncate">${escHtml(f.name)}</span>
+            <span class="folder-actions">
+              <i class="ri-pencil-line" title="Rename" onclick="event.stopPropagation();event.preventDefault();renameFolderPrompt(${f.id})"></i>
+              <i class="ri-archive-line" title="Archive folder" onclick="event.stopPropagation();event.preventDefault();toggleFolderArchive(${f.id}, true)"></i>
+            </span>
+          </a>`;
+        });
+        html += `
+          <div class="dropdown-divider"></div>
+          <a href="#" class="list-group-item list-group-item-action ${currentFolder === 'archived' ? 'active' : ''}" onclick="filterFolder('archived');return false;">
+            <i class="ri-archive-fill text-muted folder-icon"></i> Archived <span class="badge bg-light text-dark ms-auto">${archivedCount}</span>
+          </a>`;
+        container.innerHTML = html;
+    }
+
+    function createFolderPrompt() {
+        const name = prompt('New folder name:');
+        if (!name || !name.trim()) return;
+        fetch('/api/document-folders', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
+        }).then(r => r.json()).then(data => {
+            if (data.success) loadFolders();
+            else alert(data.error || 'Failed to create folder.');
+        });
+    }
+
+    function renameFolderPrompt(id) {
+        const folder = allFolders.find(f => f.id === id);
+        const name = prompt('Rename folder:', folder ? folder.name : '');
+        if (!name || !name.trim()) return;
+        fetch('/api/document-folders/' + id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
+        }).then(r => r.json()).then(data => {
+            if (data.success) loadFolders();
+            else alert(data.error || 'Failed to rename folder.');
+        });
+    }
+
+    function toggleFolderArchive(id, archived) {
+        fetch('/api/document-folders/' + id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived })
+        }).then(r => r.json()).then(data => {
+            if (data.success) { loadFolders(); if (currentFolder === id) filterFolder('all'); }
+            else alert(data.error || 'Failed to update folder.');
+        });
+    }
+
+    function moveDocument(docId, folderValue) {
+        const folderId = folderValue === '' ? null : parseInt(folderValue);
+        fetch('/api/documents/' + docId + '/organize', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderId })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                const doc = allDocs.find(d => d.id === docId);
+                if (doc) doc.folderId = folderId;
+                renderFiltered();
+            } else alert(data.error || 'Failed to move document.');
+        });
+    }
+
+    function toggleDocArchive(docId, archived) {
+        fetch('/api/documents/' + docId + '/organize', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                const doc = allDocs.find(d => d.id === docId);
+                if (doc) doc.archived = archived;
+                renderFolderList();
+                renderFiltered();
+            } else alert(data.error || 'Failed to update document.');
+        });
+    }
+
+    function renameDocumentPrompt(docId) {
+        const doc = allDocs.find(d => d.id === docId);
+        const title = prompt('Rename document:', doc ? doc.title : '');
+        if (!title || !title.trim()) return;
+        fetch('/api/documents/' + docId, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.trim() })
+        }).then(r => r.json()).then(data => {
+            if (data.success) { doc.title = title.trim(); renderFiltered(); }
+            else alert(data.error || 'Failed to rename document.');
+        });
+    }
+
+    function folderOptionsHtml(doc) {
+        let opts = `<option value="" ${doc.folderId == null ? 'selected' : ''}>Unfiled</option>`;
+        allFolders.filter(f => !f.archived).forEach(f => {
+            opts += `<option value="${f.id}" ${doc.folderId === f.id ? 'selected' : ''}>${escHtml(f.name)}</option>`;
+        });
+        return opts;
+    }
+
+    function renderFiltered() {
+        const filtered = allDocs.filter(doc => {
+            if (currentFolder === 'archived') {
+                if (!doc.archived) return false;
+            } else {
+                if (doc.archived) return false;
+                if (currentFolder === 'unfiled' && doc.folderId != null) return false;
+                else if (currentFolder !== 'all' && currentFolder !== 'unfiled' && doc.folderId !== currentFolder) return false;
+            }
+            const matchesType = currentType === 'All' || doc.type === currentType;
+            const matchesTag = currentTag === 'All' || (doc.tags && doc.tags.includes(currentTag)) || doc.type === currentTag;
+            const instText = (doc.institution || doc.partner || '').toLowerCase();
+            // IDP upgrade (2026-07-28): also search the OCR-extracted text and
+            // keywords, so scanned documents are searchable by words that only
+            // ever appear inside the file itself (e.g. "Kyushu", "CHED").
+            const ocrText = (doc.ocrText || '').toLowerCase();
+            const kwText = (doc.searchKeywords || []).join(' ').toLowerCase();
+            const matchesSearch = !currentSearch || doc.title.toLowerCase().includes(currentSearch)
+                || instText.includes(currentSearch) || ocrText.includes(currentSearch) || kwText.includes(currentSearch);
+            return matchesType && matchesTag && matchesSearch;
+        });
+
+        // Both views are kept in sync on every filter/search change so toggling
+        // between them (setView) never needs to re-fetch or re-filter.
+        renderGrid(filtered);
+        renderList(filtered);
+    }
+
+    // Existing card layout — untouched.
+    function renderGrid(filtered) {
+        const grid = document.getElementById('document-grid');
+        if (filtered.length === 0) {
+            grid.innerHTML = '<div class="col-12 text-center py-5"><i class="ri-file-search-line fs-1 text-muted"></i><p class="mt-2 text-muted">No documents found matching your filters.</p></div>';
+            return;
+        }
+
+        grid.innerHTML = filtered.map(doc => {
+            const isAccred = doc.type === 'Accreditation';
+            const icon = doc.type === 'MOA' ? 'ri-file-text-line text-primary' :
+                         doc.type === 'MOU' ? 'ri-file-list-3-line text-info' :
+                         isAccred ? 'ri-award-line text-warning' : 'ri-file-paper-2-line text-secondary';
+            const nature = doc.tags && doc.tags.length > 0 ? doc.tags[0] : 'Research';
+            const natureBadge = nature === 'Research' ? 'bg-info-subtle text-info' :
+                               nature === 'Student Exchange' ? 'bg-success-subtle text-success' :
+                               nature === 'Foreign Exchange' ? 'bg-primary-subtle text-primary' : 'bg-light text-muted';
+
+            const rightLabel = isAccred ? 'Issuing Body:' : 'Nature:';
+            const rightValue = isAccred
+                ? `<span class="fw-bold fs-12">${doc.issuingBody || '—'}</span>`
+                : `<span class="badge ${natureBadge} fs-10">${nature}</span>`;
+            const accredExtra = isAccred && (doc.accreditationLevel || doc.certificateNumber)
+                ? `<div class="mb-2 fs-11 text-muted">${doc.accreditationLevel ? 'Level: ' + doc.accreditationLevel : ''}${doc.accreditationLevel && doc.certificateNumber ? ' &middot; ' : ''}${doc.certificateNumber ? 'Cert No: ' + doc.certificateNumber : ''}</div>`
+                : '';
+
+            return `
+                <div class="col-xl-4 col-md-6 mb-4">
+                    <div class="card doc-card h-100 shadow-none mb-0">
+                        <div class="card-body pb-1">
+                            <div class="d-flex align-items-start mb-3">
+                                <div class="avatar-sm flex-shrink-0 me-3">
+                                    <span class="avatar-title bg-light rounded fs-3"><i class="${icon}"></i></span>
+                                </div>
+                                <div class="flex-grow-1 overflow-hidden">
+                                    <h5 class="fs-14 mb-1 text-truncate" title="${doc.title}">${doc.title}</h5>
+                                    <p class="text-muted fs-12 mb-0 text-truncate">${doc.institution || doc.partner || ''}</p>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2 align-items-center">
+                                <div class="col-4">
+                                    <small class="text-muted d-block fs-11">Type:</small>
+                                    <span class="fw-bold fs-12">${doc.type}</span>
+                                </div>
+                                <div class="col-8 text-end">
+                                    <small class="text-muted d-block fs-11">${rightLabel}</small>
+                                    ${rightValue}
+                                </div>
+                            </div>
+                            ${accredExtra}
+                            <div class="d-flex gap-2 mb-2">
+                                <a class="btn btn-sm btn-soft-primary flex-grow-1" href="${doc.fileLink || '#'}" target="_blank" rel="noopener"${doc.fileLink ? '' : ' aria-disabled="true"'}><i class="ri-eye-line me-1"></i>Preview</a>
+                                <a class="btn btn-sm btn-soft-success" href="${doc.fileLink || '#'}" download title="Download"><i class="ri-download-2-line"></i></a>
+                                <button class="btn btn-sm btn-soft-warning" title="Rename" onclick="renameDocumentPrompt(${doc.id})"><i class="ri-pencil-line"></i></button>
+                            </div>
+                            <select class="form-select form-select-sm mb-2" title="Move to folder" onchange="moveDocument(${doc.id}, this.value)">
+                                ${folderOptionsHtml(doc)}
+                            </select>
+                        </div>
+                        <div class="card-footer p-0 border-0">
+                            <button class="btn ${doc.archived ? 'btn-soft-secondary' : 'btn-soft-info'} w-100 rounded-0 rounded-bottom py-2" onclick="toggleDocArchive(${doc.id}, ${!doc.archived})">
+                                <i class="ri-archive-line me-1"></i>${doc.archived ? 'Unarchive' : 'Archive'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // List View — same document data and same action buttons as the grid,
+    // laid out as a responsive Bootstrap table instead of cards.
+    function renderList(filtered) {
+        const tbody = document.getElementById('document-list-body');
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="ri-file-search-line fs-1 d-block mb-2"></i>No documents found matching your filters.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filtered.map(doc => {
+            const isAccred = doc.type === 'Accreditation';
+            const icon = doc.type === 'MOA' ? 'ri-file-text-line text-primary' :
+                         doc.type === 'MOU' ? 'ri-file-list-3-line text-info' :
+                         isAccred ? 'ri-award-line text-warning' : 'ri-file-paper-2-line text-secondary';
+            const nature = doc.tags && doc.tags.length > 0 ? doc.tags[0] : 'Research';
+            const natureBadge = nature === 'Research' ? 'bg-info-subtle text-info' :
+                               nature === 'Student Exchange' ? 'bg-success-subtle text-success' :
+                               nature === 'Foreign Exchange' ? 'bg-primary-subtle text-primary' : 'bg-light text-muted';
+            const statusBadge = doc.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+
+            return `
+                <tr>
+                    <td><span class="avatar-title bg-light rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="${icon}"></i></span></td>
+                    <td class="text-truncate" style="max-width:240px" title="${doc.title}">${doc.title}</td>
+                    <td class="text-truncate" style="max-width:180px">${doc.institution || doc.partner || '—'}</td>
+                    <td>${doc.type}</td>
+                    <td><span class="badge ${natureBadge} fs-10">${nature}</span></td>
+                    <td>${doc.date || '—'}</td>
+                    <td><span class="badge ${statusBadge} fs-10">${doc.status || '—'}</span></td>
+                    <td style="min-width:140px">
+                        <select class="form-select form-select-sm" title="Move to folder" onchange="moveDocument(${doc.id}, this.value)">
+                            ${folderOptionsHtml(doc)}
+                        </select>
+                    </td>
+                    <td class="text-end">
+                        <div class="btn-group btn-group-sm">
+                            <a class="btn btn-soft-primary" href="${doc.fileLink || '#'}" target="_blank" rel="noopener" title="Preview"><i class="ri-eye-line"></i></a>
+                            <a class="btn btn-soft-success" href="${doc.fileLink || '#'}" download title="Download"><i class="ri-download-2-line"></i></a>
+                            <button class="btn btn-soft-warning" title="Rename" onclick="renameDocumentPrompt(${doc.id})"><i class="ri-pencil-line"></i></button>
+                            <button class="btn ${doc.archived ? 'btn-soft-secondary' : 'btn-soft-info'}" title="${doc.archived ? 'Unarchive' : 'Archive'}" onclick="toggleDocArchive(${doc.id}, ${!doc.archived})"><i class="ri-archive-line"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    var currentDocId = null;
+
+    function startOcr() {
+        var input = document.getElementById('fileInput');
+        var file = input.files[0];
+        if (!file) return;
+
+        document.getElementById('upload-stage').style.display = 'none';
+        document.getElementById('result-stage').style.display = 'none';
+        document.getElementById('ocr-error-stage').style.display = 'none';
+        document.getElementById('ocr-stage').style.display = 'block';
+        document.getElementById('ocr-modal-progress-bar').style.width = '0%';
+        document.getElementById('ocr-stage-heading').textContent = 'Uploading…';
+        document.getElementById('ocr-stage-detail').textContent = 'Sending the file to the server.';
+
+        var formData = new FormData();
+        formData.append('document', file);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/ocr/extract');
+        xhr.upload.addEventListener('progress', function (e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round((e.loaded / e.total) * 100);
+            document.getElementById('ocr-modal-progress-bar').style.width = pct + '%';
+        });
+        xhr.onload = function () {
+            var data;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+            if (xhr.status !== 202 || !data || !data.success) {
+                docOcrFail((data && data.error) || 'Failed to start OCR processing.');
+                return;
+            }
+            document.getElementById('ocr-stage-heading').textContent = 'OCR Processing…';
+            document.getElementById('ocr-stage-detail').textContent = 'Extracting text and metadata. Please wait.';
+            pollDocOcrStatus(data.jobId);
+        };
+        xhr.onerror = function () { docOcrFail('Network error while uploading the document.'); };
+        xhr.send(formData);
+    }
+
+    function pollDocOcrStatus(jobId) {
+        fetch('/api/ocr/status/' + jobId)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.success) { docOcrFail(data.error || 'Job not found.'); return; }
+                document.getElementById('ocr-modal-progress-bar').style.width = (data.progress || 0) + '%';
+
+                if (data.status === 'error') {
+                    // The file is still archived to the library even when OCR extraction fails.
+                    docOcrFail(data.error || 'OCR processing failed.', data.documentId);
+                    return;
+                }
+                if (data.status === 'done') { docOcrSucceed(data.result); return; }
+                setTimeout(function () { pollDocOcrStatus(jobId); }, 700);
+            })
+            .catch(function () { docOcrFail('Lost connection while checking OCR progress.'); });
+    }
+
+    function docOcrFail(message, documentId) {
+        document.getElementById('ocr-stage').style.display = 'none';
+        var box = document.getElementById('ocr-error-stage');
+        box.textContent = documentId
+            ? message + ' The original file was still saved to the library — you can fill in its details manually.'
+            : message;
+        box.style.display = 'block';
+        loadDocuments();
+    }
+
+    function docOcrSucceed(result) {
+        currentDocId = result.documentId || null;
+        document.getElementById('ocr-stage').style.display = 'none';
+        document.getElementById('result-stage').style.display = 'block';
+        document.getElementById('saveDocBtn').style.display = currentDocId ? 'inline-block' : 'none';
+
+        document.getElementById('res-title').value = result.title || '';
+        document.getElementById('res-type').value = result.documentType || '';
+        document.getElementById('res-inst').value = result.institution || result.partner || result.issuingBody || '';
+        document.getElementById('res-validity').value = [result.startDate, result.endDate].filter(Boolean).join(' – ');
+        document.getElementById('res-rawtext').value = result.rawText || '';
+        document.getElementById('res-confidence-badge').textContent = 'Confidence: ' + Math.round(result.confidence) + '%';
+        document.getElementById('res-warning-badge').style.display = result.warning ? '' : 'none';
+
+        loadDocuments();
+    }
+
+    function saveDocument() {
+        if (!currentDocId) {
+            bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+            return;
+        }
+        fetch('/api/documents/' + currentDocId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: document.getElementById('res-title').value.trim(),
+                institution: document.getElementById('res-inst').value.trim(),
+                partner: document.getElementById('res-inst').value.trim()
+            })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function () {
+                bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+                loadDocuments();
+            })
+            .catch(function () { alert('Failed to save edits — please try again.'); });
+    }
+</script>
+
+</body>
+</html>

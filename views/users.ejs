@@ -1,368 +1,537 @@
-<!DOCTYPE html>
-<html lang="en">
+﻿<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CIPRMS-CSPC-CIRL</title>
-  <link rel="icon" type="image/jpg" href="/images/cirl-logo.jpg">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', sans-serif; background: #eef2f9; color: #1a1a2e; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-
-    .top-header { background: #fff; border-bottom: 1px solid #e2e8f0; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px 0 18px; position: fixed; top: 0; left: 0; right: 0; z-index: 100; }
-    .header-left { display: flex; align-items: center; gap: 12px; }
-    .header-logo { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
-    .header-title { font-size: 19px; font-weight: 700; color: #0d1b3e; }
-    .header-right { display: flex; align-items: center; gap: 10px; }
-
-    .layout { display: flex; margin-top: 64px; height: calc(100vh - 64px); }
-    .sidebar { width: 62px; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; align-items: center; padding: 16px 0 14px; position: fixed; left: 0; top: 64px; bottom: 0; z-index: 50; }
-    .sidebar-top-icons { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
-    .sidebar-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; color: #64748b; font-size: 17px; transition: all .2s; text-decoration: none; }
-    .sidebar-icon:hover { background: #f1f5f9; color: #1e3a5f; }
-    .sidebar-icon.active { background: #e8f0fe; color: #1e3a8a; }
-    .sidebar-bottom { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-
-    .main-content { margin-left: 62px; flex: 1; padding: 20px 22px 20px; overflow: hidden; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
-
-    /* Stats */
-    .stat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
-    .stat-card { background: #fff; border: 1.5px solid #d8e2f0; border-radius: 12px; padding: 14px 16px; }
-
-    /* Add button */
-    .add-user-btn { display: flex; align-items: center; gap: 6px; padding: 8px 18px; background: #1e3a8a; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
-    .add-user-btn:hover { background: #1e40af; }
-
-    /* Tables */
-    .table-card { background: #fff; border: 1.5px solid #d8e2f0; border-radius: 12px; overflow: hidden; }
-    .tc-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px 10px; border-bottom: 1px solid #e2e8f0; }
-    .tc-title { font-size: 15px; font-weight: 700; color: #0d1b3e; }
-    table { width: 100%; border-collapse: collapse; }
-    thead tr { background: #f8faff; }
-    th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
-    td { padding: 11px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-    tbody tr:hover { background: #f8faff; }
-    tbody tr:last-child td { border-bottom: none; }
-
-    /* Action buttons */
-    .act-btn  { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid; transition: all .15s; }
-    .act-edit { background: transparent; color: #1e3a8a; border-color: #1e3a8a; }
-    .act-edit:hover { background: #e8f0fe; }
-    .act-deact { background: transparent; color: #b91c1c; border-color: #b91c1c; }
-    .act-deact:hover { background: #fee2e2; }
-    .act-reactivate { background: transparent; color: #15803d; border-color: #15803d; }
-    .act-reactivate:hover { background: #dcfce7; }
-
-    /* RBAC */
-    .perm-yes { color: #15803d; font-weight: 800; }
-    .perm-no  { color: #cbd5e1; }
-
-    /* Users table scroll */
-    .users-scroll { overflow-y: auto; max-height: 260px; }
-    .users-scroll thead th { position: sticky; top: 0; background: #f8faff; z-index: 1; }
-
-    /* RBAC fills remaining space */
-    .bottom-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 20px; }
-    .bottom-card .rbac-scroll { flex: 1; overflow-y: auto; }
-    .bottom-card thead th { position: sticky; top: 0; background: #f8faff; z-index: 1; }
-
-    /* Modal */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: none; align-items: center; justify-content: center; }
-    .modal-overlay.open { display: flex; }
-    .modal-box { background: #fff; border-radius: 16px; width: 480px; max-width: 95vw; box-shadow: 0 12px 40px rgba(0,0,0,.2); overflow: hidden; }
-    .m-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 14px; border-bottom: 1px solid #e2e8f0; }
-    .m-title { font-size: 16px; font-weight: 700; color: #0d1b3e; }
-    .m-close { background: none; border: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
-    .m-close:hover { color: #1e293b; }
-    .m-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
-    .m-actions { padding: 12px 20px 18px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid #f1f5f9; }
-    .m-btn { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: flex; align-items: center; gap: 6px; }
-    .m-btn.primary { background: #1e3a8a; color: #fff; }
-    .m-btn.primary:hover { background: #1e40af; }
-    .m-btn.secondary { background: #f1f5f9; color: #64748b; }
-    .m-btn.secondary:hover { background: #e2e8f0; }
-
-    /* Form */
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-    .form-label { font-size: 12px; font-weight: 600; color: #475569; }
-    .form-input, .form-select { padding: 8px 12px; border: 1.5px solid #d8e2f0; border-radius: 8px; font-size: 13px; font-family: inherit; color: #1e293b; outline: none; transition: border .15s; }
-    .form-input:focus, .form-select:focus { border-color: #1e3a8a; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-    /* Toast */
-    #usr-toast { position: fixed; bottom: 28px; right: 28px; z-index: 9999; padding: 12px 20px; border-radius: 10px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 20px rgba(0,0,0,.18); opacity: 0; transition: opacity .3s; pointer-events: none; }
-  </style>
+    <meta charset="utf-8" />
+    <title>User Management | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
+<div id="layout-wrapper">
 
-<%- include('partials/header') %>
-<div class="layout">
-  <%- include('partials/sidebar') %>
-  <main class="main-content">
+    <%- include('partials/header') %>
+    <%- include('partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
 
-    <!-- Page header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div>
-        <h1 style="font-size:22px;font-weight:800;color:#0d1b3e;">
-          <i class="fa-solid fa-users" style="color:#1e3a8a;margin-right:8px;"></i>User Management
-        </h1>
-        <p style="font-size:13px;color:#64748b;margin-top:2px;">Manage system users, roles, and access permissions</p>
-      </div>
-      <button class="add-user-btn" onclick="openAddUser()"><i class="fa-solid fa-plus"></i> Add User</button>
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <!-- Page Title -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                            <h4 class="mb-sm-0"><i class="ri-team-line me-2 text-primary"></i>User Management</h4>
+                            <div class="page-title-right">
+                                <ol class="breadcrumb m-0">
+                                    <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                    <li class="breadcrumb-item active">User Management</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Users Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header border-0">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <h4 class="card-title mb-0"><i class="ri-id-card-line me-2 text-primary"></i>System Users</h4>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="text-muted fs-12" id="usr-count"></span>
+                                        <% if (typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) { %>
+                                        <button class="btn btn-primary btn-sm" onclick="openAddUser()">
+                                            <i class="ri-add-line align-bottom me-1"></i>Add User
+                                        </button>
+                                        <% } %>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+                                    <input class="form-control form-control-sm" id="usr-filter-email" style="width:220px;"
+                                        placeholder="Filter by email…" oninput="renderUsers()">
+                                    <select class="form-select form-select-sm" id="usr-filter-role" style="width:180px;" onchange="renderUsers()">
+                                        <option value="">All Roles</option>
+                                        <option value="Administrator">Administrator</option>
+                                        <option value="Auth. Personnel">Auth. Personnel</option>
+                                        <option value="potential_partner">Partner</option>
+                                        <option value="Staff">Staff</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-centered align-middle table-nowrap mb-0">
+                                        <thead class="text-muted bg-light-subtle">
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Email</th>
+                                                <th>Role</th>
+                                                <th>Unit</th>
+                                                <th>Last Login</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="usr-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RBAC Table -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="card-title mb-0"><i class="ri-lock-2-line me-2 text-primary"></i>Role Permissions Matrix (RBAC)</h4>
+                                <p class="text-muted fs-13 mb-0 mt-1">Reflects the actual route/page gating in <code>cirl.js</code> as of 2026-08-27 (Administrator/Staff full-parity revision) — re-audited feature by feature, not carried over from prior documentation.</p>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-centered align-middle mb-0">
+                                        <thead class="text-muted bg-light-subtle">
+                                            <tr>
+                                                <th>Feature</th>
+                                                <th class="text-center"><i class="ri-shield-star-line me-1"></i>Administrator</th>
+                                                <th class="text-center"><i class="ri-user-star-line me-1"></i>Auth. Personnel</th>
+                                                <th class="text-center"><i class="ri-handshake-line me-1"></i>Partner</th>
+                                                <th class="text-center"><i class="ri-briefcase-line me-1"></i>Staff</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <% /* Re-audited 2026-08-27 (Administrator/Staff full-parity revision)
+                                                   directly against every page route's gating middleware (requireAdmin /
+                                                   requirePersonnel / requirePartner / requireUploader /
+                                                   requireRequester / requireStaffAccess / requireAuth in cirl.js) and
+                                                   the corresponding API routes each page calls — not copied from
+                                                   prior documentation. Administrator and Staff now share the exact
+                                                   same underlying template/route/API for every module below except
+                                                   Calendar and Admin Settings:
+                                                   - Calendar: unchanged by this revision — only requireAdmin may
+                                                     POST/PATCH/DELETE /api/calendarevents. Auth. Personnel/
+                                                     potential_partner/Staff can only view it (calendar.ejs's
+                                                     canManageCalendar flag hides the create/edit/delete UI for
+                                                     every role except Administrator).
+                                                   - Monitoring: Administrator and Staff share the exact same
+                                                     Partnership Lifecycle Monitoring page (/lifecycle, /staff/lifecycle)
+                                                     with full Renew/Edit/Delete authority (CAN_MANAGE_LIFECYCLE, and
+                                                     the underlying POST/PATCH/DELETE /api/partnerships routes, are
+                                                     requireStaffAccess). Auth. Personnel/Partner's "Monitoring" is a
+                                                     different feature — tracking their own submitted requests.
+                                                   - Registry: Administrator and Staff share full CRUD
+                                                     (POST/PATCH/DELETE /api/partnerships are requireStaffAccess;
+                                                     CAN_MANAGE_REGISTRY is true for both) on the same /registry
+                                                     page (/staff/registry reuses it via sidebarPartial).
+                                                   - User Management: Administrator and Staff share full CRUD
+                                                     (GET/POST/PATCH/DELETE /api/users are all requireStaffAccess) on
+                                                     the same /users page — EXCEPT Staff can never create, edit, or
+                                                     delete an Administrator account, or grant the Administrator role
+                                                     to anyone (explicit checks in cirl.js; the UI shows "Protected"
+                                                     on those specific rows for Staff). A deliberate
+                                                     privilege-escalation guard, not an oversight.
+                                                   - Document Library: GET /api/documents scopes EVERY role in
+                                                     OWN_SCOPE_ROLES (Administrator, Auth. Personnel, potential_partner,
+                                                     Staff) to their own uploads only — that's the *browsing*
+                                                     experience, a separate concern from
+                                                     GET /uploads/documents/:filename, where Administrator AND Staff
+                                                     are both exempt so either reviewer role can open/download any
+                                                     requester's attachment during Partnership/Document Request review.
+                                                   - Partnership Requests: Administrator and Staff share full
+                                                     Review/Approve/Reject authority and org-wide visibility on the
+                                                     same /partnership-requests page (/staff/requests reuses it) —
+                                                     PATCH /api/requests/:id and POST /api/requests/:id/documents are
+                                                     requireStaffAccess, and GET /api/requests returns every request
+                                                     to both roles (REQUEST_REVIEWER_ROLES). Neither role submits new
+                                                     requests through this flow (Staff's old submission form was
+                                                     removed 2026-08-27; Administrator never had one) — the
+                                                     submitter-side routes (POST /api/requests, PATCH .../edit, POST
+                                                     .../submit, DELETE, POST .../withdraw) stay requireRequester
+                                                     (Auth. Personnel/potential_partner, plus Administrator for
+                                                     historical reasons — neither Staff nor a real submission UI use it).
+                                                   - Document Requests: Administrator and Staff share the same full
+                                                     Fulfill/Reject authority (PATCH /api/document-requests/:id,
+                                                     POST .../documents, and the print/PDF routes are all
+                                                     requireStaffAccess/requireAuth + canAccessDocumentRequest, which
+                                                     treats both roles as universal reviewers). Only
+                                                     Administrator/Auth. Personnel/potential_partner ever submit one
+                                                     (requireRequester) — Staff was never part of that and still isn't.
+                                                   - Reports & Analytics: Administrator and Staff share the exact same
+                                                     Reports page (/staff/reports), including the Custom Report
+                                                     Builder, comparisons, PDF/Excel export, and DSS/Strategic
+                                                     Insights (every /api/reports/* route is requireStaffAccess).
+                                                     EXCEPTION: the Audit Trail tab (GET /api/activitylogs and its
+                                                     PDF/Excel export) scopes Staff to only their own logged actions
+                                                     by email (activityLogFilterFor) — Administrator alone sees every
+                                                     record system-wide. Enforced at the database query level, not
+                                                     hidden in the UI.
+                                                   - Notifications: Administrator and Staff share the exact same
+                                                     Notifications page (/staff/notifications) and its one API call
+                                                     (GET /api/notifications, opened to requireAuth 2026-08-27) — but
+                                                     the query is always scoped to the caller's own targetEmail, so
+                                                     data never crosses accounts. Staff is included in the
+                                                     Partnership/Document Request "new submission" broadcast
+                                                     (REQUEST_REVIEWER_ROLES) alongside Administrator, so both
+                                                     reviewer roles are notified the same way.
+                                                   - Settings: "Settings" below is each role's own account settings
+                                                     (Personal Details + Change Password), genuinely Full for
+                                                     everyone. Admin Settings' Integrations tab (org-wide Google
+                                                     Calendar connection) is a separate, Administrator-only
+                                                     capability — see the dedicated row below. */ %>
+                                            <% var perms = [
+                                                ['Dashboard',              'Full', 'Full',        'Full',        'Full'],
+                                                ['Calendar',               'Full', 'View Only',   'View Only',   'View Only'],
+                                                ['Monitoring',             'Full', 'Own Only',    'Own Only',    'Full'],
+                                                ['Registry',               'Full (CRUD)', 'No',          'No',          'Full (CRUD)'],
+                                                ['Document Library',       'Own + Review Attachments', 'Own Only', 'Own Only', 'Own + Review Attachments'],
+                                                ['User Management',        'Full', 'No',          'No',          'Full (except Administrator accounts)'],
+                                                ['Partnership Requests',   'Full (Review/Approve/Reject)', 'Submit Only', 'Submit Only', 'Full (Review/Approve/Reject)'],
+                                                ['Document Requests',      'Full (Review/Fulfill/Reject)', 'Submit Only', 'Submit Only', 'Full (Review/Fulfill/Reject)'],
+                                                ['Notifications',          'Own Only', 'Own Only', 'Own Only', 'Own Only'],
+                                                ['Reports & Analytics',    'Full', 'No',          'No',          'Full, Own Audit Trail Only'],
+                                                ['Settings (own account)', 'Full', 'Full',        'Full',        'Full'],
+                                                ['Admin Settings (Integrations)', 'Full', 'No', 'No', 'No'],
+                                            ]; %>
+                                            <% function permBadge(v){
+                                                if (v === 'Full') return '<span class="badge bg-success-subtle text-success"><i class="ri-check-double-line me-1"></i>Full</span>';
+                                                if (v === 'No') return '<span class="badge bg-danger-subtle text-danger"><i class="ri-close-line me-1"></i>No</span>';
+                                                return '<span class="badge bg-info-subtle text-info"><i class="ri-shield-check-line me-1"></i>' + v + '</span>';
+                                            } %>
+                                            <% perms.forEach(function(p){ %>
+                                            <tr>
+                                                <td class="fw-medium"><%= p[0] %></td>
+                                                <td class="text-center"><%- permBadge(p[1]) %></td>
+                                                <td class="text-center"><%- permBadge(p[2]) %></td>
+                                                <td class="text-center"><%- permBadge(p[3]) %></td>
+                                                <td class="text-center"><%- permBadge(p[4]) %></td>
+                                            </tr>
+                                            <% }); %>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="p-3 border-top">
+                                    <span class="badge bg-success-subtle text-success me-2"><i class="ri-check-double-line me-1"></i>Full</span>
+                                    <span class="badge bg-info-subtle text-info me-2"><i class="ri-shield-check-line me-1"></i>Scoped (own records / view only / submit only)</span>
+                                    <span class="badge bg-danger-subtle text-danger"><i class="ri-close-line me-1"></i>No Access</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- container-fluid -->
+        </div><!-- page-content -->
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div><!-- end main content -->
+</div><!-- END layout-wrapper -->
+
+<!-- Add / Edit User Modal (Bootstrap) -->
+<div class="modal fade zoomIn" id="usr-modal" tabindex="-1" aria-labelledby="usr-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-light p-3">
+                <h5 class="modal-title" id="usr-modal-title">Add User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="u-name" placeholder="e.g. Dr. Santos">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email Address <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="u-email" placeholder="user@cspc.edu.ph">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" id="u-role">
+                            <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
+                            <option value="Administrator">Administrator</option>
+                            <% } %>
+                            <option value="Auth. Personnel" selected>Auth. Personnel</option>
+                            <option value="Staff">Staff</option>
+                            <option value="potential_partner">Partner</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Unit / Department</label>
+                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE (optional)">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
+                        <div class="position-relative">
+                            <input type="password" class="form-control pe-5" id="u-password" placeholder="Enter password" autocomplete="new-password">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted" style="padding:.375rem .75rem;" onclick="togglePwdVis()">
+                                <i class="ri-eye-fill" id="u-pwd-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-text" id="u-pwd-hint"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="hstack gap-2 justify-content-end">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveUser()"><i class="ri-save-line me-1"></i>Save</button>
+                </div>
+            </div>
+        </div>
     </div>
-
-    <!-- Stat cards -->
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div style="font-size:20px;color:#1e3a8a;margin-bottom:6px;"><i class="fa-solid fa-users"></i></div>
-        <div id="stat-total" style="font-size:26px;font-weight:800;color:#0d1b3e;">0</div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px;">Total Users</div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:20px;color:#1e40af;margin-bottom:6px;"><i class="fa-solid fa-shield-halved"></i></div>
-        <div id="stat-admin" style="font-size:26px;font-weight:800;color:#1e40af;">0</div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px;">Administrators</div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:20px;color:#d97706;margin-bottom:6px;"><i class="fa-solid fa-user-tie"></i></div>
-        <div id="stat-staff" style="font-size:26px;font-weight:800;color:#d97706;">0</div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px;">Auth. Personnel</div>
-      </div>
-      <div class="stat-card">
-        <div style="font-size:20px;color:#64748b;margin-bottom:6px;"><i class="fa-regular fa-eye"></i></div>
-        <div id="stat-view" style="font-size:26px;font-weight:800;color:#64748b;">0</div>
-        <div style="font-size:11px;color:#64748b;margin-top:2px;">View-Only</div>
-      </div>
-    </div>
-
-    <!-- System Users table -->
-    <div class="table-card">
-      <div class="tc-header">
-        <span class="tc-title"><i class="fa-solid fa-id-badge" style="color:#1e3a8a;margin-right:6px;"></i>System Users</span>
-        <span id="usr-count" style="font-size:12px;color:#64748b;"></span>
-      </div>
-      <div class="users-scroll">
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Unit</th><th>Last Login</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="usr-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- RBAC table -->
-    <div class="table-card bottom-card">
-      <div class="tc-header">
-        <span class="tc-title"><i class="fa-solid fa-lock" style="color:#1e3a8a;margin-right:6px;"></i>Role Permissions Matrix (RBAC)</span>
-      </div>
-      <div class="rbac-scroll">
-        <table>
-          <thead>
-            <tr><th>Permission</th><th>Administrator</th><th>Auth. Personnel</th><th>View-Only</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>View Partnerships</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td></tr>
-            <tr><td>Submit Partnership Request</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
-            <tr><td>Approve / Reject Requests</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
-            <tr><td>Add / Edit Records</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
-            <tr><td>Generate & Export Reports</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
-            <tr><td>Manage Users & Roles</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
-            <tr><td>View Audit Trail</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td></tr>
-            <tr><td>Export Audit Log</td><td class="perm-yes"><i class="fa-solid fa-check" style="color:#15803d;margin-right:4px;"></i>Yes</td><td class="perm-no">— No</td><td class="perm-no">— No</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-  </main>
 </div>
 
-<!-- Add / Edit User Modal -->
-<div class="modal-overlay" id="usr-modal" onclick="closeUsrModal(event)">
-  <div class="modal-box">
-    <div class="m-header">
-      <span class="m-title" id="usr-modal-title">Add User</span>
-      <button class="m-close" onclick="document.getElementById('usr-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div class="m-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Full Name</label>
-          <input type="text" class="form-input" id="u-name" placeholder="e.g. Dr. Santos">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Email Address</label>
-          <input type="email" class="form-input" id="u-email" placeholder="user@cspc.edu.ph">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Role</label>
-          <select class="form-select" id="u-role">
-            <option value="Administrator">Administrator</option>
-            <option value="Auth. Personnel" selected>Auth. Personnel</option>
-            <option value="View-Only">View-Only</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Unit / Department</label>
-          <input type="text" class="form-input" id="u-unit" placeholder="e.g. CCS, CIRL, CETE">
-        </div>
-      </div>
-    </div>
-    <div class="m-actions">
-      <button class="m-btn secondary" onclick="document.getElementById('usr-modal').classList.remove('open')"><i class="fa-solid fa-xmark"></i> Cancel</button>
-      <button class="m-btn primary" onclick="saveUser()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
-    </div>
-  </div>
-</div>
-
-<div id="usr-toast"></div>
+<!-- Toast -->
+<div id="usr-toast" style="
+    position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+    color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;
+    font-size:.8125rem;font-weight:600;
+    box-shadow:0 4px 16px rgba(0,0,0,.18);
+    opacity:0;pointer-events:none;transition:opacity .3s;
+    display:flex;align-items:center;gap:.4rem;
+"></div>
 
 <script>
-  // ── Data ────────────────────────────────────────────────────────────────────
+  // User Management: Administrator and Staff share full CRUD (2026-08-27
+  // full-parity revision) — POST/PATCH/DELETE /api/users are
+  // requireStaffAccess server-side. The one preserved boundary: Staff can
+  // never edit/deactivate/delete an Administrator account (privilege-
+  // escalation guard, enforced server-side in cirl.js — CURRENT_ROLE below
+  // just drives the matching read-only UI for those specific rows).
+  var CAN_MANAGE_USERS = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;
+  var CURRENT_ROLE = <%- JSON.stringify(typeof user !== 'undefined' && user ? user.role : '') %>;
+
   let editingId = null;
-  const users = [
-    { id: 1, name: 'Admin Rivera',    email: 'rivera@cspc.edu.ph',    role: 'Administrator',  unit: 'CIRL',  login: 'Mar 11, 2026', status: 'Active'   },
-    { id: 2, name: 'Dr. Santos',      email: 'santos@cspc.edu.ph',    role: 'Auth. Personnel',unit: 'CCS',   login: 'Mar 10, 2026', status: 'Active'   },
-    { id: 3, name: 'Prof. Reyes',     email: 'reyes@cspc.edu.ph',     role: 'Auth. Personnel',unit: 'CETE',  login: 'Mar 9, 2026',  status: 'Active'   },
-    { id: 4, name: 'Engr. Cruz',      email: 'cruz@cspc.edu.ph',      role: 'View-Only',      unit: 'CAMS',  login: 'Mar 7, 2026',  status: 'Active'   },
-    { id: 5, name: 'Dr. Garcia',      email: 'garcia@cspc.edu.ph',    role: 'Auth. Personnel',unit: 'CNAS',  login: 'Mar 6, 2026',  status: 'Active'   },
-    { id: 6, name: 'Prof. Dela Cruz', email: 'delacruz@cspc.edu.ph',  role: 'Auth. Personnel',unit: 'CILS',  login: 'Mar 5, 2026',  status: 'Active'   },
-    { id: 7, name: 'Ms. Alcantara',   email: 'alcantara@cspc.edu.ph', role: 'Auth. Personnel',unit: 'CIRL',  login: 'Mar 3, 2026',  status: 'Active'   },
-    { id: 8, name: 'Engr. Mendoza',   email: 'mendoza@cspc.edu.ph',   role: 'View-Only',      unit: 'CCS',   login: 'Feb 28, 2026', status: 'Active'   },
-    { id: 9, name: 'Dr. Limbo',       email: 'limbo@cspc.edu.ph',     role: 'Auth. Personnel',unit: 'CETE',  login: 'Feb 25, 2026', status: 'Inactive' },
-    { id:10, name: 'Ms. Bautista',    email: 'bautista@cspc.edu.ph',  role: 'View-Only',      unit: 'CNAS',  login: 'Feb 20, 2026', status: 'Active'   },
-  ];
-  let nextId = 11;
+  let bsModal;
+  let users = [];
 
-  // ── Colors ──────────────────────────────────────────────────────────────────
-  const roleColor  = { 'Administrator': '#1e40af', 'Auth. Personnel': '#92400e', 'View-Only': '#475569' };
-  const statusColor= { 'Active': '#15803d', 'Inactive': '#b91c1c' };
+  // â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function apiPost(payload) {
+    return fetch('/api/users', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).then(r => r.json());
+  }
+  function apiPatch(id, payload) {
+    return fetch('/api/users/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).then(r => r.json());
+  }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function formatRole(role) {
+    if (role === 'potential_partner') return 'Partner';
+    return role || '';
+  }
+  function roleBadge(role) {
+    const displayRole = formatRole(role);
+    if (role === 'Administrator')   return `<span class="badge bg-info-subtle text-info">${displayRole}</span>`;
+    if (role === 'Auth. Personnel') return `<span class="badge bg-warning-subtle text-warning">${displayRole}</span>`;
+    if (role === 'potential_partner') return `<span class="badge bg-secondary-subtle text-secondary">${displayRole}</span>`;
+    return `<span class="badge bg-secondary-subtle text-secondary">${displayRole}</span>`;
+  }
+  function statusBadge(s) {
+    return s === 'Active'
+      ? `<span class="badge bg-success-subtle text-success"><i class="ri-checkbox-circle-line align-middle me-1"></i>Active</span>`
+      : `<span class="badge bg-danger-subtle text-danger"><i class="ri-close-circle-line align-middle me-1"></i>Inactive</span>`;
+  }
+
+  // â”€â”€ Render table from in-memory users array â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function renderUsers() {
-    const counts = { total: users.length, admin: 0, staff: 0, view: 0 };
-    users.forEach(u => {
-      if (u.role === 'Administrator')   counts.admin++;
-      if (u.role === 'Auth. Personnel') counts.staff++;
-      if (u.role === 'View-Only')       counts.view++;
-    });
-    document.getElementById('stat-total').textContent = counts.total;
-    document.getElementById('stat-admin').textContent = counts.admin;
-    document.getElementById('stat-staff').textContent = counts.staff;
-    document.getElementById('stat-view').textContent  = counts.view;
-    document.getElementById('usr-count').textContent  = `${users.length} users`;
+    const emailFilter = (document.getElementById('usr-filter-email').value || '').trim().toLowerCase();
+    const roleFilter = document.getElementById('usr-filter-role').value;
+    const filtered = users.filter(u =>
+      (!emailFilter || (u.email || '').toLowerCase().includes(emailFilter))
+      && (!roleFilter || u.role === roleFilter)
+    );
 
-    document.getElementById('usr-tbody').innerHTML = users.map(u => `
+    document.getElementById('usr-count').textContent = `${filtered.length} of ${users.length} user${users.length !== 1 ? 's' : ''}`;
+
+    document.getElementById('usr-tbody').innerHTML = filtered.map(u => `
       <tr>
-        <td style="font-weight:700;">${u.name}</td>
-        <td style="color:#64748b;">${u.email}</td>
-        <td style="font-weight:600;color:${roleColor[u.role]}">${u.role}</td>
-        <td>${u.unit}</td>
-        <td style="color:#64748b;">${u.login}</td>
-        <td style="font-weight:700;color:${statusColor[u.status]}">${u.status}</td>
+        <td class="fw-medium">${u.name}</td>
+        <td class="text-muted">${u.email}</td>
+        <td>${roleBadge(u.role)}</td>
+        <td>${u.unit ? u.unit : '<span class="text-muted">—</span>'}</td>
+        <td class="text-muted">${u.login || 'Never'}</td>
+        <td>${statusBadge(u.status)}</td>
         <td>
-          <div style="display:flex;gap:6px;">
-            <button class="act-btn act-edit" onclick="openEditUser(${u.id})"><i class="fa-solid fa-pen"></i> Edit</button>
+          <div class="hstack gap-1">
+            ${!CAN_MANAGE_USERS ? '<span class="text-muted fs-12">View only</span>'
+              : (CURRENT_ROLE === 'Staff' && u.role === 'Administrator') ? '<span class="text-muted fs-12">Protected</span>' : `
+            <button class="btn btn-sm btn-soft-secondary" onclick="openEditUser(${u.id})"><i class="ri-edit-line"></i> Edit</button>
             ${u.status === 'Active'
-              ? `<button class="act-btn act-deact" onclick="toggleStatus(${u.id})"><i class="fa-solid fa-ban"></i> Deactivate</button>`
-              : `<button class="act-btn act-reactivate" onclick="toggleStatus(${u.id})"><i class="fa-solid fa-rotate-right"></i> Reactivate</button>`
+              ? `<button class="btn btn-sm btn-soft-danger" onclick="toggleStatus(${u.id})"><i class="ri-forbid-line"></i> Deactivate</button>`
+              : `<button class="btn btn-sm btn-soft-success" onclick="toggleStatus(${u.id})"><i class="ri-refresh-line"></i> Reactivate</button>`
             }
+            `}
           </div>
         </td>
       </tr>`).join('');
   }
 
-  // ── Add User ────────────────────────────────────────────────────────────────
-  function openAddUser() {
-    editingId = null;
-    document.getElementById('usr-modal-title').innerHTML = '<i class="fa-solid fa-user-plus" style="color:#1e3a8a;margin-right:6px;"></i>Add User';
-    document.getElementById('u-name').value  = '';
-    document.getElementById('u-email').value = '';
-    document.getElementById('u-role').value  = 'Auth. Personnel';
-    document.getElementById('u-unit').value  = '';
-    document.getElementById('usr-modal').classList.add('open');
+  // ── Modal helpers ────────────────────────────────────────────────────────────────────────
+  function togglePwdVis() {
+    const inp = document.getElementById('u-password');
+    const eye = document.getElementById('u-pwd-eye');
+    if (inp.type === 'password') { inp.type = 'text'; eye.className = 'ri-eye-off-fill'; }
+    else { inp.type = 'password'; eye.className = 'ri-eye-fill'; }
   }
 
-  // ── Edit User ───────────────────────────────────────────────────────────────
+  function openAddUser() {
+    editingId = null;
+    document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
+    ['u-name','u-email','u-unit','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    document.getElementById('u-role').value = 'Auth. Personnel';
+    document.getElementById('u-pwd-required').style.display = '';
+    document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
+    document.getElementById('u-password').placeholder = 'Enter password';
+    getModal().show();
+  }
+
   function openEditUser(id) {
     const u = users.find(x => x.id === id);
     if (!u) return;
+    if (CURRENT_ROLE === 'Staff' && u.role === 'Administrator') return; // protected — server also blocks this
     editingId = id;
-    document.getElementById('usr-modal-title').innerHTML = `<i class="fa-solid fa-user-pen" style="color:#1e3a8a;margin-right:6px;"></i>Edit — ${u.name}`;
+    document.getElementById('usr-modal-title').innerHTML = `<i class="ri-edit-line me-2 text-primary"></i>Edit — ${u.name}`;
     document.getElementById('u-name').value  = u.name;
     document.getElementById('u-email').value = u.email;
     document.getElementById('u-role').value  = u.role;
-    document.getElementById('u-unit').value  = u.unit;
-    document.getElementById('usr-modal').classList.add('open');
+    document.getElementById('u-unit').value  = u.unit || '';
+    document.getElementById('u-password').value = '';
+    document.getElementById('u-pwd-required').style.display = 'none';
+    document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
+    document.getElementById('u-password').placeholder = 'New password (optional)';
+    ['u-name','u-email','u-unit','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    getModal().show();
   }
 
-  // ── Save (Add or Edit) ───────────────────────────────────────────────────────
+  function getModal() {
+    if (!bsModal) bsModal = new bootstrap.Modal(document.getElementById('usr-modal'));
+    return bsModal;
+  }
+
+  // ── Save (add or edit) — persists to MongoDB ─────────────────────────────────────────────
   function saveUser() {
-    const name  = document.getElementById('u-name').value.trim();
-    const email = document.getElementById('u-email').value.trim();
-    const role  = document.getElementById('u-role').value;
-    const unit  = document.getElementById('u-unit').value.trim();
+    const name     = document.getElementById('u-name').value.trim();
+    const email    = document.getElementById('u-email').value.trim();
+    const role     = document.getElementById('u-role').value;
+    const unit     = document.getElementById('u-unit').value.trim();
+    const password = document.getElementById('u-password').value;
+    let valid = true;
 
-    // Basic validation
-    [document.getElementById('u-name'), document.getElementById('u-email'), document.getElementById('u-unit')]
-      .forEach(el => el.style.borderColor = el.value.trim() ? '#d8e2f0' : '#ef4444');
-    if (!name || !email || !unit) return;
+    [['u-name', name], ['u-email', email]].forEach(([fid, val]) => {
+      const el = document.getElementById(fid);
+      if (!val) { el.classList.add('is-invalid'); valid = false; }
+      else el.classList.remove('is-invalid');
+    });
 
-    if (editingId) {
-      // Edit existing
-      const u = users.find(x => x.id === editingId);
-      u.name = name; u.email = email; u.role = role; u.unit = unit;
-      showUsrToast(`<i class="fa-solid fa-circle-check"></i> ${name} updated successfully.`, '#1e3a8a');
+    // Password required on Add; optional on Edit. Must satisfy the same policy the server enforces.
+    const pwdEl = document.getElementById('u-password');
+    const isStrongPassword = pw => pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
+    if (!editingId && !password) {
+      pwdEl.classList.add('is-invalid'); valid = false;
+    } else if (password && !isStrongPassword(password)) {
+      pwdEl.classList.add('is-invalid'); valid = false;
+      showToast('<i class="ri-error-warning-line me-1"></i>Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.', '#f06548');
     } else {
-      // Add new
-      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      users.unshift({ id: nextId++, name, email, role, unit, login: 'Never', status: 'Active' });
-      showUsrToast(`<i class="fa-solid fa-circle-check"></i> ${name} added to the system.`, '#15803d');
+      pwdEl.classList.remove('is-invalid');
     }
 
-    document.getElementById('usr-modal').classList.remove('open');
-    renderUsers();
+    if (!valid) return;
+
+    if (editingId) {
+      // EDIT — only send password if the admin typed a new one
+      const payload = { name, email, role, unit };
+      if (password) payload.password = password;
+      apiPatch(editingId, payload)
+        .then(data => {
+          if (data.success) {
+            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit });
+            getModal().hide();
+            renderUsers();
+            showToast(`<i class="ri-checkbox-circle-fill me-1"></i>${name} updated.`, '#405189');
+          } else {
+            showToast(`<i class="ri-error-warning-line me-1"></i>${data.error || 'Error updating user.'}`, '#f06548');
+          }
+        }).catch(e => { console.error(e); showToast('Error updating user.', '#f06548'); });
+    } else {
+      // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
+      const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+      apiPost({ name, email, role, unit, password, login: 'Never', status: 'Active', createdAt: today })
+        .then(data => {
+          if (data.success) {
+            users.unshift(data.user);
+            getModal().hide();
+            renderUsers();
+            showToast(`<i class="ri-checkbox-circle-fill me-1"></i>${name} added.`, '#0ab39c');
+          } else {
+            showToast(`<i class="ri-error-warning-line me-1"></i>${data.error || 'Error adding user.'}`, '#f06548');
+          }
+        }).catch(e => { console.error(e); showToast('Error adding user.', '#f06548'); });
+    }
   }
 
-  // ── Toggle Status ────────────────────────────────────────────────────────────
+  // â”€â”€ Toggle Active/Inactive â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function toggleStatus(id) {
     const u = users.find(x => x.id === id);
     if (!u) return;
-    u.status = u.status === 'Active' ? 'Inactive' : 'Active';
-    renderUsers();
-    const isNowActive = u.status === 'Active';
-    showUsrToast(
-      `<i class="fa-solid fa-${isNowActive ? 'rotate-right' : 'ban'}"></i> ${u.name} ${isNowActive ? 'reactivated' : 'deactivated'}.`,
-      isNowActive ? '#15803d' : '#b91c1c'
-    );
+    const newStatus = u.status === 'Active' ? 'Inactive' : 'Active';
+    apiPatch(id, { status: newStatus })
+      .then(data => {
+        if (data.success) {
+          u.status = newStatus;
+          renderUsers();
+          const on = newStatus === 'Active';
+          showToast(`<i class="ri-${on?'refresh':'forbid'}-line me-1"></i>${u.name} ${on ? 'reactivated' : 'deactivated'}.`, on ? '#0ab39c' : '#f06548');
+        } else {
+          showToast(`<i class="ri-error-warning-line me-1"></i>${data.error || 'Error updating status.'}`, '#f06548');
+        }
+      }).catch(e => { console.error(e); showToast('Error updating status.', '#f06548'); });
   }
 
-  // ── Toast ────────────────────────────────────────────────────────────────────
-  function showUsrToast(msg, color = '#1e3a8a') {
+  // â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  function showToast(msg, bg) {
     const t = document.getElementById('usr-toast');
-    t.style.background = color;
-    t.style.opacity = '1';
-    t.innerHTML = msg;
-    clearTimeout(t._to);
-    t._to = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    t.innerHTML = msg; t.style.background = bg || '#405189';
+    t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+    setTimeout(() => { t.style.opacity = '0'; t.style.pointerEvents = 'none'; }, 3500);
   }
 
-  // ── Modal close ──────────────────────────────────────────────────────────────
-  function closeUsrModal(e) {
-    if (e.target === document.getElementById('usr-modal'))
-      document.getElementById('usr-modal').classList.remove('open');
-  }
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') document.getElementById('usr-modal').classList.remove('open');
+  // â”€â”€ Load from MongoDB on page load â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/users')
+      .then(r => r.json())
+      .then(data => {
+        users = data;
+        renderUsers();
+      })
+      .catch(err => {
+        console.error('Failed to load users:', err);
+        renderUsers(); // render empty
+      });
   });
-
-  // ── Init ─────────────────────────────────────────────────────────────────────
-  renderUsers();
 </script>
+
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+<script src="/velzon/assets/js/plugins.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
 </body>
 </html>

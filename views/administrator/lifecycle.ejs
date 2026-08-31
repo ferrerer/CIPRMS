@@ -1,0 +1,548 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"
+    data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Monitoring | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <!-- gridjs css -->
+    <link rel="stylesheet" href="/velzon/assets/libs/gridjs/theme/mermaid.min.css" />
+    <!-- Layout config Js -->
+    <script src="/velzon/assets/js/layout.js"></script>
+    <!-- Bootstrap Css -->
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <!-- Icons Css -->
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <!-- App Css -->
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <!-- custom Css -->
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <style>
+        #reg-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #343a40;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            align-items: center;
+        }
+    </style>
+</head>
+
+
+<body>
+    <div id="layout-wrapper">
+        <%- include('../partials/header') %>
+            <%- include('../partials/' + (typeof sidebarPartial !=='undefined' ? sidebarPartial : 'sidebar' )) %>
+
+                <div class="main-content">
+                    <div class="page-content">
+                        <div class="container-fluid">
+
+                            <!-- page title -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <div
+                                        class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                                        <h4 class="mb-sm-0">Monitoring</h4>
+                                        <div class="page-title-right">
+                                            <ol class="breadcrumb m-0">
+                                                <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                                <li class="breadcrumb-item active">Monitoring</li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── Stat Cards (card-animate style) ── -->
+                            <div class="row">
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Total Agreements</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-total" data-target="0">0</span></h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-light text-success mb-0"><i
+                                                                class="ri-arrow-up-line align-middle"></i> <span id="cnt-moamou">MOA: 0 &nbsp; MOU: 0</span></span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-primary-subtle rounded-circle fs-2"><i
+                                                                data-feather="file-text"
+                                                                class="text-primary"></i></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Active</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-active" data-target="0">0</span></h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-success-subtle text-success mb-0"><i
+                                                                class="ri-arrow-up-line align-middle"></i> <span id="cnt-active-rate">0%</span> active
+                                                            rate</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-success-subtle rounded-circle fs-2"><i
+                                                                data-feather="check-circle"
+                                                                class="text-success"></i></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Expiring Soon</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-expiring" data-target="0">0</span></h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-warning-subtle text-warning mb-0"><i
+                                                                class="ri-time-line align-middle"></i> Within 90
+                                                            days</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-warning-subtle rounded-circle fs-2"><i
+                                                                data-feather="alert-triangle"
+                                                                class="text-warning"></i></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Expired</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-expired" data-target="0">0</span></h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-danger-subtle text-danger mb-0"><i
+                                                                class="ri-close-circle-line align-middle"></i> Requires
+                                                            renewal</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-danger-subtle rounded-circle fs-2"><i
+                                                                data-feather="x-circle" class="text-danger"></i></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div><!-- end row stat cards -->
+
+                            <div class="row">
+                                <!-- ── Left sidebar col ── -->
+                                <div class="col-xl-3">
+
+                                    <!-- Overview card -->
+                                    <div class="card">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1">Overview</h4>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-muted fs-13">Total Agreements</span>
+                                                <span class="fw-bold text-dark" id="ov-total">—</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-muted fs-13">Active</span>
+                                                <span class="fw-bold text-success" id="ov-active">—</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-muted fs-13">Expiring &le; 30d</span>
+                                                <span class="fw-bold text-danger" id="ov-expiring30">—</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-2">
+                                                <span class="text-muted fs-13">Expiring &le; 90d</span>
+                                                <span class="fw-bold text-warning" id="ov-expiring90">—</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between mb-3">
+                                                <span class="text-muted fs-13">Expired</span>
+                                                <span class="fw-bold text-danger" id="ov-expired">—</span>
+                                            </div>
+                                            <div class="mb-2">
+                                                <div class="d-flex justify-content-between fs-12 mb-1">
+                                                    <span class="text-muted">Active rate</span><span
+                                                        class="fw-bold text-success" id="ov-active-rate">—</span>
+                                                </div>
+                                                <div class="progress" style="height:6px">
+                                                    <div class="progress-bar bg-success" id="ov-active-bar" style="width:0%"></div>
+                                                </div>
+                                            </div>
+                                            <div class="mb-2">
+                                                <div class="d-flex justify-content-between fs-12 mb-1">
+                                                    <span class="text-muted">MOA</span><span
+                                                        class="fw-bold text-primary" id="ov-moa">—</span>
+                                                </div>
+                                                <div class="progress" style="height:6px">
+                                                    <div class="progress-bar bg-primary" id="ov-moa-bar" style="width:0%"></div>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between fs-12 mb-1">
+                                                    <span class="text-muted">MOU</span><span
+                                                        class="fw-bold text-info" id="ov-mou">—</span>
+                                                </div>
+                                                <div class="progress" style="height:6px">
+                                                    <div class="progress-bar bg-info" id="ov-mou-bar" style="width:0%"></div>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex justify-content-between pt-2 border-top fs-13">
+                                                <span class="text-muted">International <strong
+                                                        class="text-primary" id="ov-intl">—</strong></span>
+                                                <span class="text-muted">Local <strong
+                                                        class="text-warning" id="ov-local">—</strong></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Urgent card -->
+                                    <div class="card">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1"><i
+                                                    class="ri-error-warning-line text-warning me-1"></i> Urgent</h4>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <ul class="list-group list-group-flush" id="urgent-list">
+                                                <li class="list-group-item px-3 py-3 text-muted fs-12">Loading…</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <!-- DSS Insights card — Administrator only (removed for Auth.
+                                         Personnel 2026-07-23, alongside their loss of Reports access,
+                                         which is what this card's only action button linked to). -->
+                                    <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
+                                    <div class="card bg-primary-subtle border border-primary text-primary">
+                                        <div
+                                            class="card-header bg-transparent border-bottom border-primary align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1 text-primary"><i
+                                                    class="ri-robot-2-line me-1"></i> DSS Smart Alerts</h4>
+                                        </div>
+                                        <div class="card-body fs-13">
+                                            <p class="mb-2"><strong>Decision Support System is active.</strong></p>
+                                            <div class="d-flex gap-2 mb-3 align-items-start" id="dss-action-row">
+                                                <i class="ri-lightbulb-flash-line fs-16 mt-1"></i>
+                                                <div id="dss-action-text">Loading…</div>
+                                            </div>
+                                            <div class="d-flex gap-2 align-items-start" id="dss-review-row">
+                                                <i class="ri-alert-line fs-16 mt-1"></i>
+                                                <div id="dss-review-text">Loading…</div>
+                                            </div>
+                                            <div class="mt-3 text-end">
+                                                <a href="/reports" class="btn btn-sm btn-primary">View Full DSS Report
+                                                    <i class="ri-arrow-right-line ms-1"></i></a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <% } %>
+
+                                </div><!-- end col-xl-3 -->
+
+                                <!-- ── Main Table col ── -->
+                                <div class="col-xl-9">
+                                    <div class="card">
+                                        <div class="card-header border-0">
+                                            <div
+                                                class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                <h4 class="card-title mb-0">Agreement Validity Tracker</h4>
+                                                <span class="text-muted fs-12" id="lc-count"></span>
+                                            </div>
+                                            <!-- Filter nav tabs -->
+                                            <div class="d-flex align-items-center gap-4 mt-3 flex-wrap">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span
+                                                        class="text-muted fs-11 text-uppercase fw-semibold">Status</span>
+                                                    <ul class="nav nav-pills nav-pills-custom" id="pills-status">
+                                                        <li class="nav-item"><button class="nav-link active px-3 py-1"
+                                                                onclick="setPill('status','',this)">All</button></li>
+                                                        <li class="nav-item"><button class="nav-link px-3 py-1"
+                                                                onclick="setPill('status','Active',this)">Active</button>
+                                                        </li>
+                                                        <li class="nav-item"><button class="nav-link px-3 py-1"
+                                                                onclick="setPill('status','Expiring',this)">Expiring</button>
+                                                        </li>
+                                                        <li class="nav-item"><button class="nav-link px-3 py-1"
+                                                                onclick="setPill('status','Expired',this)">Expired</button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span
+                                                        class="text-muted fs-11 text-uppercase fw-semibold">Category</span>
+                                                    <ul class="nav nav-pills nav-pills-custom" id="pills-cat">
+                                                        <li class="nav-item"><button class="nav-link active px-3 py-1"
+                                                                onclick="setPill('cat','',this)">All</button></li>
+                                                        <li class="nav-item"><button class="nav-link px-3 py-1"
+                                                                onclick="setPill('cat','International',this)">International</button>
+                                                        </li>
+                                                        <li class="nav-item"><button class="nav-link px-3 py-1"
+                                                                onclick="setPill('cat','Local',this)">Local</button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-body pt-0">
+                                            <div id="lc-grid"></div>
+                                        </div>
+                                        <!-- Legend -->
+                                        <div class="card-footer border-top-0 bg-transparent">
+                                            <div class="d-flex flex-wrap gap-3 align-items-center">
+                                                <span
+                                                    class="text-muted fs-12 fw-semibold text-uppercase me-1">Legend:</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-success-subtle text-success">Active</span>
+                                                    Agreement is valid and in effect</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-warning-subtle text-warning">Expiring</span>
+                                                    Expires within 90 days</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-danger">Critical</span> Expires within 14
+                                                    days</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-danger-subtle text-danger">Expired</span> Past
+                                                    expiry — renewal required</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-primary-subtle text-primary">MOA</span>
+                                                    Memorandum of Agreement</span>
+                                                <span class="d-flex align-items-center gap-1 fs-12"><span
+                                                        class="badge bg-info-subtle text-info">MOU</span> Memorandum of
+                                                    Understanding</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div><!-- end col-xl-9 -->
+                            </div><!-- end row -->
+
+                        </div><!-- container-fluid -->
+                    </div><!-- page-content -->
+
+                    <footer class="footer">
+                        <div class="container-fluid">
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash;
+                                    CSPC-CIRL
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div>
+                                </div>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+    <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+    <script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+    <script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+    <script src="/velzon/assets/js/plugins.js"></script>
+    <!-- gridjs js -->
+    <script src="/velzon/assets/libs/gridjs/gridjs.umd.js"></script>
+    <!-- Renew/Edit/Delete are Administrator-only — POST/PATCH/DELETE
+         /api/partnerships already enforce this server-side; this flag (read by
+         lifecycle-gridjs.init.js) hides those row actions for Staff too. -->
+    <script>var CAN_MANAGE_LIFECYCLE = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;</script>
+    <!-- gridjs init -->
+    <script src="/velzon/assets/js/pages/lifecycle-gridjs.init.js"></script>
+    <!-- App js -->
+    <script src="/velzon/assets/js/app.js"></script>
+
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- VIEW DETAIL MODAL                                               -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <div class="modal fade zoomIn" id="viewPartnershipModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light p-3">
+                    <h5 class="modal-title" id="view-title">Agreement Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" id="view-close"></button>
+                </div>
+                <div class="modal-body" id="view-body"></div>
+                <div class="modal-footer">
+                    <div class="hstack gap-2 justify-content-end">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- EDIT MODAL                                                      -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <div class="modal fade zoomIn" id="editPartnershipModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light p-3">
+                    <h5 class="modal-title" id="editModalLabel">Edit Agreement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" id="edit-close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-lg-12 mb-3">
+                            <label class="form-label" for="e-inst">Institution Name <span
+                                    class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="e-inst">
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <label class="form-label" for="e-type">Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="e-type">
+                                <option value="">Select…</option>
+                                <option>MOA</option>
+                                <option>MOU</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <label class="form-label" for="e-cat">Category</label>
+                            <select class="form-select" id="e-cat">
+                                <option value="International">International</option>
+                                <option value="Local">Local</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-4 mb-3">
+                            <label class="form-label" for="e-expiry">Expiry Date <span
+                                    class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="e-expiry" onchange="computeEditStatus()">
+                        </div>
+                        <div class="col-lg-4 mb-3">
+                            <label class="form-label" for="e-status">Status (Auto-computed)</label>
+                            <input type="text" class="form-control bg-light" id="e-status" readonly>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="hstack gap-2 justify-content-end">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-success" id="edit-btn" onclick="saveEdit()"><i
+                                class="ri-save-line me-1"></i>Update</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- RENEW MODAL                                                     -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <div class="modal fade zoomIn" id="renewPartnershipModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light p-3">
+                    <h5 class="modal-title">Renew Agreement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" id="renew-close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="p-3 bg-success-subtle rounded mb-3">
+                        <div class="text-success fw-bold fs-11 text-uppercase mb-1">Renewing Agreement</div>
+                        <div class="fw-bold text-dark" id="renew-inst-name">—</div>
+                        <div class="text-muted fs-12" id="renew-inst-sub">—</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">Previous Expiry</label>
+                            <input type="text" class="form-control bg-light" id="renew-prev-expiry" readonly>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">New Expiry Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="renew-new-expiry"
+                                onchange="computeRenewStatus()">
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">New Status</label>
+                            <input type="text" class="form-control bg-light" id="renew-status" readonly>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning py-2 mb-0">
+                        <i class="ri-alert-line me-1"></i>This will update the agreement status to
+                        <strong>Active</strong>.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="hstack gap-2 justify-content-end">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-success" onclick="saveRenew()"><i
+                                class="ri-refresh-line me-1"></i>Confirm Renewal</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- DELETE MODAL                                                    -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <div class="modal fade zoomIn" id="deleteRecordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                        id="btn-close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mt-2 text-center">
+                        <lord-icon src="https://cdn.lordicon.com/gsqxdxog.json" trigger="loop"
+                            colors="primary:#f7b84b,secondary:#f06548" style="width:100px;height:100px"></lord-icon>
+                        <div class="mt-4 pt-2 fs-15 mx-4 mx-sm-5">
+                            <h4>Are you Sure?</h4>
+                            <p class="text-muted mx-4 mb-0">Are you sure you want to remove this agreement record?</p>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 justify-content-center mt-4 mb-2">
+                        <button type="button" class="btn w-sm btn-light" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn w-sm btn-danger" id="delete-record"
+                            onclick="confirmDelete()">Yes, Delete It!</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- toast -->
+    <div id="reg-toast"><span id="reg-toast-msg"></span></div>
+
+</body>
+
+
+</html>

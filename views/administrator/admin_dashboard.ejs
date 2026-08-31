@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"
+    data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default"
+    data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Dashboard | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+</head>
+
+<body>
+
+    <div id="layout-wrapper">
+
+        <%- include('../partials/header') %>
+            <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+                <div class="main-content">
+                    <div class="page-content">
+                        <div class="container-fluid">
+
+                            <!-- Page Title -->
+                            <% var isStaffRole = typeof user !== 'undefined' && user && user.role === 'Staff'; %>
+                            <div class="row">
+                                <div class="col-12">
+                                    <div
+                                        class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                                        <h4 class="mb-sm-0">Dashboard</h4>
+                                        <div class="page-title-right">
+                                            <ol class="breadcrumb m-0">
+                                                <li class="breadcrumb-item"><a href="<%= isStaffRole ? '/staff/dashboard' : '/dashboard' %>">CIPRMS</a></li>
+                                                <li class="breadcrumb-item active">Dashboard</li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- end page title -->
+
+                            <!-- Row 1: Stat Cards -->
+                            <div class="row">
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Active MOA/MOU</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-active"
+                                                            data-target="<%= dashActive %>">
+                                                            <%= dashActive %>
+                                                        </span>
+                                                    </h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-success-subtle text-success mb-0"><i
+                                                                class="ri-checkbox-circle-line align-middle"></i>
+                                                            Currently active</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-success-subtle rounded-circle fs-2">
+                                                            <i class="ri-shake-hands-line text-success"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Expiring Soon</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-expiring"
+                                                            data-target="<%= dashExpiring %>">
+                                                            <%= dashExpiring %>
+                                                        </span>
+                                                    </h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-warning-subtle text-warning mb-0"><i
+                                                                class="ri-time-line align-middle"></i> Within 90
+                                                            days</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-warning-subtle rounded-circle fs-2">
+                                                            <i class="ri-time-line text-warning"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Expired MOA/MOU</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-expired"
+                                                            data-target="<%= dashExpired %>">
+                                                            <%= dashExpired %>
+                                                        </span>
+                                                    </h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-danger-subtle text-danger mb-0"><i
+                                                                class="ri-close-circle-line align-middle"></i> Require
+                                                            renewal</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-danger-subtle rounded-circle fs-2">
+                                                            <i class="ri-close-circle-line text-danger"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card card-animate">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between">
+                                                <div>
+                                                    <p class="fw-medium text-muted mb-0">Total Partnerships</p>
+                                                    <h2 class="mt-4 ff-secondary fw-semibold"><span
+                                                            class="counter-value" id="cnt-total"
+                                                            data-target="<%= dashTotal %>">
+                                                            <%= dashTotal %>
+                                                        </span>
+                                                    </h2>
+                                                    <p class="mb-0 text-muted"><span
+                                                            class="badge bg-primary-subtle text-primary mb-0"><i
+                                                                class="ri-file-list-3-line align-middle"></i> All
+                                                            registered</span></p>
+                                                </div>
+                                                <div>
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span
+                                                            class="avatar-title bg-primary-subtle rounded-circle fs-2">
+                                                            <i class="ri-file-list-3-line text-primary"></i>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- end row -->
+
+                            <!-- Row 1.5: AI Insights -->
+                            <div class="row">
+                                <div class="col-xl-12">
+                                    <div class="card bg-light-subtle shadow-none border-0 mb-4">
+                                        <div class="card-header align-items-center d-flex bg-transparent border-0 pb-0">
+                                            <h4 class="card-title mb-0 flex-grow-1">
+                                                <i class="ri-lightbulb-flash-line me-2 text-primary"></i>Decision
+                                                Support & Insights
+                                            </h4>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row g-3">
+                                                <!-- High Renewal Priority -->
+                                                <div class="col-md-4">
+                                                    <div class="card h-100 border-0 shadow-sm"
+                                                        style="background: #fffcf0; border-left: 4px solid #f7b84b !important;">
+                                                        <div class="card-body p-4">
+                                                            <div class="d-flex align-items-center mb-3">
+                                                                <div class="avatar-xs flex-shrink-0 me-2">
+                                                                    <span
+                                                                        class="avatar-title bg-warning-subtle text-warning rounded-circle fs-14">
+                                                                        <i class="ri-error-warning-line"></i>
+                                                                    </span>
+                                                                </div>
+                                                                <h6 class="card-title mb-0 text-warning">High Renewal
+                                                                    Priority</h6>
+                                                            </div>
+                                                            <p class="text-muted fs-14 mb-4" id="insight-renewal"><%-
+                                                                    insightRenewal %></p>
+                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                                                class="btn btn-link text-warning p-0 fw-medium">Initiate
+                                                                Renewals <i
+                                                                    class="ri-arrow-right-line align-middle ms-1"></i></a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <!-- Expansion Opportunity -->
+                                                <div class="col-md-4">
+                                                    <div class="card h-100 border-0 shadow-sm"
+                                                        style="background: #f0f9ff; border-left: 4px solid #299cdb !important;">
+                                                        <div class="card-body p-4">
+                                                            <div class="d-flex align-items-center mb-3">
+                                                                <div class="avatar-xs flex-shrink-0 me-2">
+                                                                    <span
+                                                                        class="avatar-title bg-info-subtle text-info rounded-circle fs-14">
+                                                                        <i class="ri-global-line"></i>
+                                                                    </span>
+                                                                </div>
+                                                                <h6 class="card-title mb-0 text-info">Expansion
+                                                                    Opportunity</h6>
+                                                            </div>
+                                                            <p class="text-muted fs-14 mb-4" id="insight-expansion"><%-
+                                                                    insightExpansion %></p>
+                                                            <a href="<%= isStaffRole ? '/staff/reports' : '/reports' %>"
+                                                                class="btn btn-link text-info p-0 fw-medium">View Region
+                                                                Data <i
+                                                                    class="ri-arrow-right-line align-middle ms-1"></i></a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <!-- Resource Optimization -->
+                                                <div class="col-md-4">
+                                                    <div class="card h-100 border-0 shadow-sm"
+                                                        style="background: #f0fdf4; border-left: 4px solid #0ab39c !important;">
+                                                        <div class="card-body p-4">
+                                                            <div class="d-flex align-items-center mb-3">
+                                                                <div class="avatar-xs flex-shrink-0 me-2">
+                                                                    <span
+                                                                        class="avatar-title bg-success-subtle text-success rounded-circle fs-14">
+                                                                        <i class="ri-pie-chart-line"></i>
+                                                                    </span>
+                                                                </div>
+                                                                <h6 class="card-title mb-0 text-success">Resource
+                                                                    Optimization</h6>
+                                                            </div>
+                                                            <p class="text-muted fs-14 mb-4" id="insight-optimization">
+                                                                <%- insightOptimization %></p>
+                                                            <a href="<%= isStaffRole ? '/staff/registry' : '/registry' %>"
+                                                                class="btn btn-link text-success p-0 fw-medium">Review
+                                                                Inactive Partners <i
+                                                                    class="ri-arrow-right-line align-middle ms-1"></i></a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Charts -->
+                            <div class="row">
+                                <!-- By Type Chart -->
+                                <div class="col-xl-4">
+                                    <div class="card card-height-100">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1">Partnerships by Type & Status</h4>
+                                            <div class="flex-shrink-0">
+                                                <a href="<%= isStaffRole ? '/staff/registry' : '/registry' %>"
+                                                    class="btn btn-soft-primary btn-sm material-shadow-none">View
+                                                    Registry</a>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="type-status-chart" class="apex-charts" dir="ltr"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- By Institution Chart -->
+                                <div class="col-xl-4">
+                                    <div class="card card-height-100">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1">Partnerships by Institution</h4>
+                                            <div class="flex-shrink-0">
+                                                <a href="<%= isStaffRole ? '/staff/registry' : '/registry' %>"
+                                                    class="btn btn-soft-info btn-sm material-shadow-none">View
+                                                    Registry</a>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="institution-chart" class="apex-charts" dir="ltr"></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- By College Chart -->
+                                <div class="col-xl-4">
+                                    <div class="card card-height-100">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1">Partnerships by College / Unit</h4>
+                                            <div class="flex-shrink-0">
+                                                <a href="<%= isStaffRole ? '/staff/reports' : '/reports' %>"
+                                                    class="btn btn-soft-success btn-sm material-shadow-none">Full
+                                                    Report</a>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="college-chart" class="apex-charts" dir="ltr"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- end row -->
+
+                            <!-- Row 3: Map + Partner Countries + Recent Activity -->
+                            <div class="row">
+                                <!-- Map -->
+                                <div class="col-xl-8">
+                                    <div class="card card-height-100">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1"><i
+                                                    class="ri-map-2-line me-2 text-primary"></i>Partnerships
+                                                Geographical Map</h4>
+                                            <div class="flex-shrink-0 d-flex gap-1">
+                                                <button
+                                                    class="btn btn-soft-secondary btn-sm material-shadow-none continent-tab"
+                                                    onclick="flyToContinent(this,34,100,4)">Asia</button>
+                                                <button
+                                                    class="btn btn-soft-secondary btn-sm material-shadow-none continent-tab"
+                                                    onclick="flyToContinent(this,54,15,4)">Europe</button>
+                                                <button
+                                                    class="btn btn-soft-secondary btn-sm material-shadow-none continent-tab"
+                                                    onclick="flyToContinent(this,38,-97,4)">Americas</button>
+                                                <button
+                                                    class="btn btn-soft-secondary btn-sm material-shadow-none continent-tab"
+                                                    onclick="flyToContinent(this,-25,135,4)">Oceania</button>
+                                                <button
+                                                    class="btn btn-soft-primary btn-sm material-shadow-none continent-tab active"
+                                                    onclick="flyToContinent(this,20,0,2)">World</button>
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div id="partnership-map" style="height:360px;border-radius:0 0 8px 8px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                 <!-- Top Partner Countries -->
+                                <div class="col-xl-4">
+                                    <div class="card card-height-100">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1">Top Partner Countries</h4>
+                                            <span class="badge bg-primary-subtle text-primary">By Agreements</span>
+                                        </div>
+                                        <div class="card-body">
+                                            <% var topPartners=[
+                                                {country:'Japan',code:'jp',count:12,pct:100,lat:36,lng:138},
+                                                {country:'United States',code:'us',count:9,pct:75,lat:38,lng:-97},
+                                                {country:'South Korea',code:'kr',count:7,pct:58,lat:37,lng:127},
+                                                {country:'Philippines',code:'ph',count:6,pct:50,lat:13,lng:122},
+                                                {country:'China',code:'cn',count:5,pct:42,lat:35,lng:104},
+                                                {country:'Australia',code:'au',count:4,pct:33,lat:-25,lng:133},
+                                                {country:'Germany',code:'de',count:3,pct:25,lat:51,lng:10} ]; %>
+                                                <% topPartners.forEach(function(p){ %>
+                                                    <div class="d-flex align-items-center mb-3"
+                                                        onclick="flyToContinent(null,<%=p.lat%>,<%=p.lng%>,5)"
+                                                        style="cursor:pointer;">
+                                                        <div class="flex-shrink-0 me-3">
+                                                            <img src="https://flagcdn.com/w40/<%=p.code%>.png"
+                                                                alt="<%=p.country%>" class="rounded"
+                                                                style="width:32px;height:20px;object-fit:cover;">
+                                                        </div>
+                                                        <div class="flex-grow-1">
+                                                            <div class="d-flex justify-content-between mb-1">
+                                                                <span class="fs-13 fw-medium">
+                                                                    <%=p.country%>
+                                                                </span>
+                                                                <span class="fs-12 text-muted">
+                                                                    <%=p.count%>
+                                                                </span>
+                                                            </div>
+                                                            <div class="progress" style="height:4px;">
+                                                                <div class="progress-bar bg-primary"
+                                                                    style="width:<%=p.pct%>%"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <% }); %>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- end row -->
+                             
+
+                            <!-- Row 4: Lifecycle Alerts -->
+                            <div class="row">
+                                <!-- Expiring Soon Table -->
+                                <div class="col-xl-12">
+                                    <div class="card">
+                                        <div class="card-header align-items-center d-flex">
+                                            <h4 class="card-title mb-0 flex-grow-1"><i
+                                                    class="ri-alarm-warning-line me-2 text-warning"></i>Expiring
+                                                Partnerships</h4>
+                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                                class="btn btn-soft-warning btn-sm material-shadow-none">View
+                                                Lifecycle</a>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="table-responsive table-card align-items-center d-flex">
+                                                <table
+                                                    class="table table-borderless table-hover table-centered align-middle table-nowrap mb-0">
+                                                    <thead class="text-muted bg-light-subtle">
+                                                        <tr>
+                                                            <th>Institution</th>
+                                                            <th>Type</th>
+                                                            <th>Country</th>
+                                                            <th>Expires</th>
+                                                            <th>Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="expiring-tbody">
+                                                        <% if (!expiringRows || expiringRows.length===0) { %>
+                                                            <tr>
+                                                                <td colspan="5" class="text-center text-muted py-4"><i
+                                                                        class="ri-checkbox-circle-line me-1 text-success"></i>No
+                                                                    expiring or expired partnerships.</td>
+                                                            </tr>
+                                                            <% } else { expiringRows.forEach(function(p) { var d=new
+                                                                Date(p.end || p.endDate); var fmtDate=isNaN(d) ? (p.end
+                                                                || p.endDate || '—' ) :
+                                                                d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+                                                                %>
+                                                                <tr>
+                                                                    <td><span class="fw-medium"><%- p.inst ||
+                                                                                p.institution || '—' %></span></td>
+                                                                    <td><span
+                                                                            class="badge <%= p.type === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary' %>"><%-
+                                                                                p.type || '—' %></span></td>
+                                                                    <td><%- p.country || '—' %></td>
+                                                                    <td><%- fmtDate %></td>
+                                                                    <td>
+                                                                        <% if (p.status==='Expired' ) { %><span
+                                                                                class="badge bg-danger-subtle text-danger">Expired</span>
+                                                                            <% } else { %><span
+                                                                                    class="badge bg-warning-subtle text-warning">Expiring
+                                                                                    Soon</span>
+                                                                                <% } %>
+                                                                    </td>
+                                                                </tr>
+                                                                <% }); } %>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- end row -->
+
+                        </div><!-- container-fluid -->
+                    </div><!-- page-content -->
+
+                    <footer class="footer">
+                        <div class="container-fluid">
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash;
+                                    CSPC-CIRL
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div>
+                                </div>
+                            </div>
+                        </div>
+                    </footer>
+                </div><!-- end main content -->
+
+    </div><!-- END layout-wrapper -->
+
+    <!-- JAVASCRIPT -->
+    <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+    <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+    <script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+    <script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+    <script src="/velzon/assets/js/plugins.js"></script>
+    <script src="/velzon/assets/js/app.js"></script>
+    <script src="/velzon/assets/libs/apexcharts/apexcharts.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // ── Leaflet Map (initialized empty; markers added once real data loads) ──
+        const map = L.map('partnership-map', { center: [20, 15], zoom: 2, zoomControl: true });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
+        }).addTo(map);
+
+        const STATUS_COLOR = { active: '#17c653', expiring: '#f7b84b', expired: '#f06548' };
+        const STATUS_RING = { active: '#d1fae5', expiring: '#fef3c7', expired: '#fee2e2' };
+        const STATUS_LABEL = { active: 'Active', expiring: 'Expiring Soon', expired: 'Expired' };
+
+        // Real partnership status strings ('Active' / 'Expiring Soon' / 'Expired') → map/badge color key
+        function statusKey(status) {
+            if (status === 'Active') return 'active';
+            if (status === 'Expired') return 'expired';
+            return 'expiring'; // covers 'Expiring Soon' and anything unrecognized
+        }
+
+        function makeIcon(key) {
+            const c = STATUS_COLOR[key], r = STATUS_RING[key];
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32" viewBox="0 0 26 32">
+        <ellipse cx="13" cy="30" rx="5" ry="2.5" fill="rgba(0,0,0,.18)"/>
+        <circle cx="13" cy="13" r="12" fill="${r}" stroke="${c}" stroke-width="2.5"/>
+        <circle cx="13" cy="13" r="6" fill="${c}"/>
+    </svg>`;
+            return L.divIcon({ className: '', html: svg, iconSize: [26, 32], iconAnchor: [13, 30], popupAnchor: [0, -28] });
+        }
+
+        function renderMap(partnerships) {
+            // Only records that actually carry coordinates get a marker — no invented locations.
+            partnerships.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number').forEach(function (p) {
+                const key = statusKey(p.status);
+                const popup = `<div style="font-family:Inter,sans-serif;min-width:180px;">
+        <div style="font-weight:700;font-size:13px;color:#0d1b3e;margin-bottom:4px;">${p.inst}</div>
+        <div style="font-size:11.5px;color:#64748b;margin-bottom:6px;">${p.country || ''}</div>
+        <div style="display:flex;gap:6px;">
+            <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e8f0fe;color:#405189;">${p.type || ''}</span>
+            <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:${STATUS_RING[key]};color:${STATUS_COLOR[key]};">${STATUS_LABEL[key]}</span>
+        </div>
+    </div>`;
+                L.marker([p.lat, p.lng], { icon: makeIcon(key) }).addTo(map).bindPopup(popup, { maxWidth: 240 });
+            });
+            setTimeout(function () { map.invalidateSize(); }, 300);
+        }
+
+        function flyToContinent(btn, lat, lng, zoom) {
+            document.querySelectorAll('.continent-tab').forEach(function (t) { t.classList.remove('active', 'btn-soft-primary'); t.classList.add('btn-soft-secondary'); });
+            if (btn) { btn.classList.remove('btn-soft-secondary'); btn.classList.add('active', 'btn-soft-primary'); }
+            map.flyTo([lat, lng], zoom, { duration: 1.2 });
+        }
+
+        // ── Country → ISO2 code, for the flag emoji in "Top Partner Countries" ──
+        // Rendered as native Unicode flag emoji rather than an <img> pointed at
+        // an external CDN (flagcdn.com) — that's what silently broke before:
+        // no fallback when the CDN was unreachable, so every flag showed as a
+        // broken-image icon. Emoji render natively, no network dependency.
+        // Supports both full country names AND a raw 2-letter code typed
+        // directly (e.g. "PH", "jp"). A country that matches neither simply
+        // gets the 🌍 fallback — never a fabricated code.
+        const COUNTRY_CODE = {
+            'Philippines': 'ph', 'Japan': 'jp', 'South Korea': 'kr', 'Korea': 'kr', 'North Korea': 'kp',
+            'China': 'cn', 'Singapore': 'sg', 'Australia': 'au', 'Thailand': 'th', 'New Zealand': 'nz',
+            'Netherlands': 'nl', 'USA': 'us', 'US': 'us', 'United States': 'us', 'United States of America': 'us',
+            'Germany': 'de', 'United Kingdom': 'gb', 'UK': 'gb', 'Canada': 'ca', 'France': 'fr',
+            'Spain': 'es', 'Italy': 'it', 'India': 'in', 'Indonesia': 'id', 'Malaysia': 'my', 'Vietnam': 'vn',
+            'Taiwan': 'tw', 'Hong Kong': 'hk', 'Brazil': 'br', 'Mexico': 'mx'
+        };
+
+        function countryToFlagEmoji(country) {
+            const trimmed = (country || '').trim();
+            if (!trimmed) return null;
+            const code = /^[A-Za-z]{2}$/.test(trimmed) ? trimmed.toLowerCase() : COUNTRY_CODE[trimmed];
+            if (!code) return null;
+            return String.fromCodePoint(...[...code.toUpperCase()].map(c => 127397 + c.charCodeAt(0)));
+        }
+
+        function renderTopCountries(partnerships) {
+            const counts = {};
+            partnerships.forEach(p => {
+                const c = (p.country || '').trim();
+                if (!c) return;
+                counts[c] = (counts[c] || 0) + 1;
+            });
+            const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 7);
+            const el = document.getElementById('top-countries-list');
+            if (!top.length) { el.innerHTML = '<p class="text-muted fs-13 mb-0">No partnership records yet.</p>'; return; }
+            const max = top[0][1];
+            el.innerHTML = top.map(([country, count]) => {
+                const flagEmoji = countryToFlagEmoji(country);
+                const flag = flagEmoji
+                    ? `<span class="fs-3" style="line-height:1;" role="img" aria-label="${country} flag">${flagEmoji}</span>`
+                    : `<span class="fs-3" style="line-height:1;" role="img" aria-label="Unknown country">🌍</span>`;
+                const pct = Math.round((count / max) * 100);
+                return `<div class="d-flex align-items-center mb-3">
+        <div class="flex-shrink-0 me-3">${flag}</div>
+        <div class="flex-grow-1">
+            <div class="d-flex justify-content-between mb-1">
+                <span class="fs-13 fw-medium">${country}</span>
+                <span class="fs-12 text-muted">${count}</span>
+            </div>
+            <div class="progress" style="height:4px;">
+                <div class="progress-bar bg-primary" style="width:${pct}%"></div>
+            </div>
+        </div>
+    </div>`;
+            }).join('');
+        }
+
+        function fmtDate(s) {
+            const d = new Date(s);
+            return isNaN(d) ? (s || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+
+        function renderCharts(stats) {
+            var typeChart = new ApexCharts(document.getElementById('type-status-chart'), {
+                chart: { type: 'bar', height: 300, toolbar: { show: false } },
+                plotOptions: { bar: { horizontal: false, columnWidth: '45%', borderRadius: 4 } },
+                dataLabels: { enabled: false },
+                series: [
+                    { name: 'MOA', data: [stats.byType.MOA || 0] },
+                    { name: 'MOU', data: [stats.byType.MOU || 0] },
+                    { name: 'Active', data: [stats.active] },
+                    { name: 'Expiring', data: [stats.expiring] },
+                    { name: 'Expired', data: [stats.expired] }
+                ],
+                xaxis: { categories: ['Agreements'] },
+                colors: ['#405189', '#0ab39c', '#17c653', '#f7b84b', '#f06548'],
+                legend: { position: 'bottom' },
+                grid: { borderColor: '#f1f1f1' }
+            });
+            typeChart.render();
+
+            const instEntries = Object.entries(stats.byInstitution || {}).sort((a, b) => b[1] - a[1]);
+            var institutionChart = new ApexCharts(document.getElementById('institution-chart'), {
+                chart: { type: 'bar', height: 300, toolbar: { show: false } },
+                plotOptions: { bar: { horizontal: true, borderRadius: 4 } },
+                dataLabels: { enabled: true },
+                series: [{ name: 'Partnerships', data: instEntries.map(e => e[1]) }],
+                xaxis: { categories: instEntries.map(e => e[0]) },
+                colors: ['#0ab39c'],
+                grid: { borderColor: '#f1f1f1' }
+            });
+            institutionChart.render();
+
+            const unitEntries = Object.entries(stats.byUnit || {}).sort((a, b) => b[1] - a[1]);
+            var collegeChart = new ApexCharts(document.getElementById('college-chart'), {
+                chart: { type: 'bar', height: 300, toolbar: { show: false } },
+                plotOptions: { bar: { horizontal: true, borderRadius: 4 } },
+                dataLabels: { enabled: true },
+                series: [{ name: 'Partnerships', data: unitEntries.map(e => e[1]) }],
+                xaxis: { categories: unitEntries.map(e => e[0]) },
+                colors: ['#405189'],
+                grid: { borderColor: '#f1f1f1' }
+            });
+            collegeChart.render();
+        }
+
+        // ── DSS & Expiring table are server-side rendered — no loading state. ──
+        // Only the charts, map, and top-countries list require client-side JS.
+
+        // 1. Stats API → charts only (counters already rendered by EJS)
+        fetch('/api/partnerships/stats')
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(stats => { renderCharts(stats); })
+            .catch(err => {
+                console.error('Stats API failed:', err);
+                renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {} });
+            });
+
+        // 2. Partnerships list → map + top countries only
+        fetch('/api/partnerships')
+            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+            .then(partnerships => {
+                const list = Array.isArray(partnerships) ? partnerships : [];
+                renderMap(list);
+                renderTopCountries(list);
+            })
+            .catch(err => { console.error('Map data failed:', err); });
+
+    </script>
+
+</body>
+
+</html>

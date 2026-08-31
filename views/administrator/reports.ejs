@@ -1,0 +1,1410 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"
+    data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Reports & Analytics | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <!-- gridjs css -->
+    <link rel="stylesheet" href="/velzon/assets/libs/gridjs/theme/mermaid.min.css" />
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+</head>
+
+<body>
+    <div id="layout-wrapper">
+        <%- include('../partials/header') %>
+            <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+                <div class="main-content">
+                    <div class="page-content">
+                        <div class="container-fluid">
+
+                            <!-- page title -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <div
+                                        class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                                        <h4 class="mb-sm-0">Reports & Analytics</h4>
+                                        <div class="page-title-right">
+                                            <ol class="breadcrumb m-0">
+                                                <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                                <li class="breadcrumb-item active">Reports</li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Nav Tabs -->
+                            <div class="row">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header border-0">
+                                            <ul class="nav nav-tabs-custom rounded card-header-tabs border-bottom-0"
+                                                role="tablist">
+                                                <li class="nav-item">
+                                                    <a class="nav-link active" id="tab-rep" href="#"
+                                                        onclick="switchTab('rep');return false;">
+                                                        <i class="ri-bar-chart-2-line me-1"></i> Reports
+                                                    </a>
+                                                </li>
+                                                <li class="nav-item">
+                                                    <a class="nav-link" id="tab-audit" href="#"
+                                                        onclick="switchTab('audit');return false;">
+                                                        <i class="ri-history-line me-1"></i> Audit Trail
+                                                    </a>
+                                                </li>
+                                                <li class="nav-item">
+                                                    <a class="nav-link" id="tab-insights" href="#"
+                                                        onclick="switchTab('insights');return false;">
+                                                        <i class="ri-lightbulb-flash-line me-1"></i> Strategic Insights
+                                                        (DSS)
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- â”€â”€ REPORTS TAB â”€â”€ -->
+                            <div id="content-rep">
+
+                                <!-- Report Cards -->
+                                <div class="row">
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-primary-subtle rounded fs-2"><i
+                                                                data-feather="file-text"
+                                                                class="text-primary"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Partnership Summary Report</h6>
+                                                <p class="text-muted fs-13 mb-3">Complete overview of all active and
+                                                    inactive partnerships, categorized by type, region, and college
+                                                    unit.</p>
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Partnership Summary Report'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Partnership Summary Report'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-warning-subtle rounded fs-2"><i
+                                                                data-feather="clock" class="text-warning"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Expiring Agreements Report</h6>
+                                                <p class="text-muted fs-13 mb-3">List of agreements expiring within a
+                                                    selected timeframe with renewal status and responsible units.</p>
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {status:'Expiring Soon', title:'Expiring Agreements Report'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {status:'Expiring Soon', title:'Expiring Agreements Report'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-success-subtle rounded fs-2"><i
+                                                                data-feather="check-circle" class="text-success"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Active Partnerships List</h6>
+                                                <p class="text-muted fs-13 mb-3">Full list of currently active MOA/MOU
+                                                    agreements including responsible unit, coordinator, and expiry date.
+                                                </p>
+                                        
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {status:'Active', title:'Active Partnerships List'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {status:'Active', title:'Active Partnerships List'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-danger-subtle rounded fs-2"><i
+                                                                data-feather="x-circle" class="text-danger"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Expired Partnerships List</h6>
+                                                <p class="text-muted fs-13 mb-3">All expired agreements with last known
+                                                    details and recommended renewal actions.</p>
+                                         
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {status:'Expired', title:'Expired Partnerships List'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {status:'Expired', title:'Expired Partnerships List'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-warning-subtle rounded fs-2"><i
+                                                                data-feather="alert-triangle"
+                                                                class="text-warning"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Expiring Soon List</h6>
+                                                <p class="text-muted fs-13 mb-3">Partnerships expiring within 90 days,
+                                                    prioritized for renewal. Ideal for CHED reporting and audit prep.
+                                                </p>
+        
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {status:'Expiring Soon', title:'Expiring Soon List'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {status:'Expiring Soon', title:'Expiring Soon List'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-info-subtle rounded fs-2"><i
+                                                                data-feather="calendar" class="text-info"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Mid-Year Output Report</h6>
+                                                <p class="text-muted fs-13 mb-3">Summary of first-half partnership activities, including new, renewed, and expired agreements.</p>
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Mid-Year Output Report'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Mid-Year Output Report'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-primary-subtle rounded fs-2"><i
+                                                                data-feather="bar-chart-2" class="text-primary"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Yearly Output Report</h6>
+                                                <p class="text-muted fs-13 mb-3">Annual summary of partnership records for the academic/calendar year, suitable for CHED submission.</p>
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Yearly Output Report'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Yearly Output Report'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-3 col-md-6">
+                                        <div class="card card-animate h-150">
+                                            <div class="card-body d-flex flex-column">
+                                                <div class="d-flex mb-3">
+                                                    <div class="avatar-sm flex-shrink-0">
+                                                        <span class="avatar-title bg-success-subtle rounded fs-2"><i
+                                                                data-feather="shield" class="text-success"></i></span>
+                                                    </div>
+                                                </div>
+                                                <h6 class="fs-15 fw-semibold">Compliance / Audit Report</h6>
+                                                <p class="text-muted fs-13 mb-3">Structured report for accreditation
+                                                    bodies (QS Stars, AUN-QA, WURI) and regulatory audits.</p>
+                                                <div class="d-flex gap-2 mt-auto">
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Compliance Audit Report'})"><i
+                                                            class="ri-file-pdf-line me-1"></i>PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Compliance Audit Report'})"><i
+                                                            class="ri-table-line me-1"></i>Excel</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div><!-- end report cards row -->
+
+                                <!-- Custom Report Builder -->
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header border-0 d-flex align-items-center flex-wrap gap-2">
+                                                <h5 class="card-title mb-0 flex-grow-1"><i
+                                                        class="ri-equalizer-line me-2 text-primary"></i>Custom Report
+                                                    Builder</h5>
+                                                <span class="badge bg-primary-subtle text-primary fs-12"><i class="ri-shield-line me-1"></i>Advanced Analytics</span>
+                                            </div>
+                                            <div class="card-body pt-0">
+                                                <h6 class="text-uppercase fs-11 fw-semibold text-muted mb-2 mt-1">Report Configuration</h6>
+                                                <div class="row g-3 mb-3">
+                                                    <div class="col-xl-6 col-md-6">
+                                                        <label class="form-label fw-semibold">Report Title</label>
+                                                        <input type="text" class="form-control" id="cr-title" placeholder="e.g. List of Active International Partners">
+                                                    </div>
+                                                    <div class="col-xl-6 col-md-6">
+                                                        <label class="form-label fw-semibold">Report Type</label>
+                                                        <select class="form-select" id="cr-type" onchange="onReportTypeChange()">
+                                                            <option value="Summary">Summary</option>
+                                                            <option value="Active Partnerships">Active Partnerships</option>
+                                                            <option value="Inactive Partnerships">Inactive Partnerships</option>
+                                                            <option value="Expired Partnerships">Expired Partnerships</option>
+                                                            <option value="Expiring Soon">Expiring Soon</option>
+                                                            <!-- Preserved legacy aliases -->
+                                                            <option value="Expiration" style="display:none;">Expiration</option>
+                                                            <option value="Active List" style="display:none;">Active List</option>
+                                                            <option value="Expired List" style="display:none;">Expired List</option>
+                                                            <option value="Mid-Year" style="display:none;">Mid-Year</option>
+                                                            <option value="Yearly" style="display:none;">Yearly</option>
+                                                            <option value="Audit" style="display:none;">Audit</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <h6 class="text-uppercase fs-11 fw-semibold text-muted mb-2">Partnership Filters</h6>
+                                                <div class="row g-3 mb-3">
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Category</label>
+                                                        <select class="form-select" id="cr-cat">
+                                                            <option value="">All</option>
+                                                            <option>International</option>
+                                                            <option>Local</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Agreement Type</label>
+                                                        <select class="form-select" id="cr-agtype">
+                                                            <option value="">All</option>
+                                                            <option>MOA</option>
+                                                            <option>MOU</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Status</label>
+                                                        <select class="form-select" id="cr-status">
+                                                            <option value="">All</option>
+                                                            <option>Active</option>
+                                                            <option>Expiring Soon</option>
+                                                            <option>Expired</option>
+                                                            <option>Inactive</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Country</label>
+                                                        <input type="text" class="form-control" id="cr-country" placeholder="e.g. Japan (blank = all)">
+                                                    </div>
+                                                </div>
+
+                                                <h6 class="text-uppercase fs-11 fw-semibold text-muted mb-2">Date Filters</h6>
+                                                <div class="row g-3">
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Date From</label>
+                                                        <input type="date" class="form-control" id="cr-date-from">
+                                                    </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Date To</label>
+                                                        <input type="date" class="form-control" id="cr-date-to">
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-4 d-flex gap-2 flex-wrap">
+                                                    <button class="btn btn-primary" id="btn-cr-preview" onclick="previewCustomReport()"><i
+                                                            class="ri-eye-line me-1"></i>Preview</button>
+                                                    <button class="btn btn-danger" onclick="generateCustomReport('pdf')"><i
+                                                            class="ri-file-pdf-line me-1"></i>Generate PDF</button>
+                                                    <button class="btn btn-success" onclick="generateCustomReport('excel')"><i
+                                                            class="ri-table-line me-1"></i>Generate Excel</button>
+                                                    <button class="btn btn-outline-secondary ms-auto" onclick="resetCustomReportFilters()"><i
+                                                            class="ri-refresh-line me-1"></i>Reset Filters</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- ══════════════════════════════════════════════════════════════════ -->
+                                <!-- Report Preview + Compare — single connected modal workflow            -->
+                                <!-- (Reports & Analytics → Custom Report Builder → Preview → Compare →     -->
+                                <!-- pick a dimension/value → 3-column result: new selection (left) /       -->
+                                <!-- result (center) / original, untouched report (right))                 -->
+                                <!-- ══════════════════════════════════════════════════════════════════ -->
+                                <div class="modal fade" id="report-preview-modal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                                    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <div class="flex-grow-1">
+                                                    <h5 class="modal-title mb-1" id="prev-title">Report Preview</h5>
+                                                    <p class="text-muted fs-12 mb-0" id="prev-meta">Generated date & user...</p>
+                                                </div>
+                                                <button type="button" class="btn-close" onclick="closeReportModal()" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+
+                                                <!-- Loading state -->
+                                                <div id="rpm-loading" class="text-center py-5" style="display:none;">
+                                                    <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading…</span></div>
+                                                    <p class="text-muted mt-3 mb-0">Generating report…</p>
+                                                </div>
+
+                                                <!-- Error state — `d-flex` is a Bootstrap "display" utility and is
+                                                     therefore !important; putting it directly on this element made
+                                                     `style.display = 'none'` unable to ever actually hide it (the
+                                                     !important class always won), so the error banner rendered
+                                                     permanently, regardless of success or failure. Keeping the outer
+                                                     toggle target free of any display utility class, with the flex
+                                                     layout on an inner wrapper instead, lets the JS show/hide actually
+                                                     take effect. -->
+                                                <div id="rpm-error" class="alert alert-danger" style="display:none;">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <i class="ri-error-warning-line fs-4"></i>
+                                                        <div class="flex-grow-1" id="rpm-error-text">Something went wrong.</div>
+                                                        <button type="button" class="btn btn-sm btn-outline-danger" id="rpm-retry-btn" onclick="previewCustomReport()">Retry</button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- VIEW 1: Single Report Preview -->
+                                                <div id="rpm-view-preview">
+                                                    <div class="mb-3 d-flex align-items-center flex-wrap gap-1" id="prev-filters"></div>
+                                                    <div class="row g-3 mb-4" id="prev-summary-cards"></div>
+                                                    <div class="table-responsive">
+                                                        <div class="d-flex align-items-center mb-2">
+                                                            <h6 class="fw-semibold mb-0 text-dark flex-grow-1"><i class="ri-list-check-2 me-1 text-primary"></i>Included Records (<span id="prev-records-count">0</span>)</h6>
+                                                        </div>
+                                                        <table class="table table-sm table-bordered align-middle mb-0">
+                                                            <thead class="bg-light">
+                                                                <tr>
+                                                                    <th>#</th>
+                                                                    <th>Institution</th>
+                                                                    <th>Country</th>
+                                                                    <th>Region</th>
+                                                                    <th>Type</th>
+                                                                    <th>Nature</th>
+                                                                    <th>Unit</th>
+                                                                    <th>Start</th>
+                                                                    <th>End</th>
+                                                                    <th>Status</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="prev-records-tbody"></tbody>
+                                                        </table>
+                                                    </div>
+                                                </div><!-- end rpm-view-preview -->
+
+                                                <!-- VIEW 2: Compare — configuration step -->
+                                                <div id="rpm-view-compare-select" style="display:none;">
+                                                    <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
+                                                        <i class="ri-information-line fs-4"></i>
+                                                        <div class="fs-13">
+                                                            <strong>Your original report is preserved as-is.</strong> It will appear on the right, unchanged. Choose a dimension and a value below to build the report you want to compare it against — that one will appear on the left, with the result in the center.
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-muted fs-13">The comparison-against report reuses every filter already set in the Custom Report Builder — category, date range, agreement type, country and status — except for the one dimension you override below.</p>
+                                                    <div class="mb-3 d-flex align-items-center flex-wrap gap-1" id="cmp-inherited-filters"></div>
+                                                    <div class="row g-3">
+                                                        <div class="col-md-6">
+                                                            <label class="form-label fw-semibold">Compare By</label>
+                                                            <select class="form-select" id="cmp-field" onchange="onCompareFieldChange()">
+                                                                <option value="country">Country</option>
+                                                                <option value="inst">Institution</option>
+                                                                <option value="unit">College / Unit</option>
+                                                                <option value="region">Region</option>
+                                                                <option value="type">Agreement Type</option>
+                                                                <option value="nature">Nature of Partnership</option>
+                                                                <option value="cat">Category</option>
+                                                                <option value="year">Year</option>
+                                                                <option value="status">Partnership Status</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <label class="form-label fw-semibold">Compare Against</label>
+                                                            <select class="form-select" id="cmp-value">
+                                                                <option value="">Loading…</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mt-4">
+                                                        <button class="btn btn-info text-white" id="btn-generate-comparison" onclick="generateComparison()"><i class="ri-git-branch-line me-1"></i>Generate Comparison</button>
+                                                    </div>
+                                                </div><!-- end rpm-view-compare-select -->
+
+                                                <!-- VIEW 3: Comparison Result — Compared Against (left) / Result (center) / Original Report (right) -->
+                                                <div id="rpm-view-compare-result" style="display:none;">
+                                                    <div class="row g-3">
+                                                        <div class="col-lg-4 order-lg-1">
+                                                            <div class="card border border-danger-subtle h-100 mb-0">
+                                                                <div class="card-header bg-danger-subtle py-2">
+                                                                    <h6 class="mb-0 text-danger fw-semibold"><i class="ri-file-chart-line me-1"></i>Compared Against — <span id="cmp-b-label">Group B</span></h6>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <div class="text-center mb-3">
+                                                                        <div class="display-6 fw-bold text-danger" id="cmp-b-count">0</div>
+                                                                        <div class="text-muted fs-12" id="cmp-b-pct">0% of compared</div>
+                                                                    </div>
+                                                                    <div class="table-responsive" style="max-height:320px;">
+                                                                        <table class="table table-sm table-bordered mb-0"><tbody id="cmp-b-tbody"></tbody></table>
+                                                                    </div>
+                                                                    <p class="text-muted fs-12 mt-2 mb-0" id="cmp-b-note"></p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="col-lg-4 order-lg-2">
+                                                            <div class="card border border-primary h-100 mb-0">
+                                                                <div class="card-header bg-primary-subtle py-2">
+                                                                    <h6 class="mb-0 text-primary fw-semibold"><i class="ri-scales-3-line me-1"></i>Comparison Result</h6>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <p class="text-muted fs-12 mb-3" id="cmp-title"></p>
+                                                                    <div class="row g-2 mb-3" id="cmp-summary-cards"></div>
+                                                                    <div id="cmp-chart-card">
+                                                                        <div id="cmp-apex-chart" class="apex-charts" dir="ltr"></div>
+                                                                    </div>
+                                                                    <div id="cmp-empty" class="text-center text-muted py-4" style="display:none;">
+                                                                        <i class="ri-inbox-line fs-2 d-block mb-2"></i>No comparison data for the selected filters.
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="col-lg-4 order-lg-3">
+                                                            <div class="card border border-primary-subtle h-100 mb-0">
+                                                                <div class="card-header bg-primary-subtle py-2">
+                                                                    <h6 class="mb-0 text-primary fw-semibold"><i class="ri-file-chart-line me-1"></i>Original Report — <span id="cmp-a-label">Group A</span></h6>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <div class="text-center mb-3">
+                                                                        <div class="display-6 fw-bold text-primary" id="cmp-a-count">0</div>
+                                                                        <div class="text-muted fs-12" id="cmp-a-pct">0% of compared</div>
+                                                                    </div>
+                                                                    <div class="table-responsive" style="max-height:320px;">
+                                                                        <table class="table table-sm table-bordered mb-0"><tbody id="cmp-a-tbody"></tbody></table>
+                                                                    </div>
+                                                                    <p class="text-muted fs-12 mt-2 mb-0" id="cmp-a-note"></p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div><!-- end rpm-view-compare-result -->
+
+                                            </div><!-- end modal-body -->
+
+                                            <div class="modal-footer flex-wrap gap-2" id="rpm-footer-preview">
+                                                <button type="button" class="btn btn-danger" onclick="generateCustomReport('pdf')"><i class="ri-file-pdf-line me-1"></i>Export PDF</button>
+                                                <button type="button" class="btn btn-success" onclick="generateCustomReport('excel')"><i class="ri-table-line me-1"></i>Export Excel</button>
+                                                <button type="button" class="btn btn-info text-white" onclick="openCompareSelect()"><i class="ri-git-branch-line me-1"></i>Compare</button>
+                                                <button type="button" class="btn btn-light" onclick="closeReportModal()">Close</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="closeReportModal()"><i class="ri-arrow-go-back-line me-1"></i>Back / Edit</button>
+                                            </div>
+                                            <div class="modal-footer flex-wrap gap-2" id="rpm-footer-compare-select" style="display:none;">
+                                                <button type="button" class="btn btn-light" onclick="closeReportModal()">Close</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="backToPreview()"><i class="ri-arrow-go-back-line me-1"></i>Back to Report Preview</button>
+                                            </div>
+                                            <div class="modal-footer flex-wrap gap-2" id="rpm-footer-compare-result" style="display:none;">
+                                                <button type="button" class="btn btn-light" onclick="closeReportModal()">Close</button>
+                                                <button type="button" class="btn btn-outline-secondary" onclick="backToPreview()"><i class="ri-arrow-go-back-line me-1"></i>Back to Report Preview</button>
+                                                <button type="button" class="btn btn-outline-warning" onclick="changeComparison()"><i class="ri-edit-2-line me-1"></i>Change Comparison</button>
+                                                <button type="button" class="btn btn-outline-danger" onclick="clearComparison()"><i class="ri-close-circle-line me-1"></i>Clear Comparison</button>
+                                                <button type="button" class="btn btn-danger" onclick="exportComparison('pdf')"><i class="ri-file-pdf-line me-1"></i>Export PDF</button>
+                                                <button type="button" class="btn btn-success" onclick="exportComparison('excel')"><i class="ri-table-line me-1"></i>Export Excel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div><!-- end report-preview-modal -->
+
+                            </div><!-- end content-rep -->
+
+                            <!-- ── AUDIT TRAIL TAB ── -->
+                            <div id="content-audit" style="display:none;">
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header border-0">
+                                                <% var isStaffOwnTrail = typeof user !== 'undefined' && user && user.role === 'Staff'; %>
+                                                <div class="d-flex align-items-center flex-wrap gap-2">
+                                                    <h5 class="card-title mb-0 flex-grow-1"><i
+                                                            class="ri-history-line me-2 text-primary"></i><%= isStaffOwnTrail ? 'My Activity Trail' : 'Activity / Audit Trail' %></h5>
+                                                    <button class="btn btn-sm btn-danger" onclick="exportAuditPDF()"><i
+                                                            class="ri-file-pdf-line me-1"></i>Export Log PDF</button>
+                                                    <button class="btn btn-sm btn-success" onclick="exportAuditExcel()"><i
+                                                            class="ri-table-line me-1"></i>Export Log Excel</button>
+                                                </div>
+                                                <p class="text-muted mt-1 mb-0 fs-12"><%= isStaffOwnTrail ? 'Your own actions, logged for transparency and accountability.' : 'All system actions logged for transparency and accountability' %></p>
+                                            </div>
+                                            <div class="card-body pt-0">
+                                                <!-- Filters -->
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-md-3">
+                                                        <select id="audit-filter-action" class="form-select form-select-sm" onchange="applyAuditFilters()">
+                                                            <option value="">All Actions</option>
+                                                            <option value="ADD">ADD</option>
+                                                            <option value="EDIT">EDIT</option>
+                                                            <option value="DELETE">DELETE</option>
+                                                            <option value="APPROVE">APPROVE</option>
+                                                            <option value="REJECT">REJECT</option>
+                                                            <option value="RENEW">RENEW</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <select id="audit-filter-role" class="form-select form-select-sm" onchange="applyAuditFilters()">
+                                                            <option value="">All Roles</option>
+                                                            <option value="Administrator">Administrator</option>
+                                                            <option value="Auth. Personnel">Auth. Personnel</option>
+                                                            <option value="potential_partner">Partner</option>
+                                                            <option value="Staff">Staff</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <input type="date" id="audit-filter-from" class="form-control form-control-sm" placeholder="Date From" onchange="applyAuditFilters()">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <input type="date" id="audit-filter-to" class="form-control form-control-sm" placeholder="Date To" onchange="applyAuditFilters()">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset</button>
+                                                    </div>
+                                                </div>
+                                                <div id="audit-grid"></div>
+                                                <div id="audit-empty" class="text-center text-muted py-5" style="display:none;">
+                                                    <i class="ri-history-line fs-1 mb-2 d-block"></i>
+                                                    <p class="mb-0">No audit logs found. Actions on partnerships, users, and access requests will appear here.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div><!-- end content-audit -->
+
+                            <!-- â”€â”€ STRATEGIC INSIGHTS (DSS) TAB â”€â”€ -->
+                            <div id="content-insights" style="display:none;">
+                                <div class="row">
+                                    <div class="col-xl-8">
+                                        <div class="card">
+                                            <div class="card-header border-0 align-items-center d-flex">
+                                                <h4 class="card-title mb-0 flex-grow-1"><i
+                                                        class="ri-lightbulb-flash-line text-warning me-1"></i>
+                                                    Partnership Recommendations</h4>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="alert alert-info border-0 mb-4">
+                                                    <span id="dss-alert"><strong><i
+                                                                class="ri-information-line me-1"></i> Decision Support
+                                                            System (DSS) Active:</strong> Loading data…</span>
+                                                </div>
+
+                                                <h6 class="fw-semibold text-uppercase fs-12 mb-3">Strategic Portfolio
+                                                    Gaps</h6>
+                                                <div class="d-flex bg-light rounded p-3 mb-4 border">
+                                                    <div class="flex-shrink-0 text-primary fs-3">
+                                                        <i class="ri-global-line"></i>
+                                                    </div>
+                                                    <div class="flex-grow-1 ms-3">
+                                                        <h6 class="mb-1">Europe & Oceania Representation</h6>
+                                                        <p class="text-muted mb-0 fs-13" id="region-gap-text">Analyzing
+                                                            regional distribution…</p>
+                                                    </div>
+                                                </div>
+
+                                                <h6 class="fw-semibold text-uppercase fs-12 mb-3">Nearest Expiring
+                                                    Partnership</h6>
+                                                <div
+                                                    class="d-flex bg-warning-subtle rounded p-3 mb-4 border border-warning">
+                                                    <div class="flex-shrink-0 text-warning fs-3">
+                                                        <i class="ri-star-line"></i>
+                                                    </div>
+                                                    <div class="flex-grow-1 ms-3" id="dss-expiring-block">
+                                                        <p class="text-muted mb-0 fs-13">Loading…</p>
+                                                    </div>
+                                                </div>
+
+                                                <h6 class="fw-semibold text-uppercase fs-12 mb-3">Longest-Overdue
+                                                    Expired Agreement</h6>
+                                                <div class="d-flex bg-danger-subtle rounded p-3 border border-danger">
+                                                    <div class="flex-shrink-0 text-danger fs-3">
+                                                        <i class="ri-alert-line"></i>
+                                                    </div>
+                                                    <div class="flex-grow-1 ms-3" id="dss-expired-block">
+                                                        <p class="text-muted mb-0 fs-13">Loading…</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-xl-4">
+                                        <div class="card card-animate">
+                                            <div class="card-body text-center">
+                                                <div class="avatar-lg mx-auto mb-3">
+                                                    <div
+                                                        class="avatar-title bg-success-subtle text-success rounded-circle fs-1">
+                                                        <i class="ri-line-chart-line"></i>
+                                                    </div>
+                                                </div>
+                                                <h5 class="fs-16 mb-1">Partnership Health Score</h5>
+                                                <p class="text-muted mb-4">Based on activity, diversity, and renewal
+                                                    rates.</p>
+                                                <h2 id="health-score" class="display-5 fw-bold text-success mb-2">—<span
+                                                        class="fs-14 text-muted">/100</span></h2>
+                                                <p class="text-muted">Based on active vs expired ratios</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div><!-- end content-insights -->
+
+                        </div><!-- container-fluid -->
+                    </div><!-- page-content -->
+
+                    <footer class="footer">
+                        <div class="container-fluid">
+                            <div class="row">
+                                <div class="col-sm-6">
+                                    <script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash;
+                                    CSPC-CIRL
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div>
+                                </div>
+                            </div>
+                        </div>
+                    </footer>
+                </div><!-- end main content -->
+    </div><!-- END layout-wrapper -->
+
+    <script>
+        function switchTab(tab) {
+            document.getElementById('tab-rep').classList.toggle('active', tab === 'rep');
+            document.getElementById('tab-audit').classList.toggle('active', tab === 'audit');
+            if (document.getElementById('tab-insights')) {
+                document.getElementById('tab-insights').classList.toggle('active', tab === 'insights');
+            }
+            document.getElementById('content-rep').style.display = tab === 'rep' ? '' : 'none';
+            document.getElementById('content-audit').style.display = tab === 'audit' ? '' : 'none';
+            if (document.getElementById('content-insights')) {
+                document.getElementById('content-insights').style.display = tab === 'insights' ? '' : 'none';
+            }
+            // Lazy-load data when tab becomes visible
+            if (tab === 'audit') loadAuditGrid();
+            if (tab === 'insights') loadDssInsights();
+        }
+
+        const actionBadge = {
+            ADD: 'bg-success-subtle text-success', EDIT: 'bg-primary-subtle text-primary',
+            RENEW: 'bg-warning-subtle text-warning', VIEW: 'bg-secondary-subtle text-secondary',
+            DELETE: 'bg-danger-subtle text-danger', APPROVE: 'bg-info-subtle text-info',
+            REJECT: 'bg-danger-subtle text-danger'
+        };
+        const roleBadge = {
+            'Administrator': 'bg-primary-subtle text-primary',
+            'Auth. Personnel': 'bg-warning-subtle text-warning',
+            'potential_partner': 'bg-success-subtle text-success',
+            'Staff': 'bg-secondary-subtle text-secondary'
+        };
+        function formatRole(role) {
+            if (role === 'potential_partner') return 'Partner';
+            return role || '';
+        }
+        const roleLabel = {
+            'potential_partner': 'Partner'
+        };
+
+        var auditGrid = null;
+        var allAuditLogs = [];
+
+        // ── Load Audit Trail from MongoDB ────────────────────────────────────────────
+        function loadAuditGrid() {
+            // destroy old instance so we can re-render fresh data
+            if (auditGrid) {
+                auditGrid.destroy();
+                auditGrid = null;
+                document.getElementById('audit-grid').innerHTML = '';
+            }
+            document.getElementById('audit-empty').style.display = 'none';
+
+            fetch('/api/activitylogs')
+                .then(r => r.json())
+                .then(function (logs) {
+                    allAuditLogs = logs;
+                    renderAuditGrid(logs);
+                })
+                .catch(function (err) { console.error('Failed to load audit log:', err); });
+        }
+
+        function renderAuditGrid(logs) {
+            if (auditGrid) { auditGrid.destroy(); auditGrid = null; document.getElementById('audit-grid').innerHTML = ''; }
+            if (!logs || logs.length === 0) {
+                document.getElementById('audit-empty').style.display = '';
+                return;
+            }
+            document.getElementById('audit-empty').style.display = 'none';
+            auditGrid = new gridjs.Grid({
+                columns: [
+                    { name: '#', width: '50px', formatter: (_, row) => gridjs.html(`<span class="text-muted fw-semibold">${row.cells[0].data}</span>`) },
+                    { name: 'Action', formatter: (cell) => gridjs.html(`<span class="badge ${actionBadge[cell] || 'bg-secondary-subtle text-secondary'}">${cell}</span>`) },
+                    { name: 'Record / Details', width: '38%' },
+                    { name: 'Performed By' },
+                    { name: 'Role', formatter: (cell) => gridjs.html(`<span class="badge ${roleBadge[cell] || 'bg-secondary-subtle text-secondary'}">${formatRole(cell)}</span>`) },
+                    { name: 'Date & Time' }
+                ],
+                data: logs.map((a, i) => [i + 1, a.action, a.record, a.by, a.role, a.date]),
+                search: true,
+                pagination: { limit: 15 },
+                sort: true,
+                language: { search: { placeholder: 'Search audit log...' } },
+                style: {
+                    table: { border: 'none' },
+                    th: { background: 'var(--vz-table-bg,#f3f6f9)', color: 'var(--vz-table-color,#878a99)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '700', border: 'none', padding: '10px 16px' },
+                    td: { border: 'none', padding: '10px 16px', fontSize: '13px' }
+                }
+            }).render(document.getElementById('audit-grid'));
+        }
+
+        function applyAuditFilters() {
+            const action = document.getElementById('audit-filter-action').value;
+            const role   = document.getElementById('audit-filter-role').value;
+            const from   = document.getElementById('audit-filter-from').value;
+            const to     = document.getElementById('audit-filter-to').value;
+            let filtered = allAuditLogs.filter(function(log) {
+                if (action && log.action !== action) return false;
+                if (role   && log.role   !== role)   return false;
+                if (from || to) {
+                    // log.date is like "Jun 25, 2026, 09:30 PM" — parse it
+                    var d = new Date(log.date);
+                    if (from && d < new Date(from)) return false;
+                    if (to   && d > new Date(to + 'T23:59:59')) return false;
+                }
+                return true;
+            });
+            renderAuditGrid(filtered);
+        }
+
+        function resetAuditFilters() {
+            document.getElementById('audit-filter-action').value = '';
+            document.getElementById('audit-filter-role').value = '';
+            document.getElementById('audit-filter-from').value = '';
+            document.getElementById('audit-filter-to').value = '';
+            renderAuditGrid(allAuditLogs);
+        }
+
+        function exportAuditPDF() {
+            window.open('/api/reports/activitylog/pdf', '_blank');
+        }
+
+        function exportAuditExcel() {
+            window.open('/api/reports/activitylog/excel', '_blank');
+        }
+
+        // Report Type options that name a status ("Active Partnerships", etc.)
+        // imply that status server-side even if the Status filter is left at
+        // "All" (see computeCustomReportData's REPORT_TYPE_IMPLIED_STATUS) —
+        // sync the Status filter to match so the builder never silently shows
+        // a status the admin didn't ask for. An explicit Status filter choice
+        // still always wins if the admin changes it afterward.
+        var REPORT_TYPE_IMPLIED_STATUS = {
+            'Active Partnerships': 'Active',
+            'Active List': 'Active',
+            'Inactive Partnerships': 'Inactive',
+            'Expired Partnerships': 'Expired',
+            'Expired List': 'Expired',
+            'Expiring Soon': 'Expiring Soon'
+        };
+        function onReportTypeChange() {
+            var reportType = document.getElementById('cr-type').value;
+            var implied = REPORT_TYPE_IMPLIED_STATUS[reportType];
+            if (implied) document.getElementById('cr-status').value = implied;
+        }
+
+        function buildReportQueryParams() {
+            var reportType = document.getElementById('cr-type').value;
+            var customTitle = document.getElementById('cr-title').value.trim();
+            var cat = document.getElementById('cr-cat').value;
+            var dateFrom = document.getElementById('cr-date-from').value;
+            var dateTo = document.getElementById('cr-date-to').value;
+            var agtype = document.getElementById('cr-agtype').value;
+            var status = document.getElementById('cr-status').value;
+            var country = document.getElementById('cr-country').value.trim();
+
+            var params = new URLSearchParams();
+            params.set('reportType', reportType);
+            params.set('title', customTitle || (reportType + ' Report'));
+            if (cat) params.set('cat', cat);
+            if (dateFrom) params.set('dateFrom', dateFrom);
+            if (dateTo) params.set('dateTo', dateTo);
+            if (agtype) params.set('agtype', agtype);
+            if (status) params.set('status', status);
+            if (country) params.set('country', country);
+
+            return params;
+        }
+
+        // Restores every Custom Report Builder field to its default/blank
+        // state (Reset Filters button) — must clear all 8 remaining fields so
+        // no stale value can silently affect the next generated report.
+        function resetCustomReportFilters() {
+            document.getElementById('cr-title').value = '';
+            document.getElementById('cr-type').value = 'Summary';
+            document.getElementById('cr-cat').value = '';
+            document.getElementById('cr-agtype').value = '';
+            document.getElementById('cr-status').value = '';
+            document.getElementById('cr-country').value = '';
+            document.getElementById('cr-date-from').value = '';
+            document.getElementById('cr-date-to').value = '';
+        }
+
+        function exportReport(format, params) {
+            var q = new URLSearchParams(params).toString();
+            window.open('/api/reports/partnerships/' + format + '?' + q, '_blank');
+        }
+
+        function generateCustomReport(format) {
+            var type = document.getElementById('cr-type').value;
+            if (type === 'Audit') {
+                window.open('/api/reports/activitylog/' + format, '_blank');
+                return;
+            }
+            var params = buildReportQueryParams();
+            window.open('/api/reports/partnerships/' + format + '?' + params.toString(), '_blank');
+        }
+
+        // ── Report Preview Modal — shared loading/error/view-switching helpers ──
+        var _reportModalInstance = null;
+        function getReportModal() {
+            if (!_reportModalInstance) {
+                _reportModalInstance = new bootstrap.Modal(document.getElementById('report-preview-modal'));
+            }
+            return _reportModalInstance;
+        }
+
+        function showRpmLoading() {
+            document.getElementById('rpm-loading').style.display = '';
+            document.getElementById('rpm-error').style.display = 'none';
+            document.getElementById('rpm-view-preview').style.display = 'none';
+            document.getElementById('rpm-view-compare-select').style.display = 'none';
+            document.getElementById('rpm-view-compare-result').style.display = 'none';
+            document.getElementById('rpm-footer-preview').style.display = 'none';
+            document.getElementById('rpm-footer-compare-select').style.display = 'none';
+            document.getElementById('rpm-footer-compare-result').style.display = 'none';
+        }
+
+        function showRpmError(message, retryFn) {
+            document.getElementById('rpm-loading').style.display = 'none';
+            document.getElementById('rpm-error').style.display = '';
+            document.getElementById('rpm-error-text').textContent = message;
+            document.getElementById('rpm-retry-btn').onclick = retryFn || previewCustomReport;
+            // Mirror showRpmLoading()'s completeness: an error must always
+            // fully replace whatever content view was showing, never sit
+            // alongside it. Without this, a slower/stale request's error
+            // handler firing after a newer request had already rendered
+            // successfully left BOTH the error banner and the real report
+            // visible at once ("Something went wrong" above a fully-populated
+            // report).
+            document.getElementById('rpm-view-preview').style.display = 'none';
+            document.getElementById('rpm-view-compare-select').style.display = 'none';
+            document.getElementById('rpm-view-compare-result').style.display = 'none';
+            document.getElementById('rpm-footer-preview').style.display = 'none';
+            document.getElementById('rpm-footer-compare-select').style.display = 'none';
+            document.getElementById('rpm-footer-compare-result').style.display = 'none';
+        }
+
+        // view: 'preview' | 'compare-select' | 'compare-result'
+        function switchRpmView(view) {
+            document.getElementById('rpm-loading').style.display = 'none';
+            document.getElementById('rpm-error').style.display = 'none';
+            document.getElementById('rpm-view-preview').style.display = (view === 'preview') ? '' : 'none';
+            document.getElementById('rpm-view-compare-select').style.display = (view === 'compare-select') ? '' : 'none';
+            document.getElementById('rpm-view-compare-result').style.display = (view === 'compare-result') ? '' : 'none';
+            document.getElementById('rpm-footer-preview').style.display = (view === 'preview') ? '' : 'none';
+            document.getElementById('rpm-footer-compare-select').style.display = (view === 'compare-select') ? '' : 'none';
+            document.getElementById('rpm-footer-compare-result').style.display = (view === 'compare-result') ? '' : 'none';
+        }
+
+        function closeReportModal() {
+            getReportModal().hide();
+        }
+
+        var _lastCustomReportData = null;
+
+        // Incremented on every previewCustomReport() call so an older,
+        // slower request's eventual success/error can never overwrite what a
+        // newer request already rendered (e.g. the admin double-clicking
+        // Preview, or clicking it again after changing a filter before the
+        // first request finished).
+        var _previewRequestSeq = 0;
+
+        function previewCustomReport() {
+            getReportModal().show();
+            showRpmLoading();
+            var mySeq = ++_previewRequestSeq;
+            var params = buildReportQueryParams();
+            fetch('/api/reports/custom/preview?' + params.toString())
+                .then(function (r) {
+                    if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Server error while generating the preview.'); });
+                    return r.json();
+                })
+                .then(function(data) {
+                    if (mySeq !== _previewRequestSeq) return; // superseded by a newer preview request
+                    if (data.error) throw new Error(data.error);
+                    _lastCustomReportData = data;
+                    renderReportPreview(data);
+                    switchRpmView('preview');
+                })
+                .catch(function(err) {
+                    if (mySeq !== _previewRequestSeq) return; // superseded by a newer preview request
+                    console.error('Preview error:', err);
+                    showRpmError('Failed to generate report preview: ' + err.message);
+                });
+        }
+
+        function renderReportPreview(data) {
+            document.getElementById('prev-title').textContent = data.title;
+            document.getElementById('prev-meta').textContent = 'Generated ' + data.generatedDate + ' by ' + data.generatedBy + ' • Total Records: ' + data.totalRecords;
+
+            // Applied filters badges
+            var filtersEl = document.getElementById('prev-filters');
+            var badgesHtml = '';
+            if (data.filters) {
+                Object.entries(data.filters).forEach(function(pair) {
+                    badgesHtml += '<span class="badge bg-secondary-subtle text-secondary me-1 mb-1"><strong class="text-secondary-emphasis">' + escapeHtml(pair[0]) + ':</strong> ' + escapeHtml(pair[1]) + '</span>';
+                });
+            }
+            filtersEl.innerHTML = badgesHtml;
+
+            // Key metrics cards
+            var cardsEl = document.getElementById('prev-summary-cards');
+            var sum = data.summary || {};
+            cardsEl.innerHTML = `
+                <div class="col-md-3">
+                    <div class="card card-animate mb-0 bg-primary-subtle border-0">
+                        <div class="card-body p-3">
+                            <h6 class="fs-12 text-uppercase text-primary fw-semibold mb-1">Total Partnerships</h6>
+                            <h3 class="mb-0 text-primary fw-bold">${sum.totalCount || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card card-animate mb-0 bg-success-subtle border-0">
+                        <div class="card-body p-3">
+                            <h6 class="fs-12 text-uppercase text-success fw-semibold mb-1">Active Agreements</h6>
+                            <h3 class="mb-0 text-success fw-bold">${sum.activeCount || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card card-animate mb-0 bg-warning-subtle border-0">
+                        <div class="card-body p-3">
+                            <h6 class="fs-12 text-uppercase text-warning fw-semibold mb-1">Expiring Soon</h6>
+                            <h3 class="mb-0 text-warning fw-bold">${sum.expiringSoonCount || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card card-animate mb-0 bg-danger-subtle border-0">
+                        <div class="card-body p-3">
+                            <h6 class="fs-12 text-uppercase text-danger fw-semibold mb-1">Expired / Inactive</h6>
+                            <h3 class="mb-0 text-danger fw-bold">${sum.inactiveCount || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Detailed Records Table
+            var recCountEl = document.getElementById('prev-records-count');
+            var recTbody = document.getElementById('prev-records-tbody');
+            var records = data.records || [];
+            recCountEl.textContent = records.length;
+
+            var recHtml = '';
+            if (records.length === 0) {
+                recHtml = '<tr><td colspan="10" class="text-center text-muted py-3">No partnerships found matching the selected filters.</td></tr>';
+            } else {
+                records.forEach(function(p, i) {
+                    var stBadge = p.status === 'Active' ? 'bg-success-subtle text-success' : p.status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger';
+                    recHtml += '<tr>'
+                        + '<td>' + (i + 1) + '</td>'
+                        + '<td class="fw-semibold">' + escapeHtml(p.inst) + '</td>'
+                        + '<td>' + escapeHtml(p.country || '—') + '</td>'
+                        + '<td>' + escapeHtml(p.region || '—') + '</td>'
+                        + '<td><span class="badge bg-primary-subtle text-primary">' + escapeHtml(p.type || '—') + '</span></td>'
+                        + '<td>' + escapeHtml(p.nature || '—') + '</td>'
+                        + '<td><span class="badge bg-secondary-subtle text-secondary">' + escapeHtml(p.unit || '—') + '</span></td>'
+                        + '<td>' + escapeHtml(p.start || '—') + '</td>'
+                        + '<td>' + escapeHtml(p.end || '—') + '</td>'
+                        + '<td><span class="badge ' + stBadge + '">' + escapeHtml(p.status || '—') + '</span></td>'
+                        + '</tr>';
+                });
+            }
+            recTbody.innerHTML = recHtml;
+        }
+
+        // Partnership fields (inst/country/type) are attacker-influenceable via
+        // POST /api/partnerships (any Administrator/Personnel-entered value) with
+        // no server-side sanitization — escape before building innerHTML strings
+        // below (S17, Roadmap v2 Phase G7, docs/SYSTEM_AUDIT_2026-07-16.md).
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        // ── Load DSS Insights from MongoDB ───────────────────────────────────────────
+        function loadDssInsights() {
+            fetch('/api/partnerships/stats')
+                .then(r => r.json())
+                .then(function (s) {
+                    // Update DSS alert text
+                    var dssAlert = document.getElementById('dss-alert');
+                    if (dssAlert) dssAlert.innerHTML = '<strong><i class="ri-information-line me-1"></i> Decision Support System (DSS) Active:</strong> Analyzing <strong>' + s.active + '</strong> active and <strong>' + s.expired + '</strong> expired partnerships. <strong>' + s.expiring + '</strong> expiring soon.';
+
+                    // Update health score based on real data
+                    var score = Math.round(((s.active / (s.total || 1)) * 60) + ((1 - (s.expired / (s.total || 1))) * 40));
+                    var scoreEl = document.getElementById('health-score');
+                    if (scoreEl) { scoreEl.textContent = score; scoreEl.className = score >= 70 ? 'display-5 fw-bold text-success mb-2' : score >= 50 ? 'display-5 fw-bold text-warning mb-2' : 'display-5 fw-bold text-danger mb-2'; }
+
+                    // Top region gap
+                    var regionEl = document.getElementById('region-gap-text');
+                    if (regionEl) {
+                        var regions = Object.entries(s.byRegion || {}).sort((a, b) => a[1] - b[1]);
+                        if (regions.length) { var weakest = regions[0]; regionEl.innerHTML = '<strong>' + weakest[0] + '</strong> has only ' + weakest[1] + ' partnership(s). <strong>Recommendation:</strong> Prioritize establishing MOAs in this region to improve global reach and QS Stars rating.'; }
+                    }
+
+                    // Report card counts
+                    var activeEl = document.getElementById('stat-active-count');
+                    var expiringEl = document.getElementById('stat-expiring-count');
+                    var expiredEl = document.getElementById('stat-expired-count');
+                    if (activeEl) activeEl.textContent = s.active + ' record' + (s.active === 1 ? '' : 's');
+                    if (expiringEl) expiringEl.textContent = s.expiring + ' record' + (s.expiring === 1 ? '' : 's');
+                    if (expiredEl) expiredEl.textContent = s.expired + ' record' + (s.expired === 1 ? '' : 's');
+                })
+                .catch(function (err) { console.error('Failed to load stats:', err); });
+
+            // Nearest-expiring / longest-overdue blocks need the raw list, not just the aggregate stats
+            fetch('/api/partnerships')
+                .then(r => r.json())
+                .then(function (all) {
+                    var withDays = all.map(function (p) {
+                        var d = Math.ceil((new Date(p.end) - new Date()) / 86400000);
+                        return Object.assign({}, p, { days: d });
+                    });
+
+                    var expiringBlock = document.getElementById('dss-expiring-block');
+                    if (expiringBlock) {
+                        var soon = withDays.filter(function (p) { return p.status === 'Expiring Soon'; })
+                            .sort(function (a, b) { return a.days - b.days; });
+                        if (soon.length) {
+                            var p = soon[0];
+                            expiringBlock.innerHTML = '<h6 class="mb-1 text-dark">' + escapeHtml(p.inst) + (p.country ? ' (' + escapeHtml(p.country) + ')' : '') + '</h6>'
+                                + '<p class="text-muted mb-2 fs-13">This ' + escapeHtml(p.type) + ' expires in <strong>' + p.days + ' day' + (p.days === 1 ? '' : 's') + '</strong>.'
+                                + (soon.length > 1 ? ' ' + (soon.length - 1) + ' other agreement' + (soon.length > 2 ? 's are' : ' is') + ' also expiring within 90 days.' : '') + '</p>'
+                                + '<a href="/lifecycle" class="btn btn-sm btn-warning">Review in Lifecycle Monitor</a>';
+                        } else {
+                            expiringBlock.innerHTML = '<p class="text-muted mb-0 fs-13">No partnerships are currently expiring within the next 90 days.</p>';
+                        }
+                    }
+
+                    var expiredBlock = document.getElementById('dss-expired-block');
+                    if (expiredBlock) {
+                        var expired = withDays.filter(function (p) { return p.status === 'Expired'; })
+                            .sort(function (a, b) { return a.days - b.days; });
+                        if (expired.length) {
+                            var e = expired[0];
+                            var overdueDays = Math.abs(e.days);
+                            expiredBlock.innerHTML = '<h6 class="mb-1 text-dark">' + escapeHtml(e.inst) + (e.country ? ' (' + escapeHtml(e.country) + ')' : '') + '</h6>'
+                                + '<p class="text-muted mb-2 fs-13">This ' + escapeHtml(e.type) + ' expired <strong>' + overdueDays + ' day' + (overdueDays === 1 ? '' : 's') + '</strong> ago.'
+                                + (expired.length > 1 ? ' ' + (expired.length - 1) + ' other expired agreement' + (expired.length > 2 ? 's remain' : ' remains') + ' unrenewed.' : '')
+                                + ' <strong>Recommendation:</strong> Renew or archive this record.</p>';
+                        } else {
+                            expiredBlock.innerHTML = '<p class="text-muted mb-0 fs-13">No expired agreements currently require review.</p>';
+                        }
+                    }
+                })
+                .catch(function (err) { console.error('Failed to load partnerships for DSS blocks:', err); });
+        }
+
+
+        // ── COMPARE REPORTS (accessed from the Preview modal — reuses the ─────
+        // existing /api/reports/comparison/* engine and export routes) ────────
+        var _cmpChartInstance = null;
+        var _lastComparisonData = null;
+        var _lastComparisonQs = null;
+
+        function statusBadgeClass(status) {
+            if (status === 'Active') return 'bg-success-subtle text-success';
+            if (status === 'Expired') return 'bg-danger-subtle text-danger';
+            if (status === 'Expiring Soon') return 'bg-warning-subtle text-warning';
+            if (status === 'Inactive') return 'bg-secondary-subtle text-secondary';
+            return 'bg-light text-dark';
+        }
+
+        /**
+         * Comparison dimension (from the Compare view) + the SAME filters
+         * currently set in the Custom Report Builder — req: "Apply the same
+         * filters selected by the Administrator to both reports."
+         */
+        /**
+         * The comparison-against report (Group B / left column) reuses every
+         * filter already set in the Custom Report Builder — Group A / right
+         * column is the ORIGINAL report, untouched, computed server-side from
+         * these SAME base filters with none of them overridden.
+         */
+        function buildComparisonQueryString() {
+            var params = new URLSearchParams();
+            params.append('compType', 'Compare Against');
+            params.append('compareField', document.getElementById('cmp-field').value);
+            params.append('compareValue', document.getElementById('cmp-value').value);
+            params.append('title', (_lastCustomReportData && _lastCustomReportData.title) || 'Original Report');
+            // Report Type (e.g. "Active Partnerships") implies a status server-side
+            // even when the Status filter is left at "All" — forwarding it here is
+            // what keeps Group A (the preserved original report) identical to what
+            // Preview just showed, instead of reverting to every status.
+            params.append('reportType', document.getElementById('cr-type').value);
+            var cat = document.getElementById('cr-cat').value;
+            var dateFrom = document.getElementById('cr-date-from').value;
+            var dateTo = document.getElementById('cr-date-to').value;
+            var agtype = document.getElementById('cr-agtype').value;
+            var status = document.getElementById('cr-status').value;
+            var country = document.getElementById('cr-country').value.trim();
+            if (cat) params.append('cat', cat);
+            if (dateFrom) params.append('dateFrom', dateFrom);
+            if (dateTo) params.append('dateTo', dateTo);
+            if (agtype) params.append('agtype', agtype);
+            if (status) params.append('status', status);
+            if (country) params.append('country', country);
+            return params.toString();
+        }
+
+        function renderInheritedFilterBadges() {
+            var el = document.getElementById('cmp-inherited-filters');
+            var pairs = [
+                ['Category', document.getElementById('cr-cat').value],
+                ['Date From', document.getElementById('cr-date-from').value],
+                ['Date To', document.getElementById('cr-date-to').value],
+                ['Agreement Type', document.getElementById('cr-agtype').value],
+                ['Status', document.getElementById('cr-status').value],
+                ['Country', document.getElementById('cr-country').value]
+            ].filter(function (p) { return p[1]; });
+            el.innerHTML = pairs.length
+                ? pairs.map(function (p) {
+                    return '<span class="badge bg-secondary-subtle text-secondary me-1 mb-1"><strong class="text-secondary-emphasis">' + escapeHtml(p[0]) + ':</strong> ' + escapeHtml(p[1]) + '</span>';
+                }).join('')
+                : '<span class="text-muted fs-12">No filters applied — comparing across all partnerships.</span>';
+        }
+
+        function onCompareFieldChange() {
+            var field = document.getElementById('cmp-field').value;
+            var valSel = document.getElementById('cmp-value');
+            valSel.innerHTML = '<option value="">Loading…</option>';
+            fetch('/api/reports/dimension-values?field=' + encodeURIComponent(field))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    var values = data.values || [];
+                    if (!values.length) {
+                        valSel.innerHTML = '<option value="">No values available</option>';
+                        return;
+                    }
+                    valSel.innerHTML = values.map(function (v) {
+                        return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
+                    }).join('');
+                })
+                .catch(function () { valSel.innerHTML = '<option value="">Failed to load values</option>'; });
+        }
+
+        function openCompareSelect() {
+            renderInheritedFilterBadges();
+            onCompareFieldChange();
+            switchRpmView('compare-select');
+        }
+
+        function backToPreview() {
+            switchRpmView('preview');
+        }
+
+        // Same stale-response guard as _previewRequestSeq, for the exact same
+        // race (e.g. clicking "Generate Comparison" again before a prior
+        // request finished).
+        var _comparisonRequestSeq = 0;
+
+        function generateComparison() {
+            var qs = buildComparisonQueryString();
+            _lastComparisonQs = qs;
+            var mySeq = ++_comparisonRequestSeq;
+            var btn = document.getElementById('btn-generate-comparison');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Generating…'; }
+
+            fetch('/api/reports/comparison/preview?' + qs)
+                .then(function (r) {
+                    if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Server error while generating the comparison.'); });
+                    return r.json();
+                })
+                .then(function (data) {
+                    if (mySeq !== _comparisonRequestSeq) return; // superseded by a newer comparison request
+                    _lastComparisonData = data;
+                    renderComparisonResult(data);
+                    switchRpmView('compare-result');
+                })
+                .catch(function (err) {
+                    if (mySeq !== _comparisonRequestSeq) return; // superseded by a newer comparison request
+                    console.error('Comparison error:', err);
+                    showRpmError('Failed to generate comparison: ' + err.message, function () { switchRpmView('compare-select'); });
+                })
+                .finally(function () {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ri-git-branch-line me-1"></i>Generate Comparison'; }
+                });
+        }
+
+        function renderRecordsIntoTable(tbodyId, records) {
+            var tbody = document.getElementById(tbodyId);
+            if (!records || !records.length) {
+                tbody.innerHTML = '<tr><td class="text-center text-muted py-3">No records in this group.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = records.map(function (p) {
+                return '<tr>' +
+                    '<td class="fw-semibold">' + escapeHtml(p.inst || '—') + '<div class="text-muted fs-11">' + escapeHtml(p.country || '—') + '</div></td>' +
+                    '<td><span class="badge ' + statusBadgeClass(p.status) + '">' + escapeHtml(p.status || '—') + '</span></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        /**
+         * 3-column comparison result — Report 2 / Group B (left), Comparison
+         * Result (center), Report 1 / Group A (right). Real data only, from
+         * /api/reports/comparison/preview — nothing here is hardcoded.
+         */
+        function renderComparisonResult(data) {
+            document.getElementById('cmp-title').textContent = data.title + ' — ' + data.periodLabel;
+            document.getElementById('cmp-a-label').textContent = data.groupA;
+            document.getElementById('cmp-b-label').textContent = data.groupB;
+            document.getElementById('cmp-a-count').textContent = data.totalA;
+            document.getElementById('cmp-b-count').textContent = data.totalB;
+
+            var totalBoth = data.totalBoth || 0;
+            var pctA = totalBoth > 0 ? ((data.totalA / totalBoth) * 100).toFixed(1) : '0.0';
+            var pctB = totalBoth > 0 ? ((data.totalB / totalBoth) * 100).toFixed(1) : '0.0';
+            document.getElementById('cmp-a-pct').textContent = pctA + '% of compared';
+            document.getElementById('cmp-b-pct').textContent = pctB + '% of compared';
+
+            renderRecordsIntoTable('cmp-a-tbody', data.groupARecords);
+            renderRecordsIntoTable('cmp-b-tbody', data.groupBRecords);
+            var aShown = (data.groupARecords || []).length;
+            var bShown = (data.groupBRecords || []).length;
+            document.getElementById('cmp-a-note').textContent = aShown < data.totalA ? ('Showing ' + aShown + ' of ' + data.totalA + '. Export to see all.') : '';
+            document.getElementById('cmp-b-note').textContent = bShown < data.totalB ? ('Showing ' + bShown + ' of ' + data.totalB + '. Export to see all.') : '';
+
+            var diff = data.diff || 0;
+            var pctDiff = totalBoth > 0 ? ((diff / totalBoth) * 100).toFixed(1) : '0.0';
+            var aLarger = data.totalA >= data.totalB;
+            var trendIcon = diff === 0 ? 'ri-subtract-line text-muted' : (aLarger ? 'ri-arrow-up-line text-success' : 'ri-arrow-down-line text-danger');
+            var trendText = diff === 0 ? 'Even — no difference' : ((aLarger ? data.groupA : data.groupB) + ' leads by ' + diff);
+
+            var summaryEl = document.getElementById('cmp-summary-cards');
+            var emptyEl = document.getElementById('cmp-empty');
+            var chartCard = document.getElementById('cmp-chart-card');
+
+            if (totalBoth === 0) {
+                summaryEl.innerHTML = '';
+                chartCard.style.display = 'none';
+                emptyEl.style.display = '';
+                if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
+                return;
+            }
+            emptyEl.style.display = 'none';
+            chartCard.style.display = '';
+
+            summaryEl.innerHTML =
+                '<div class="col-6"><div class="card bg-warning-subtle border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-warning">' + diff + '</div><div class="fs-11 text-warning fw-semibold">Difference</div></div></div>' +
+                '<div class="col-6"><div class="card bg-light border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-dark">' + totalBoth + '</div><div class="fs-11 text-dark fw-semibold">Total Compared</div></div></div>' +
+                '<div class="col-12"><div class="card bg-body border p-2 mb-0 text-center"><i class="' + trendIcon + ' fs-4 d-block"></i><div class="fs-12 fw-semibold">' + escapeHtml(trendText) + '</div><div class="fs-11 text-muted">' + pctDiff + '% gap</div></div></div>';
+
+            if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
+            document.getElementById('cmp-apex-chart').innerHTML = '';
+            if (typeof ApexCharts !== 'undefined') {
+                _cmpChartInstance = new ApexCharts(document.getElementById('cmp-apex-chart'), {
+                    series: [{ name: data.groupA, data: [data.totalA] }, { name: data.groupB, data: [data.totalB] }],
+                    chart: { type: 'bar', height: 180, toolbar: { show: false }, fontFamily: 'inherit' },
+                    colors: ['#0a58ca', '#dc3545'],
+                    plotOptions: { bar: { horizontal: true, barHeight: '45%', borderRadius: 4 } },
+                    dataLabels: { enabled: true },
+                    xaxis: { categories: ['Count'] },
+                    legend: { position: 'top' }
+                });
+                _cmpChartInstance.render();
+            }
+        }
+
+        function changeComparison() {
+            switchRpmView('compare-select');
+        }
+
+        function clearComparison() {
+            document.getElementById('cmp-field').value = 'country';
+            onCompareFieldChange();
+            _lastComparisonData = null;
+            _lastComparisonQs = null;
+            if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
+            switchRpmView('compare-select');
+        }
+
+        function exportComparison(format) {
+            var qs = _lastComparisonQs || buildComparisonQueryString();
+            window.open('/api/reports/comparison/' + format + '?' + qs, '_blank');
+        }
+        // ── END COMPARE REPORTS ─────────────────────────────────────────────────
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Load DSS stats quietly in background (elements are in the hidden insights tab)
+            loadDssInsights();
+        });
+    </script>
+
+    <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+    <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+    <script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+    <script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+    <script src="/velzon/assets/js/plugins.js"></script>
+    <!-- apexcharts -->
+    <script src="/velzon/assets/libs/apexcharts/apexcharts.min.js"></script>
+    <!-- gridjs -->
+    <script src="/velzon/assets/libs/gridjs/gridjs.umd.js"></script>
+    <script src="/velzon/assets/js/app.js"></script>
+</body>
+
+</html>

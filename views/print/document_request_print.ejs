@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Document_Request_<%= r.id %>
+  </title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      margin: 0;
+      padding: 24px;
+      background: #e9e9e9;
+    }
+
+    .sheet {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 28px 32px;
+    }
+
+    .toolbar {
+      max-width: 720px;
+      margin: 0 auto 14px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .toolbar button {
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px 16px;
+      border: 1px solid #0a58ca;
+      background: #0a58ca;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .toolbar button.secondary {
+      background: #fff;
+      color: #0a58ca;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header img {
+      width: 62px;
+      height: 62px;
+      object-fit: cover;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .header-text {
+      flex: 1;
+      text-align: center;
+    }
+
+    .header-text .line1 {
+      font-size: 12px;
+    }
+
+    .header-text .line2 {
+      font-size: 15px;
+      font-weight: bold;
+    }
+
+    .header-text .line3 {
+      font-size: 12px;
+    }
+
+    .header-text .line4 {
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .form-code {
+      width: 110px;
+      text-align: right;
+      font-size: 11px;
+      font-weight: bold;
+      color: #0a58ca;
+      flex-shrink: 0;
+    }
+
+    .rule {
+      border: none;
+      border-top: 3px solid #0a58ca;
+      margin: 10px 0 14px;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 15px;
+      font-weight: bold;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    table.form-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    table.form-table td {
+      border: 1px solid #000;
+      padding: 8px 10px;
+      vertical-align: top;
+    }
+
+    table.form-table td.label {
+      width: 190px;
+      font-weight: bold;
+      background: #f4f4f4;
+    }
+
+    table.form-table td.tall {
+      height: 54px;
+    }
+
+    .doc-form-cell label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 26px;
+      font-weight: normal;
+    }
+
+    .checkbox {
+      width: 13px;
+      height: 13px;
+      border: 1px solid #000;
+      display: inline-block;
+      text-align: center;
+      line-height: 13px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .sign-block {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 34px;
+      font-size: 13px;
+    }
+
+    .sign-col {
+      width: 31%;
+      text-align: center;
+    }
+
+    .sign-name {
+      font-weight: bold;
+      min-height: 14px;
+      border-bottom: 1px solid #000;
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+
+    .sign-label {
+      font-size: 12px;
+      margin-bottom: 22px;
+      text-align: left;
+    }
+
+    .sign-date {
+      font-size: 11px;
+      border-top: 1px solid #000;
+      padding-top: 3px;
+    }
+
+    .footer {
+      margin-top: 28px;
+    }
+
+    .footer .rule {
+      border-top: 2px solid #0a58ca;
+      margin-bottom: 6px;
+    }
+
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .sheet {
+        max-width: 100%;
+        padding: 10mm 14mm;
+      }
+
+      .toolbar {
+        display: none;
+      }
+
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="toolbar no-print">
+    <button class="secondary" onclick="window.close()">Close</button>
+    <a href="/api/document-requests/<%= r.id %>/pdf"><button class="secondary">Download PDF</button></a>
+    <button onclick="window.print()">Print</button>
+  </div>
+
+  <div class="sheet">
+    <div class="header">
+      <img src="/images/cspc.PNG" alt="CSPC Seal">
+      <div class="header-text">
+        <div class="line1">Republic of the Philippines</div>
+        <div class="line2">CAMARINES SUR POLYTECHNIC COLLEGES</div>
+        <div class="line3">Nabua, Camarines Sur</div>
+        <div class="line4">CENTER FOR INTERNATIONAL RELATIONS AND LINKAGES</div>
+      </div>
+      <div class="form-code">CSPC-F-CIRL-04</div>
+    </div>
+    <hr class="rule">
+
+    <div class="title">DOCUMENTS REQUEST FORM</div>
+
+    <table class="form-table">
+      <tr>
+        <td class="label">Name of Requestor</td>
+        <td>
+          <%= r.requestedBy || '—' %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Office / College / Institution</td>
+        <td>
+          <%= r.institution || '—' %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Date / Time Submitted</td>
+        <td>
+          <%= dateTimeStr %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Contact No.</td>
+        <td>
+          <%= r.contactNumber || '—' %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Document/s to be Requested</td>
+        <td class="tall">
+          <%= docTypeLabel %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Purpose</td>
+        <td class="tall">
+          <%= r.notes || '—' %>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Document Form</td>
+        <td class="doc-form-cell">
+          <label><span class="checkbox"><%- r.documentForm==='Printed Copy' ? '&#10003;' : '' %></span> Printed
+            Copy</label>
+          <label><span class="checkbox"><%- r.documentForm==='Digital Copy' ? '&#10003;' : '' %></span> Digital
+            Copy</label>
+        </td>
+      </tr>
+      <tr>
+        <td class="label">Email Address</td>
+        <td>
+          <%= r.requestedByEmail || '—' %>
+        </td>
+      </tr>
+    </table>
+
+    <div class="sign-block">
+      <div class="sign-col">
+        <div class="sign-label">Approved By:</div>
+        <div class="sign-name">
+          <%= r.decidedBy || '' %>
+        </div>
+        <div class="sign-date">DATE: <%= fmtDate(r.updatedAt) %>
+        </div>
+      </div>
+      <div class="sign-col">
+        <div class="sign-label">Released By:</div>
+        <div class="sign-name">
+          <%= r.releasedBy || '' %>
+        </div>
+        <div class="sign-date">DATE: <%= fmtDate(r.releasedAt) %>
+        </div>
+      </div>
+      <div class="sign-col">
+        <div class="sign-label">Received By:</div>
+        <div class="sign-name">
+          <%= r.receivedBy || '' %>
+        </div>
+        <div class="sign-date">DATE: <%= fmtDate(r.receivedAt) %>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <hr class="rule">
+      <div class="footer-row">
+        <span>Effectivity Date: February 2023</span>
+        <span>Rev. 1</span>
+        <span>Page 1 of 1</span>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>

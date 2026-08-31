@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Notifications | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0"><i class="ri-notification-3-line me-2 text-primary"></i>Notifications</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Notifications</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row g-3">
+                    <!-- Left: Summary -->
+                    <div class="col-xl-4">
+                        <div class="card mb-0">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-pie-chart-line me-2 text-primary"></i>Summary</h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2 text-center mb-3">
+                                    <div class="col-4">
+                                        <div class="border rounded p-3">
+                                            <h4 class="mb-0" id="sum-total">0</h4>
+                                            <p class="text-muted fs-11 mb-0">Total</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="border rounded p-3">
+                                            <h4 class="mb-0 text-primary" id="sum-unread">0</h4>
+                                            <p class="text-muted fs-11 mb-0">Unread</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="border rounded p-3">
+                                            <h4 class="mb-0 text-success" id="sum-read">0</h4>
+                                            <p class="text-muted fs-11 mb-0">Read</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="fw-semibold text-muted fs-12 text-uppercase d-block mb-2">Filter</span>
+                                <div class="btn-group w-100" role="group" id="pills-read">
+                                    <button class="btn btn-sm btn-primary pill-btn" data-val="all" onclick="setPill(this)">All</button>
+                                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="unread" onclick="setPill(this)">Unread</button>
+                                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="read" onclick="setPill(this)">Read</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Notification list -->
+                    <div class="col-xl-8">
+                        <div class="card mb-0 h-100">
+                            <div class="card-header border-0">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <h4 class="card-title mb-0"><i class="ri-notification-4-line me-2 text-primary"></i>Notification List</h4>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="text-muted fs-12" id="notif-count"></span>
+                                        <button class="btn btn-primary btn-sm" onclick="markAllRead()">
+                                            <i class="ri-check-double-line align-bottom me-1"></i>Mark All Read
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body pt-0 bg-light-subtle">
+                                <div id="notif-feed">
+                                    <div class="text-center text-muted py-5"><div class="spinner-border text-primary" role="status"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script>
+    let allNotifs = [];
+    let activeRead = 'all';
+
+    function loadNotifications() {
+        fetch('/api/notifications/mine').then(function (r) { return r.json(); }).then(function (notifs) {
+            allNotifs = notifs;
+            updateSummary();
+            render();
+        }).catch(function () {
+            document.getElementById('notif-feed').innerHTML = '<div class="card"><div class="card-body text-center py-5 text-danger">Failed to load notifications.</div></div>';
+        });
+    }
+
+    function updateSummary() {
+        document.getElementById('sum-total').textContent = allNotifs.length;
+        document.getElementById('sum-unread').textContent = allNotifs.filter(function (n) { return n.unread; }).length;
+        document.getElementById('sum-read').textContent = allNotifs.filter(function (n) { return !n.unread; }).length;
+    }
+
+    function setPill(btn) {
+        document.querySelectorAll('#pills-read .pill-btn').forEach(function (b) {
+            b.className = b.className.replace('btn-primary', 'btn-soft-secondary');
+        });
+        btn.className = btn.className.replace('btn-soft-secondary', 'btn-primary');
+        activeRead = btn.dataset.val;
+        render();
+    }
+
+    function markRead(id) {
+        var n = allNotifs.find(function (x) { return x.id === id; });
+        if (n && n.unread) {
+            fetch('/api/notifications/' + id, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false })
+            }).then(function () {
+                n.unread = false;
+                updateSummary();
+                render();
+            });
+        }
+    }
+
+    // Click a notification — mark read, then navigate to its Request Details
+    // page (if it has one). Clicks on the download button are excluded so
+    // "Download" doesn't also trigger navigation.
+    function openNotif(id, evt) {
+        if (evt && evt.target.closest('.notif-download-btn')) return;
+        var n = allNotifs.find(function (x) { return x.id === id; });
+        markRead(id);
+        if (n && n.link) window.location.href = n.link;
+    }
+
+    function markAllRead() {
+        fetch('/api/notifications/markallread/mine', { method: 'PATCH' }).then(loadNotifications);
+    }
+
+    function render() {
+        var filtered = allNotifs.filter(function (n) {
+            if (activeRead === 'unread') return n.unread;
+            if (activeRead === 'read') return !n.unread;
+            return true;
+        });
+
+        var feed = document.getElementById('notif-feed');
+        var countEl = document.getElementById('notif-count');
+        if (countEl) countEl.textContent = filtered.length + ' notification' + (filtered.length === 1 ? '' : 's');
+
+        if (!filtered.length) {
+            feed.innerHTML = '<div class="card"><div class="card-body text-center py-5 text-muted">' +
+                '<i class="ri-notification-off-line fs-1 d-block mb-2"></i>No notifications found.</div></div>';
+            return;
+        }
+
+        feed.innerHTML = '<div class="card mb-0"><ul class="list-group list-group-flush">' +
+            filtered.map(function (n) {
+                var color = n.color || 'info';
+                var icon = n.icon || 'ri-information-line';
+                return '<li class="list-group-item px-3 py-3 ' + (n.unread ? 'bg-primary-subtle' : '') + '" onclick="openNotif(' + n.id + ', event)" style="cursor:pointer;">' +
+                    '<div class="d-flex gap-3 align-items-start">' +
+                        '<div class="flex-shrink-0"><span class="avatar-xs avatar-title bg-' + color + '-subtle rounded-circle"><i class="' + icon + ' text-' + color + '"></i></span></div>' +
+                        '<div class="flex-grow-1">' +
+                            '<div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">' +
+                                '<span class="fw-semibold fs-13 ' + (n.unread ? 'text-dark' : 'text-muted') + '">' + n.title + (n.unread ? ' <span class="badge bg-primary-subtle text-primary fs-10 ms-1">New</span>' : '') + '</span>' +
+                                '<span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>' + (n.time || '') + '</span>' +
+                            '</div>' +
+                            '<p class="text-muted fs-12 mb-0">' + (n.desc || '') + '</p>' +
+                            (n.downloadLink ? '<a href="' + n.downloadLink + '" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm mt-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>' : '') +
+                        '</div>' +
+                        (n.unread ? '<div class="flex-shrink-0 mt-1"><span class="badge bg-primary rounded-circle" style="width:8px;height:8px;padding:0;"></span></div>' : '') +
+                    '</div>' +
+                '</li>';
+            }).join('') +
+        '</ul></div>';
+    }
+
+    document.addEventListener('DOMContentLoaded', loadNotifications);
+</script>
+</body>
+</html>

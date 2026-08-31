@@ -8,15 +8,32 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node cirl.js",
+    "test": "jest --runInBand"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "dotenv": "^17.3.1",
     "ejs": "^5.0.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
     "express-session": "^1.19.0",
+    "googleapis": "^173.0.0",
+    "mongodb": "^7.2.0",
+    "multer": "^2.2.0",
     "open": "^11.0.0",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
+    "passport-google-oauth20": "^2.0.0",
+    "pdf-parse": "^2.4.5",
+    "pdf-to-png-converter": "^4.1.1",
+    "pdfkit": "^0.19.1",
+    "sharp": "^0.35.3",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
   }
 }

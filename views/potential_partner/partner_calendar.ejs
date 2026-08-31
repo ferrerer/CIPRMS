@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Calendar | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0"><i class="ri-calendar-2-line me-2 text-primary"></i>Calendar</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Calendar</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                    <!-- Left sidebar -->
+                    <div class="col-xl-3">
+                        <div>
+                            <h5 class="mb-1">Upcoming Events</h5>
+                            <p class="text-muted">Don't miss scheduled meetings and deadlines</p>
+                            <div class="pe-2 me-n1 mb-3" data-simplebar style="height:400px">
+                                <div id="upcoming-event-list"></div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-body bg-info-subtle">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0">
+                                        <i class="ri-calendar-check-line text-info fs-3"></i>
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <h6 class="fs-15">Partnership Calendar</h6>
+                                        <p class="text-muted mb-0">Scheduled meetings, partnership events, submission deadlines, and approved activities. Click any date's events to view details. This calendar is view-only for partner accounts.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- end col-xl-3 -->
+
+                    <!-- Main calendar -->
+                    <div class="col-xl-9">
+                        <div class="card card-h-100">
+                            <div class="card-body">
+                                <div id="calendar"></div>
+                            </div>
+                        </div>
+                    </div><!-- end col-xl-9 -->
+                </div><!-- end row -->
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<!-- View-only event modal -->
+<div class="modal fade" id="event-view-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0">
+      <div class="modal-header p-3 bg-info-subtle">
+        <h5 class="modal-title" id="ev-title">Event</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="d-flex mb-2">
+            <div class="flex-shrink-0 me-3"><i class="ri-calendar-event-line text-muted fs-16"></i></div>
+            <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="ev-date"></h6></div>
+        </div>
+        <div class="d-flex align-items-center mb-2">
+            <div class="flex-shrink-0 me-3"><i class="ri-time-line text-muted fs-16"></i></div>
+            <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="ev-when"></h6></div>
+        </div>
+        <div class="d-flex align-items-center mb-2">
+            <div class="flex-shrink-0 me-3"><i class="ri-map-pin-line text-muted fs-16"></i></div>
+            <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="ev-location">—</h6></div>
+        </div>
+        <div class="d-flex mb-0">
+            <div class="flex-shrink-0 me-3"><i class="ri-discuss-line text-muted fs-16"></i></div>
+            <div class="flex-grow-1"><p class="text-muted mb-0" id="ev-desc">—</p></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script src="/velzon/assets/libs/fullcalendar/index.global.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modal = new bootstrap.Modal(document.getElementById('event-view-modal'));
+        var calEl = document.getElementById('calendar');
+
+        function strDate(dt) {
+            return dt ? dt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+        }
+        function strTime(dt) {
+            return dt ? dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+        }
+
+        // ── Upcoming events sidebar (view-only, read from the same FullCalendar instance) ──
+        function upcomingEvents() {
+            if (!cal) return;
+            var now = new Date();
+            var evs = cal.getEvents()
+                .filter(function (e) { return e.start && e.start >= now; })
+                .sort(function (a, b) { return a.start - b.start; })
+                .slice(0, 10);
+            var html = '';
+            evs.forEach(function (e) {
+                var cls = e.classNames[0] || 'bg-primary-subtle';
+                var tc = cls.replace('-subtle', '').replace('bg-', 'text-');
+                html += '<div class="card mb-2"><div class="card-body p-3">'
+                    + '<div class="d-flex mb-1"><div class="flex-grow-1"><i class="mdi mdi-checkbox-blank-circle me-2 ' + tc + '"></i>'
+                    + '<span class="fw-medium">' + strDate(e.start) + '</span></div>'
+                    + '<div class="flex-shrink-0"><small class="badge bg-primary-subtle text-primary ms-auto">' + strTime(e.start) + '</small></div></div>'
+                    + '<h6 class="card-title fs-14 mb-1">' + e.title + '</h6>'
+                    + '<p class="text-muted text-truncate mb-0 fs-12">' + (e.extendedProps.location || '') + '</p>'
+                    + '</div></div>';
+            });
+            document.getElementById('upcoming-event-list').innerHTML = html || '<p class="text-muted fs-12">No upcoming events.</p>';
+        }
+
+        function showEvent(ev) {
+            document.getElementById('ev-title').textContent = ev.title;
+            document.getElementById('ev-date').textContent = strDate(ev.start);
+            document.getElementById('ev-when').textContent = ev.allDay ? 'All day' : (strTime(ev.start) + (ev.end ? ' – ' + strTime(ev.end) : ''));
+            document.getElementById('ev-location').textContent = ev.extendedProps.location || '—';
+            document.getElementById('ev-desc').textContent = ev.extendedProps.description || '—';
+            modal.show();
+        }
+
+        // Deep-link support so a "New event" notification can jump straight to
+        // that event's detail modal: /partner/calendar?id=5
+        var deepLinkOpened = false;
+        function openFromQuery() {
+            if (deepLinkOpened) return;
+            var id = new URLSearchParams(window.location.search).get('id');
+            if (!id) { deepLinkOpened = true; return; }
+            var ev = cal.getEventById(id);
+            if (ev) { deepLinkOpened = true; showEvent(ev); }
+        }
+
+        var cal = new FullCalendar.Calendar(calEl, {
+            timeZone: 'local',
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' },
+            initialView: 'dayGridMonth',
+            editable: false,
+            selectable: false,
+            navLinks: false,
+            dayMaxEvents: 3,
+            events: '/api/calendarevents',
+            eventDataTransform: function (doc) {
+                return {
+                    id: doc.id,
+                    title: doc.title,
+                    start: doc.start,
+                    end: doc.end || undefined,
+                    allDay: doc.allDay || false,
+                    className: doc.className || 'bg-primary-subtle',
+                    extendedProps: { location: doc.location || '', description: doc.description || '' }
+                };
+            },
+            windowResize: function () {
+                var w = window.innerWidth;
+                cal.changeView(w < 768 ? 'listMonth' : w < 1200 ? 'timeGridWeek' : 'dayGridMonth');
+            },
+            eventDidMount: function () { upcomingEvents(); },
+            eventClick: function (info) { showEvent(info.event); },
+            loading: function (isLoading) { if (!isLoading) openFromQuery(); }
+        });
+        cal.render();
+    });
+</script>
+</body>
+</html>

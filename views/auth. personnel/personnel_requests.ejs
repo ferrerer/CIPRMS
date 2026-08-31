@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Requests | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <!-- Layout config Js -->
+    <script src="/velzon/assets/js/layout.js"></script>
+    <!-- Bootstrap Css -->
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <!-- Icons Css -->
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <!-- App Css -->
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <!-- Custom Css -->
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/velzon/assets/css/ciprms-bridge.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+      #req-toast {
+          position: fixed;
+          bottom: 30px;
+          right: 30px;
+          padding: 12px 24px;
+          border-radius: 6px;
+          color: white;
+          font-weight: 600;
+          box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+          opacity: 0;
+          transition: opacity 0.3s;
+          z-index: 9999;
+      }
+      .table-card {
+          border-radius: 12px;
+          border: none;
+          box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+          background: white;
+      }
+      .table thead th {
+          background-color: #f3f6f9;
+          color: #878a99;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          border: none;
+          padding: 15px 20px;
+      }
+      .table tbody td {
+          padding: 15px 20px;
+          border-bottom: 1px solid #f3f6f9;
+          font-size: 13px;
+          vertical-align: middle;
+      }
+      .badge-soft-pending { background-color: #fff3e0; color: #ff9800; }
+      .badge-soft-fulfilled { background-color: #e8f5e9; color: #4caf50; }
+      .badge-soft-rejected { background-color: #ffebee; color: #f44336; }
+
+      .search-box-container {
+          position: relative;
+          max-width: 250px;
+      }
+      .search-box-container .form-control {
+          padding-left: 15px;
+          border-radius: 6px;
+          border: 1px solid #e9ebec;
+          font-size: 13px;
+      }
+
+      /* Section switcher — same convention as administrator/partnership_requests.ejs */
+      .section-tabs { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+      .section-tab {
+          padding: .45rem 1.15rem; border-radius: 20px; font-size: .82rem; font-weight: 600;
+          cursor: pointer; border: 2px solid transparent; transition: all .18s;
+          display: flex; align-items: center; gap: .4rem; background: #f3f4fa; color: #495057;
+      }
+      .section-tab:hover { background: #e8eaf6; color: #405189; }
+      .section-tab.active { background: #405189; color: #fff; border-color: #405189; }
+
+      /* ── CSPC-F-CIRL-04 "Documents Request Form" — styled to resemble the
+         official paper form (bordered label/value rows) instead of a generic
+         Bootstrap two-column grid. ── */
+      .dr-form-header {
+          display: flex; align-items: center; gap: 12px;
+          padding-bottom: 14px; margin-bottom: 4px; border-bottom: 3px solid #405189;
+      }
+      .dr-form-header img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+      .dr-form-header .dr-form-title { font-weight: 700; color: #405189; font-size: 1rem; margin: 0; letter-spacing: .3px; }
+      .dr-form-header .dr-form-subtitle { font-size: .75rem; color: #878a99; margin: 0; }
+      .dr-form-header .dr-form-code { margin-left: auto; font-size: .72rem; font-weight: 700; color: #405189; text-align: right; }
+
+      .dr-form-table { border: 1px solid #dfe3ea; border-radius: 6px; overflow: hidden; margin-top: 16px; }
+      .dr-row { display: flex; border-bottom: 1px solid #dfe3ea; }
+      .dr-row:last-child { border-bottom: none; }
+      .dr-label {
+          flex: 0 0 230px; background: #f8f9fb; font-weight: 600; font-size: .78rem;
+          text-transform: uppercase; letter-spacing: .3px; color: #495057;
+          padding: 12px 16px; display: flex; align-items: center; border-right: 1px solid #dfe3ea;
+      }
+      .dr-value { flex: 1; padding: 10px 16px; display: flex; align-items: center; min-width: 0; }
+      .dr-row-tall .dr-value { align-items: flex-start; padding-top: 12px; }
+      .dr-readonly {
+          color: #21252980; color: #313a46; font-weight: 500; font-size: .875rem;
+          background: #fbfbfc; border: 1px dashed #dfe3ea; border-radius: 4px;
+          padding: 6px 10px; width: 100%;
+      }
+      .dr-readonly small { display: block; color: #878a99; font-weight: 400; font-size: .68rem; margin-top: 2px; }
+      .dr-value .form-control, .dr-value .form-select { font-size: .875rem; }
+      .dr-radio-group { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+      .dr-radio { display: flex; align-items: center; gap: 6px; font-size: .875rem; font-weight: 500; color: #495057; cursor: pointer; margin: 0; }
+      .dr-radio input { width: 16px; height: 16px; cursor: pointer; }
+
+      @media (max-width: 576px) {
+          .dr-row { flex-direction: column; }
+          .dr-label { border-right: none; border-bottom: 1px solid #dfe3ea; flex: 1 1 auto; }
+          .dr-form-header { flex-wrap: wrap; }
+          .dr-form-header .dr-form-code { margin-left: 0; text-align: left; }
+      }
+    </style>
+</head>
+
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_personnel') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <!-- Page Title -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                            <h4 class="mb-sm-0">Requests</h4>
+                            <div class="page-title-right">
+                                <ol class="breadcrumb m-0">
+                                    <li class="breadcrumb-item"><a href="/personnel/dashboard">CIPRMS</a></li>
+                                    <li class="breadcrumb-item active">Requests</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section switcher — Partnership Request / Document Request share this page but
+                     remain fully independent forms; only one panel is visible at a time. -->
+                <div class="section-tabs">
+                    <a class="section-tab active" id="tab-pr" href="#" onclick="switchSection('pr');return false;">
+                        <i class="ri-building-4-line"></i> Partnership Request
+                    </a>
+                    <a class="section-tab" id="tab-dr" href="#" onclick="switchSection('dr');return false;">
+                        <i class="ri-file-shield-2-line"></i> Document Request
+                    </a>
+                </div>
+
+                <!-- ═══════════ PANEL: PARTNERSHIP REQUEST ═══════════ -->
+                <div id="panel-pr">
+
+                    <!-- Submission Form -->
+                    <div class="row justify-content-center mb-4">
+                        <div class="col-lg-12">
+                            <div class="card shadow-sm border-0" style="border-radius: 8px;">
+                                <div class="card-header d-flex align-items-center border-bottom-0 pt-4 px-4">
+                                    <h4 class="card-title mb-0 flex-grow-1 fw-bold text-primary" id="pr-form-title">New Partnership Request</h4>
+                                    <button type="button" class="btn btn-sm btn-light" onclick="openNewPRForm()"><i class="ri-add-line me-1"></i>Start New</button>
+                                </div>
+                                <div class="card-body p-4">
+
+                                    <!-- OCR auto-fill from a supporting document -->
+                                    <div class="card border border-primary-subtle mb-4">
+                                        <div class="card-body">
+                                            <h6 class="mb-2"><i class="ri-scan-2-line text-primary me-1"></i>Auto-fill from Document (OCR) — Optional</h6>
+                                            <p class="text-muted fs-13 mb-3">Upload a proposal, MOA/MOU draft, or letter of intent (PDF, JPG, or PNG — max 10MB). The system extracts text and suggests values below, and the file itself becomes your request's supporting document attachment.</p>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <input type="file" class="form-control" id="pr-ocr-file-input" accept=".pdf,.jpg,.jpeg,.png" style="max-width:360px">
+                                                <button type="button" class="btn btn-primary text-nowrap" onclick="startPROcrExtraction()"><i class="ri-magic-line me-1"></i>Extract & Attach</button>
+                                            </div>
+                                            <div id="pr-ocr-progress-wrap" class="mt-3" style="display:none">
+                                                <div class="d-flex justify-content-between fs-12 text-muted mb-1"><span id="pr-ocr-stage-text">Uploading…</span><span id="pr-ocr-percent-text">0%</span></div>
+                                                <div class="progress" style="height:6px"><div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" id="pr-ocr-progress-bar" style="width:0%"></div></div>
+                                            </div>
+                                            <div id="pr-ocr-result-box" class="mt-3" style="display:none">
+                                                <span class="badge bg-success-subtle text-success"><i class="ri-checkbox-circle-line me-1"></i>Document attached — form auto-filled below</span>
+                                                <button type="button" class="btn btn-sm btn-light ms-2" onclick="applyPROcrToForm()">Re-apply suggested values</button>
+                                                <div id="pr-ocr-idp-panel" class="mt-3" style="display:none"></div>
+                                            </div>
+                                            <div id="pr-ocr-error-box" class="alert alert-danger mt-3 mb-0 py-2 fs-13" style="display:none"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-lg-6 mb-3">
+                                            <label class="form-label" for="pr-f-inst">Institution Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="pr-f-inst" placeholder="e.g. Naga City State University">
+                                        </div>
+                                        <div class="col-lg-6 mb-3">
+                                            <label class="form-label" for="pr-f-country">Country <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="pr-f-country" placeholder="e.g. Philippines">
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-type">Agreement Type <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="pr-f-type">
+                                                <option value="">Select…</option>
+                                                <option>MOA</option><option>MOU</option><option>LOI</option><option>JVA</option><option>Other</option>
+                                            </select>
+                                            <div class="form-text text-warning fs-12" id="pr-f-type-warn" style="display:none"></div>
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-nature">Nature of Partnership <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="pr-f-nature">
+                                                <option value="">Select…</option>
+                                                <option>Research</option><option>Student Exchange</option><option>Joint Program</option>
+                                                <option>Faculty Development</option><option>Technology Transfer</option><option>Community Outreach</option><option>Other</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-cat">Category</label>
+                                            <select class="form-select" id="pr-f-cat">
+                                                <option value="">Select…</option>
+                                                <option value="International">International</option>
+                                                <option value="Local">Local</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-region">Region</label>
+                                            <select class="form-select" id="pr-f-region">
+                                                <option value="">Select…</option>
+                                                <option>Asia</option><option>Europe</option><option>Americas</option><option>Oceania</option><option>Africa</option><option>Local</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-unit">Responsible CSPC Unit</label>
+                                            <select class="form-select" id="pr-f-unit">
+                                                <option value="">Select…</option>
+                                                <option>CCS</option><option>CILS</option><option>CETE</option><option>CNAS</option><option>CAMS</option><option>CIRL</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-start">Proposed Start Date</label>
+                                            <input type="date" class="form-control" id="pr-f-start">
+                                        </div>
+                                        <div class="col-lg-4 mb-3">
+                                            <label class="form-label" for="pr-f-end">Proposed End Date</label>
+                                            <input type="date" class="form-control" id="pr-f-end">
+                                        </div>
+                                        <div class="col-12 mb-3">
+                                            <label class="form-label" for="pr-f-notes">Additional Details</label>
+                                            <textarea class="form-control" id="pr-f-notes" rows="4" placeholder="Purpose, objectives, expected benefits, or any other details relevant to your request…"></textarea>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-light" onclick="savePRDraft()"><i class="ri-save-line me-1"></i>Save as Draft</button>
+                                        <button type="button" class="btn btn-success" onclick="submitPRRequest()"><i class="ri-send-plane-line me-1"></i>Submit Request</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/personnel/monitoring">Monitoring</a> page.</p>
+
+                </div><!-- end panel-pr -->
+
+                <!-- ═══════════ PANEL: DOCUMENT REQUEST ═══════════ -->
+                <div id="panel-dr" style="display:none">
+
+                    <!-- Submission Form Section -->
+                    <div class="row justify-content-center mb-5">
+                        <div class="col-lg-12">
+                            <div class="card shadow-sm border-0" style="border-radius: 8px;">
+                                <div class="card-body p-4">
+                                    <div class="dr-form-header">
+                                        <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL">
+                                        <div>
+                                            <p class="dr-form-title">Documents Request Form</p>
+                                            <p class="dr-form-subtitle">Center for International Relations and Linkages — CSPC</p>
+                                        </div>
+                                        <div class="dr-form-code">CSPC-F-CIRL-04</div>
+                                    </div>
+                                    <form id="docRequestForm">
+                                        <div class="dr-form-table">
+                                            <div class="dr-row">
+                                                <div class="dr-label">Name of Requestor</div>
+                                                <div class="dr-value"><div class="dr-readonly"><%= user.name %></div></div>
+                                            </div>
+                                            <div class="dr-row">
+                                                <div class="dr-label">Office / College / Institution</div>
+                                                <div class="dr-value">
+                                                    <% if (user.unit) { %>
+                                                        <div class="dr-readonly"><%= user.unit %><small>Auto-filled from your profile</small></div>
+                                                        <input type="hidden" id="f-inst" value="<%= user.unit %>">
+                                                    <% } else { %>
+                                                        <input type="text" class="form-control" id="f-inst" placeholder="Enter your office/college...">
+                                                    <% } %>
+                                                </div>
+                                            </div>
+                                            <div class="dr-row">
+                                                <div class="dr-label">Date / Time</div>
+                                                <div class="dr-value"><div class="dr-readonly" id="f-datetime-display">—</div></div>
+                                            </div>
+                                            <div class="dr-row">
+                                                <div class="dr-label">Contact No.</div>
+                                                <div class="dr-value"><input type="text" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000"></div>
+                                            </div>
+                                            <div class="dr-row dr-row-tall">
+                                                <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
+                                                <div class="dr-value" style="display:block">
+                                                    <select class="form-select" id="f-type">
+                                                        <option value="">Select type...</option>
+                                                        <option>MOA</option>
+                                                        <option>MOU</option>
+                                                        <option>Accreditation</option>
+                                                    </select>
+                                                    <small class="text-muted d-block mt-2">CSPC-CIRL issues MOA, MOU, or Accreditation documents.</small>
+                                                </div>
+                                            </div>
+                                            <div class="dr-row dr-row-tall">
+                                                <div class="dr-label">Purpose</div>
+                                                <div class="dr-value" style="display:block">
+                                                    <textarea class="form-control" id="f-notes" rows="4" placeholder="Describe what's needed and why..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="dr-row">
+                                                <div class="dr-label">Document Form</div>
+                                                <div class="dr-value dr-radio-group">
+                                                    <label class="dr-radio"><input type="radio" name="f-form" value="Printed Copy"> Printed Copy</label>
+                                                    <label class="dr-radio"><input type="radio" name="f-form" value="Digital Copy"> Digital Copy</label>
+                                                </div>
+                                            </div>
+                                            <div class="dr-row">
+                                                <div class="dr-label">Email Address</div>
+                                                <div class="dr-value"><div class="dr-readonly"><%= user.email %></div></div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-end gap-2 mt-4">
+                                            <button type="button" class="btn btn-light px-4" onclick="resetForm()">Clear</button>
+                                            <button type="button" class="btn btn-success px-5 fw-bold" id="submit-req-btn" onclick="submitRequest()">
+                                                Submit Request
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/personnel/monitoring">Monitoring</a> page.</p>
+
+                </div><!-- end panel-dr -->
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6">
+                        <script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL
+                    </div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+
+<div id="req-toast"></div>
+
+<!-- JAVASCRIPT -->
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script src="/velzon/assets/js/pages/idp-ocr-widget.js"></script>
+
+<script>
+    /* ─── SECTION SWITCHER ─── */
+    function switchSection(sec) {
+        document.getElementById('panel-pr').style.display = sec === 'pr' ? '' : 'none';
+        document.getElementById('panel-dr').style.display = sec === 'dr' ? '' : 'none';
+        document.getElementById('tab-pr').classList.toggle('active', sec === 'pr');
+        document.getElementById('tab-dr').classList.toggle('active', sec === 'dr');
+    }
+
+    function showToast(msg, color) {
+        const t = document.getElementById('req-toast');
+        t.style.background = color || '#405189'; t.style.opacity = '1'; t.innerHTML = msg;
+        setTimeout(() => t.style.opacity = '0', 3000);
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    /* ═══════════════════════════════════════════════════
+       PARTNERSHIP REQUEST — form (reused from the
+       potential_partner Requests page, same /api/requests
+       endpoints) + own request-tracking table + renewal
+       ═══════════════════════════════════════════════════ */
+    var myRequests = [];
+    var prEditingId = null;
+    var prOcrExtractedResult = null;
+
+    function resetPRForm() {
+        prEditingId = null;
+        document.getElementById('pr-form-title').textContent = 'New Partnership Request';
+        ['pr-f-inst', 'pr-f-country', 'pr-f-notes'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['pr-f-type', 'pr-f-nature', 'pr-f-cat', 'pr-f-region', 'pr-f-unit'].forEach(function (id) { document.getElementById(id).value = ''; });
+        document.getElementById('pr-f-start').value = '';
+        document.getElementById('pr-f-end').value = '';
+        prOcrExtractedResult = null;
+        document.getElementById('pr-ocr-file-input').value = '';
+        document.getElementById('pr-ocr-progress-wrap').style.display = 'none';
+        document.getElementById('pr-ocr-result-box').style.display = 'none';
+        document.getElementById('pr-ocr-error-box').style.display = 'none';
+        document.getElementById('pr-ocr-idp-panel').style.display = 'none';
+        document.getElementById('pr-f-type-warn').style.display = 'none';
+    }
+
+    function openNewPRForm() {
+        resetPRForm();
+    }
+
+    function editPRDraft(id) {
+        var r = myRequests.find(function (x) { return x.id === id; });
+        if (!r) return;
+        resetPRForm();
+        prEditingId = id;
+        document.getElementById('pr-form-title').textContent = 'Edit Draft Request';
+        document.getElementById('pr-f-inst').value = r.institution || '';
+        document.getElementById('pr-f-country').value = r.country || '';
+        document.getElementById('pr-f-type').value = r.type || '';
+        document.getElementById('pr-f-nature').value = r.nature || '';
+        document.getElementById('pr-f-cat').value = r.category || '';
+        document.getElementById('pr-f-region').value = r.region || '';
+        document.getElementById('pr-f-unit').value = r.unit || '';
+        document.getElementById('pr-f-start').value = r.startDate || '';
+        document.getElementById('pr-f-end').value = r.endDate || '';
+        document.getElementById('pr-f-notes').value = r.notes || '';
+        document.getElementById('pr-form-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function collectPRFormData() {
+        return {
+            institution: document.getElementById('pr-f-inst').value.trim(),
+            country: document.getElementById('pr-f-country').value.trim(),
+            type: document.getElementById('pr-f-type').value,
+            nature: document.getElementById('pr-f-nature').value,
+            category: document.getElementById('pr-f-cat').value,
+            region: document.getElementById('pr-f-region').value,
+            unit: document.getElementById('pr-f-unit').value,
+            startDate: document.getElementById('pr-f-start').value,
+            endDate: document.getElementById('pr-f-end').value,
+            notes: document.getElementById('pr-f-notes').value.trim(),
+            attachmentLink: (prOcrExtractedResult && prOcrExtractedResult.fileLink) || undefined
+        };
+    }
+
+    function savePRDraft() {
+        var payload = collectPRFormData();
+        if (prEditingId) {
+            fetch('/api/requests/' + prEditingId + '/edit', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Draft updated.', '#15803d'); loadPRHistory(); }
+                else showToast(data.error || 'Failed to update draft.', '#f06548');
+            });
+        } else {
+            payload.isDraft = true;
+            fetch('/api/requests', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Saved as draft.', '#15803d'); prEditingId = data.request.id; loadPRHistory(); }
+                else showToast(data.error || 'Failed to save draft.', '#f06548');
+            });
+        }
+    }
+
+    function submitPRRequest() {
+        var payload = collectPRFormData();
+        if (!payload.institution || !payload.country || !payload.type || !payload.nature) {
+            showToast('Institution, country, agreement type, and nature are required to submit.', '#e0a800');
+            return;
+        }
+        if (prEditingId) {
+            fetch('/api/requests/' + prEditingId + '/edit', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function () {
+                return fetch('/api/requests/' + prEditingId + '/submit', { method: 'POST' });
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Request submitted.', '#15803d'); openNewPRForm(); loadPRHistory(); }
+                else showToast(data.error || 'Failed to submit request.', '#f06548');
+            });
+        } else {
+            payload.isDraft = false;
+            fetch('/api/requests', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.success) { showToast('Request submitted.', '#15803d'); openNewPRForm(); loadPRHistory(); }
+                else showToast(data.error || 'Failed to submit request.', '#f06548');
+            });
+        }
+    }
+
+    // ── OCR auto-fill (reuses the same /api/ocr endpoints as the Registry module) ──
+    function startPROcrExtraction() {
+        var file = document.getElementById('pr-ocr-file-input').files[0];
+        if (!file) { showToast('Choose a file first.', '#e0a800'); return; }
+
+        document.getElementById('pr-ocr-error-box').style.display = 'none';
+        document.getElementById('pr-ocr-result-box').style.display = 'none';
+        document.getElementById('pr-ocr-progress-wrap').style.display = '';
+        document.getElementById('pr-ocr-progress-bar').style.width = '0%';
+
+        var formData = new FormData();
+        formData.append('document', file);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/ocr/extract');
+        xhr.upload.addEventListener('progress', function (e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round((e.loaded / e.total) * 100);
+            document.getElementById('pr-ocr-progress-bar').style.width = pct + '%';
+        });
+        xhr.onload = function () {
+            var data;
+            try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+            if (xhr.status !== 202 || !data || !data.success) { prOcrFail((data && data.error) || 'Failed to start OCR.'); return; }
+            document.getElementById('pr-ocr-stage-text').textContent = 'OCR Processing…';
+            pollPROcrStatus(data.jobId);
+        };
+        xhr.onerror = function () { prOcrFail('Network error while uploading.'); };
+        xhr.send(formData);
+    }
+
+    function pollPROcrStatus(jobId) {
+        fetch('/api/ocr/status/' + jobId).then(function (r) { return r.json(); }).then(function (data) {
+            if (!data.success) { prOcrFail(data.error || 'Job not found.'); return; }
+            document.getElementById('pr-ocr-progress-bar').style.width = (data.progress || 0) + '%';
+            if (data.status === 'error') { prOcrFail(data.error || 'OCR failed.'); return; }
+            if (data.status === 'done') { prOcrSucceed(data.result); return; }
+            setTimeout(function () { pollPROcrStatus(jobId); }, 700);
+        }).catch(function () { prOcrFail('Lost connection while checking OCR progress.'); });
+    }
+
+    function prOcrFail(message) {
+        document.getElementById('pr-ocr-progress-wrap').style.display = 'none';
+        var box = document.getElementById('pr-ocr-error-box');
+        box.textContent = message;
+        box.style.display = '';
+    }
+
+    function prOcrSucceed(result) {
+        prOcrExtractedResult = result;
+        document.getElementById('pr-ocr-progress-wrap').style.display = 'none';
+        document.getElementById('pr-ocr-result-box').style.display = '';
+        if (window.IDP) {
+            IDP.renderResult('pr-ocr-idp-panel', result, {
+                onCancelDuplicate: function (documentId) {
+                    if (!documentId) return;
+                    fetch('/api/documents/' + documentId + '/organize', {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true })
+                    }).then(function () { showToast('Upload archived — removed from the active Document Library.', '#15803d'); });
+                },
+                onViewDuplicate: function (fileLink) { window.open(fileLink, '_blank'); }
+            });
+        }
+        // 2026-07-29: auto-fill immediately — no manual "Apply" click required.
+        // applyPROcrToForm() only ever sets a field when OCR actually found a
+        // value for it (never overwrites with a placeholder), shows its own
+        // confirmation toast, and remains safe to re-run from the "Re-apply
+        // suggested values" button afterward.
+        applyPROcrToForm();
+    }
+
+    function prOcrIsoDate(str) {
+        if (!str) return '';
+        var d = new Date(str);
+        if (isNaN(d.getTime())) return '';
+        // Use LOCAL date parts, not toISOString() (which converts to UTC) —
+        // a date-only string like "March 3, 2026" parses as local midnight,
+        // and toISOString() can roll that back to March 2 in UTC+ timezones.
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dd = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + mm + '-' + dd;
+    }
+
+    function applyPROcrToForm() {
+        if (!prOcrExtractedResult) return;
+        var r = prOcrExtractedResult;
+        var filled = []; // { id, confidence }
+        function set(id, value, confidence) {
+            if (value === null || value === undefined || value === '') return;
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.value = value;
+            filled.push({ id: id, confidence: confidence });
+        }
+
+        if (r.institution) set('pr-f-inst', r.partner || r.institution, r.institutionConfidence);
+        set('pr-f-country', r.country, r.countryConfidence);
+        set('pr-f-cat', r.category, r.categoryConfidence);
+        set('pr-f-region', r.region, r.regionConfidence);
+        set('pr-f-unit', r.unit, r.unitConfidence);
+        if (r.nature) set('pr-f-nature', r.nature, r.natureConfidence);
+
+        var typeWarn = document.getElementById('pr-f-type-warn');
+        var mappedType = window.IDP ? IDP.mapDocumentType(r.documentType, ['MOA', 'MOU', 'LOI', 'JVA', 'Other']) : null;
+        if (mappedType) {
+            set('pr-f-type', mappedType, r.documentTypeConfidence);
+            if (typeWarn) typeWarn.style.display = 'none';
+        } else if (r.documentType && typeWarn) {
+            // A type WAS detected but doesn't confidently map to one of this
+            // form's options — leave the dropdown as the user left it and say why,
+            // rather than guessing (e.g. "Research Agreement" has no exact option here).
+            typeWarn.textContent = 'Detected "' + r.documentType + '" — please select the closest Agreement Type manually.';
+            typeWarn.style.display = '';
+        }
+
+        var startIso = prOcrIsoDate(r.startDate), endIso = prOcrIsoDate(r.endDate);
+        set('pr-f-start', startIso, r.startDateConfidence);
+        set('pr-f-end', endIso, r.endDateConfidence);
+
+        var extras = [];
+        if (r.purpose) extras.push('Purpose: ' + r.purpose);
+        if (r.objectives) extras.push('Objectives: ' + r.objectives);
+        if (r.scope) extras.push('Scope: ' + r.scope);
+        if (extras.length) {
+            var notesEl = document.getElementById('pr-f-notes');
+            notesEl.value = (notesEl.value ? notesEl.value + '\n\n' : '') + '[From OCR] ' + extras.join(' | ');
+            filled.push({ id: 'pr-f-notes', confidence: null });
+        }
+
+        if (window.IDP) filled.forEach(function (f) { IDP.markFilled(f.id, f.confidence); });
+        if (filled.length) {
+            var firstEl = document.getElementById(filled[0].id);
+            if (firstEl) firstEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        showToast('Suggested values applied — please review before saving.', '#15803d');
+    }
+
+    // Draft auto-resume only — this page no longer renders a tracking table;
+    // full request history now lives on /personnel/monitoring (reuses the
+    // same /api/requests/mine endpoint that page's table uses).
+    function loadPRHistory() {
+        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (data) {
+            myRequests = Array.isArray(data) ? data : [];
+        }).catch(function () { myRequests = []; });
+    }
+
+    function openFormOnEntry() {
+        var draft = myRequests.find(function (r) { return r.status === 'Draft'; });
+        if (draft) editPRDraft(draft.id);
+        else openNewPRForm();
+    }
+
+    /* ═══════════════════════════════════════════════════
+       DOCUMENT REQUEST (unchanged from the previous
+       standalone page — same /api/document-requests
+       endpoint; tracking/detail-view now live on
+       /personnel/monitoring, not this page)
+       ═══════════════════════════════════════════════════ */
+    function resetForm() {
+        document.getElementById('docRequestForm').reset();
+    }
+
+    function setDrDateTimeDisplay() {
+        var el = document.getElementById('f-datetime-display');
+        if (el) el.textContent = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    setDrDateTimeDisplay();
+
+    function submitRequest() {
+        const inst = document.getElementById('f-inst').value.trim();
+        const type = document.getElementById('f-type').value;
+        const notes = document.getElementById('f-notes').value.trim();
+        const contactNumber = document.getElementById('f-contact').value.trim();
+        const documentFormEl = document.querySelector('input[name="f-form"]:checked');
+        const documentForm = documentFormEl ? documentFormEl.value : '';
+
+        if (!inst || !type) {
+            showToast('<i class="ri-error-warning-line me-2"></i> Please fill in all required fields.', '#e0a800');
+            if (!inst) document.getElementById('f-inst').classList.add('is-invalid');
+            if (!type) document.getElementById('f-type').classList.add('is-invalid');
+            return;
+        }
+
+        document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+
+        const btn = document.getElementById('submit-req-btn');
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line ai-spin me-2"></i> Submitting...';
+
+        fetch('/api/document-requests', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ institution: inst, documentType: type, notes, contactNumber, documentForm })
+        }).then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            if (ok && data.success) {
+                showToast('<i class="ri-checkbox-circle-line me-2"></i> Document request submitted!', '#15803d');
+                document.getElementById('docRequestForm').reset();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                showToast('<i class="ri-error-warning-line me-2"></i> ' + (data.error || 'Error submitting request.'), '#f06548');
+            }
+        }).catch(e => {
+            console.error(e);
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            showToast('<i class="ri-error-warning-line me-2"></i> Error submitting request.', '#f06548');
+        });
+    }
+
+    /* ─── INIT ─── this page is submission-only now (2026-07-25): no
+       tracking table/deep-link support here — that all lives on
+       /personnel/monitoring. Loading PR history on entry is only to
+       auto-resume an existing Draft, matching potential_partner's
+       Requests page behavior. ─── */
+    document.addEventListener('DOMContentLoaded', () => {
+        loadPRHistory().then(openFormOnEntry);
+    });
+</script>
+</body>
+</html>

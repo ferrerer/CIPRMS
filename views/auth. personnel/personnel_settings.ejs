@@ -1,0 +1,350 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Account Settings | CIPRMS-CSPC-CIRL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+  <script src="/velzon/assets/js/layout.js"></script>
+  <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
+  <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
+  <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
+  <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+<div id="layout-wrapper">
+
+  <%- include('../partials/header') %>
+  <%- include('../partials/sidebar_personnel') %>
+
+  <div class="main-content">
+    <div class="page-content">
+      <div class="container-fluid">
+
+        <!-- Page Title -->
+        <div class="row">
+          <div class="col-12">
+            <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+              <h4 class="mb-sm-0"><i class="ri-settings-3-line me-2 text-primary"></i>Account Settings</h4>
+              <div class="page-title-right">
+                <ol class="breadcrumb m-0">
+                  <li class="breadcrumb-item"><a href="/personnel/dashboard">CIPRMS</a></li>
+                  <li class="breadcrumb-item active">Account Settings</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+
+          <!-- Left: Profile Card -->
+          <div class="col-xxl-3 col-lg-4">
+            <div class="card">
+              <div class="card-body p-4 text-center">
+                <div class="position-relative d-inline-block mb-3" style="cursor:pointer;" onclick="document.getElementById('photo-input').click()" title="Change photo">
+                  <div id="hero-avatar" class="avatar-xl mx-auto rounded-circle d-flex align-items-center justify-content-center fs-1 fw-bold text-white"
+                    style="background:linear-gradient(135deg,#405189,#0ab39c);overflow:hidden;background-size:cover;background-position:center;">?</div>
+                  <span class="position-absolute bottom-0 end-0 badge rounded-pill bg-primary p-1" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;">
+                    <i class="ri-camera-fill fs-11"></i>
+                  </span>
+                </div>
+                <input id="photo-input" type="file" accept="image/*" class="d-none" onchange="handlePhotoChange(event)">
+                <h5 class="mb-1" id="hero-name">—</h5>
+                <p class="text-muted mb-3" id="hero-role">Auth. Personnel</p>
+                <div class="border-top pt-3 text-start">
+                  <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
+                    <i class="ri-building-2-line text-primary"></i>
+                    <span id="info-dept">—</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
+                    <i class="ri-briefcase-line text-primary"></i>
+                    <span id="info-position">—</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="ri-map-pin-line text-primary"></i>
+                    <span id="info-institution">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Tab Panel -->
+          <div class="col-xxl-9 col-lg-8">
+            <div class="card">
+              <div class="card-header border-0">
+                <ul class="nav nav-tabs-custom rounded card-header-tabs border-bottom-0" role="tablist">
+                  <li class="nav-item" role="presentation">
+                    <a class="nav-link active" data-bs-toggle="tab" href="#tab-personal" role="tab">
+                      <i class="ri-user-3-line me-1"></i>Personal Details
+                    </a>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <a class="nav-link" data-bs-toggle="tab" href="#tab-password" role="tab">
+                      <i class="ri-lock-line me-1"></i>Change Password
+                    </a>
+                  </li>
+                </ul>
+              </div>
+              <div class="card-body p-4">
+                <div class="tab-content">
+
+                  <!-- Tab: Personal Details -->
+                  <div class="tab-pane active" id="tab-personal" role="tabpanel">
+                    <form id="profile-form" action="javascript:void(0);">
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-name">Full Name <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" id="s-name" placeholder="e.g. Juan dela Cruz" oninput="updateCard()">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-email">Email Address <span class="text-danger">*</span></label>
+                          <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. personnel@cspc.edu.ph">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-dept">Department / College <span class="text-danger">*</span></label>
+                          <select class="form-select" id="s-dept" onchange="updateCard()">
+                            <option value="">Select...</option>
+                            <option>CIRL</option>
+                            <option>CCS</option>
+                            <option>CHS</option>
+                            <option>CTDE</option>
+                            <option>CTHBM</option>
+                            <option>CAS</option>
+                            <option>CEA</option>
+                          </select>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-position">Designation / Position <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" id="s-position" placeholder="e.g. Faculty, Coordinator" oninput="updateCard()">
+                        </div>
+                        <div class="col-12">
+                          <label class="form-label" for="s-institution">Institution / School <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" id="s-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges" oninput="updateCard()">
+                        </div>
+                      </div>
+                      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-light" onclick="resetForm()">
+                          <i class="ri-refresh-line me-1"></i>Cancel
+                        </button>
+                        <button type="button" id="save-btn" class="btn btn-primary" onclick="saveSettings()">
+                          <i class="ri-save-3-line me-1"></i>Update Settings
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <!-- Tab: Change Password -->
+                  <div class="tab-pane" id="tab-password" role="tabpanel">
+                    <form id="pwd-form" action="javascript:void(0);" onsubmit="changePassword(event)">
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <label class="form-label" for="oldpasswordInput">Current Password <span class="text-danger">*</span></label>
+                          <div class="position-relative">
+                            <input type="password" class="form-control pe-5" id="oldpasswordInput" placeholder="Enter current password">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('oldpasswordInput',this)">
+                              <i class="ri-eye-line"></i>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="newpasswordInput">New Password <span class="text-danger">*</span></label>
+                          <div class="position-relative">
+                            <input type="password" class="form-control pe-5" id="newpasswordInput" placeholder="Min. 8 characters, with upper/lowercase and a number">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('newpasswordInput',this)">
+                              <i class="ri-eye-line"></i>
+                            </button>
+                          </div>
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="confirmpasswordInput">Confirm New Password <span class="text-danger">*</span></label>
+                          <div class="position-relative">
+                            <input type="password" class="form-control pe-5" id="confirmpasswordInput" placeholder="Repeat new password">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('confirmpasswordInput',this)">
+                              <i class="ri-eye-line"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <button type="button" class="btn btn-light"
+                          onclick="['oldpasswordInput','newpasswordInput','confirmpasswordInput'].forEach(id=>document.getElementById(id).value='')">
+                          <i class="ri-refresh-line me-1"></i>Cancel
+                        </button>
+                        <button type="submit" id="pwd-btn" class="btn btn-primary">
+                          <i class="ri-lock-line me-1"></i>Update Password
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- row -->
+      </div><!-- container-fluid -->
+    </div><!-- page-content -->
+
+    <footer class="footer">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+          <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+        </div>
+      </div>
+    </footer>
+  </div><!-- end main content -->
+</div><!-- END layout-wrapper -->
+
+<!-- Toast -->
+<div id="s-toast" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;font-size:.8125rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .3s;display:flex;align-items:center;gap:.4rem;"></div>
+
+<script>
+  const PHOTO_KEY = 'ciprms_personnel_photo';
+
+  function togglePwd(id, btn) {
+    const inp = document.getElementById(id);
+    const ico = btn.querySelector('i');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+    ico.className = inp.type === 'password' ? 'ri-eye-line' : 'ri-eye-off-line';
+  }
+
+  function updateCard() {
+    const name = document.getElementById('s-name').value.trim();
+    const dept = document.getElementById('s-dept').value;
+    const pos  = document.getElementById('s-position').value.trim();
+    const inst = document.getElementById('s-institution').value.trim();
+    const parts = name.split(' ').filter(Boolean);
+    const initials = parts.length >= 2 ? (parts[0][0]+parts[parts.length-1][0]).toUpperCase() : (parts[0] ? parts[0][0].toUpperCase() : '?');
+    const av = document.getElementById('hero-avatar');
+    if (!av.dataset.hasPhoto) { av.textContent = initials; av.style.backgroundImage = ''; }
+    document.getElementById('hero-name').textContent = name || '—';
+    document.getElementById('info-dept').textContent = dept || '—';
+    document.getElementById('info-position').textContent = pos || '—';
+    document.getElementById('info-institution').textContent = inst || '—';
+  }
+
+  function applyPhoto(dataUrl) {
+    const el = document.getElementById('hero-avatar');
+    if (dataUrl) {
+      el.style.backgroundImage = `url('${dataUrl}')`;
+      el.style.backgroundSize = 'cover';
+      el.style.backgroundPosition = 'center';
+      el.textContent = '';
+      el.dataset.hasPhoto = '1';
+    } else {
+      delete el.dataset.hasPhoto;
+      el.style.backgroundImage = '';
+      updateCard();
+    }
+  }
+
+  function handlePhotoChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try { localStorage.setItem(PHOTO_KEY, ev.target.result); } catch(_) {}
+      applyPhoto(ev.target.result);
+      showToast('<i class="ri-image-line me-1"></i>Photo updated!', '#0ab39c');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function loadProfile() {
+    const savedPhoto = localStorage.getItem(PHOTO_KEY);
+    if (savedPhoto) applyPhoto(savedPhoto);
+    try {
+      const data = await fetch('/api/personnel/profile').then(r => r.json());
+      if (data.name)        document.getElementById('s-name').value        = data.name;
+      if (data.dept)        document.getElementById('s-dept').value        = data.dept;
+      if (data.position)    document.getElementById('s-position').value    = data.position;
+      if (data.institution) document.getElementById('s-institution').value = data.institution;
+      updateCard();
+    } catch(_) { updateCard(); }
+  }
+
+  async function saveSettings() {
+    const name = document.getElementById('s-name').value.trim();
+    const email = document.getElementById('s-email').value.trim();
+    const dept = document.getElementById('s-dept').value;
+    const position = document.getElementById('s-position').value.trim();
+    const institution = document.getElementById('s-institution').value.trim();
+    if (!name || !email || !dept || !position || !institution)
+      return showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields.', '#f06548');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return showToast('<i class="ri-error-warning-line me-1"></i>Invalid email address.', '#f06548');
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
+    try {
+      const res = await fetch('/api/personnel/profile', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, email, dept, position, institution })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed.');
+      updateCard();
+      showToast('<i class="ri-checkbox-circle-line me-1"></i>Settings saved!', '#0ab39c');
+    } catch(err) {
+      showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="ri-save-3-line me-1"></i>Update Settings';
+    }
+  }
+
+  function resetForm() {
+    ['s-name','s-position','s-institution'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('s-dept').value = '';
+    updateCard();
+  }
+
+  async function changePassword(e) {
+    e.preventDefault();
+    const oldP = document.getElementById('oldpasswordInput').value.trim();
+    const newP = document.getElementById('newpasswordInput').value.trim();
+    const confP = document.getElementById('confirmpasswordInput').value.trim();
+    if (!oldP || !newP || !confP) return showToast('<i class="ri-error-warning-line me-1"></i>All fields are required.', '#f06548');
+    if (newP !== confP) return showToast('<i class="ri-error-warning-line me-1"></i>Passwords do not match.', '#f06548');
+    const isStrongPassword = pw => pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
+    if (!isStrongPassword(newP)) return showToast('<i class="ri-error-warning-line me-1"></i>Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.', '#f06548');
+    const btn = document.getElementById('pwd-btn');
+    btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Updating…';
+    try {
+      const res = await fetch('/api/personnel/password', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ oldPassword: oldP, newPassword: newP })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Update failed.');
+      showToast('<i class="ri-lock-line me-1"></i>Password changed!', '#0ab39c');
+      ['oldpasswordInput','newpasswordInput','confirmpasswordInput'].forEach(id => document.getElementById(id).value = '');
+    } catch(err) {
+      showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');
+    } finally {
+      btn.disabled = false; btn.innerHTML = '<i class="ri-lock-line me-1"></i>Update Password';
+    }
+  }
+
+  function showToast(msg, bg = '#405189') {
+    const t = document.getElementById('s-toast');
+    t.style.background = bg; t.innerHTML = msg; t.style.opacity = '1';
+    clearTimeout(t._to); t._to = setTimeout(() => t.style.opacity = '0', 3500);
+  }
+
+  loadProfile();
+</script>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+<script src="/velzon/assets/js/plugins.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+</body>
+</html>

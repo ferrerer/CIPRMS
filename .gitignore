@@ -1,3 +1,6 @@
+# Database backups (contain real user PII — never commit)
+Database_backup/
+
 # Environment variables
 .env
 .env.local
@@ -25,6 +28,19 @@ Thumbs.db
 *.swp
 *.swo
 
+node.module/
 # Build outputs
 dist/
 build/
+
+# OCR temp uploads (deleted automatically after processing; never committed)
+uploads/tmp/*
+!uploads/tmp/.gitkeep
+
+# Archived Document Library uploads (runtime user data, not source)
+uploads/documents/*
+!uploads/documents/.gitkeep
+
+# Profile picture uploads (runtime user data, not source)
+uploads/avatars/*
+!uploads/avatars/.gitkeep

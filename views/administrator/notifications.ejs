@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"
+    data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Notifications | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body>
+<div id="layout-wrapper">
+
+  <%- include('../partials/header') %>
+  <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+  <div class="main-content">
+    <div class="page-content">
+      <div class="container-fluid">
+
+        <!-- Page Title -->
+        <div class="row">
+          <div class="col-12">
+            <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+              <h4 class="mb-sm-0"><i class="ri-notification-3-line me-2 text-primary"></i>Notifications</h4>
+              <div class="page-title-right">
+                <ol class="breadcrumb m-0">
+                  <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                  <li class="breadcrumb-item active">Notifications</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary Tiles -->
+        <div class="row">
+          <div class="col-xl-3 col-md-6">
+            <div class="card card-animate">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <p class="fw-medium text-muted mb-0">Total Notifications</p>
+                    <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-total">0</span></h2>
+                    <p class="mb-0 text-muted"><span class="badge bg-primary-subtle text-primary mb-0">All notifications</span></p>
+                  </div>
+                  <div class="avatar-sm flex-shrink-0">
+                    <span class="avatar-title bg-primary-subtle rounded-circle fs-2">
+                      <i class="ri-notification-4-line text-primary"></i>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xl-3 col-md-6">
+            <div class="card card-animate">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <p class="fw-medium text-muted mb-0">Unread Notifications</p>
+                    <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-unread">0</span></h2>
+                    <p class="mb-0 text-muted"><span class="badge bg-warning-subtle text-warning mb-0"><i class="ri-mail-unread-line align-middle"></i> Needs attention</span></p>
+                  </div>
+                  <div class="avatar-sm flex-shrink-0">
+                    <span class="avatar-title bg-warning-subtle rounded-circle fs-2">
+                      <i class="ri-mail-unread-line text-warning"></i>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xl-3 col-md-6">
+            <div class="card card-animate">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <p class="fw-medium text-muted mb-0">Read Notifications</p>
+                    <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-read">0</span></h2>
+                    <p class="mb-0 text-muted"><span class="badge bg-success-subtle text-success mb-0"><i class="ri-checkbox-circle-line align-middle"></i> Reviewed</span></p>
+                  </div>
+                  <div class="avatar-sm flex-shrink-0">
+                    <span class="avatar-title bg-success-subtle rounded-circle fs-2">
+                      <i class="ri-mail-open-line text-success"></i>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-xl-3 col-md-6">
+            <div class="card card-animate">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <p class="fw-medium text-muted mb-0">Today's Notifications</p>
+                    <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-today">0</span></h2>
+                    <p class="mb-0 text-muted"><span class="badge bg-info-subtle text-info mb-0"><i class="ri-calendar-event-line align-middle"></i> Today</span></p>
+                  </div>
+                  <div class="avatar-sm flex-shrink-0">
+                    <span class="avatar-title bg-info-subtle rounded-circle fs-2">
+                      <i class="ri-calendar-event-line text-info"></i>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- end Summary Tiles -->
+
+        <div class="row g-3 mb-3">
+          <!-- Notifications -->
+          <div class="col-12">
+            <div class="card mb-0 h-100">
+              <div class="card-header border-0">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <h4 class="card-title mb-0"><i class="ri-notification-4-line me-2 text-primary"></i>Notification List</h4>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted fs-12" id="notif-count"></span>
+                    <button class="btn btn-primary btn-sm" id="mark-all-read-btn" onclick="markAllRead()">
+                      <i class="ri-check-double-line align-bottom me-1"></i>Mark All Read
+                    </button>
+                    <button class="btn btn-soft-secondary btn-sm btn-icon" data-bs-toggle="offcanvas" data-bs-target="#alertConfigOffcanvas">
+                      <i class="ri-settings-3-line"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+                  <span class="fw-semibold text-muted fs-12 text-uppercase">Status Filter</span>
+                  <div class="btn-group" role="group" id="pills-read">
+                    <button class="btn btn-sm btn-primary pill-btn" data-type="read" data-val="all" onclick="setPill(this)">All</button>
+                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-type="read" data-val="unread" onclick="setPill(this)">Unread</button>
+                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-type="read" data-val="read" onclick="setPill(this)">Read</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body pt-0 bg-light-subtle">
+                <div id="notif-feed"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pagination Container -->
+        <div id="notif-pagination"></div>
+
+        <!-- Alert Config Offcanvas -->
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="alertConfigOffcanvas">
+          <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title"><i class="ri-settings-3-line me-2 text-primary"></i>Alert Config</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label fs-12 mb-1">Notify when expiring in</label>
+                <select class="form-select form-select-sm">
+                  <option>30 days</option>
+                  <option>60 days</option>
+                  <option selected>90 days</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label fs-12 mb-1">Channel</label>
+                <select class="form-select form-select-sm">
+                  <option selected>Email + In-App</option>
+                  <option>Email Only</option>
+                  <option>In-App Only</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label fs-12 mb-1">Frequency</label>
+                <select class="form-select form-select-sm">
+                  <option>Once</option>
+                  <option selected>Weekly until renewed</option>
+                  <option>Daily (last 7 days)</option>
+                </select>
+              </div>
+              <div class="col-12 mt-3">
+                <button class="btn btn-primary btn-sm w-100" data-bs-dismiss="offcanvas"><i class="ri-save-line me-1"></i>Save Config</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- container-fluid -->
+    </div><!-- page-content -->
+
+    <footer class="footer">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+          <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+        </div>
+      </div>
+    </footer>
+  </div><!-- end main content -->
+</div><!-- END layout-wrapper -->
+
+    <script>
+        let allNotifs = [];
+
+        const tagColor = {
+            lifecycle: 'warning', calendar: 'primary', request: 'info', requests: 'info',
+            registry: 'success', dashboard: 'secondary'
+        };
+
+        let activeRead = 'all';
+        let currentPage = 1;
+        const itemsPerPage = 4;
+
+        // â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        function apiPatchNotif(id, payload) {
+            return fetch('/api/notifications/' + id, {
+                method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+            });
+        }
+
+        // â”€â”€ Summary tiles â€” real counts from allNotifs, no hardcoded values â”€â”€â”€â”€
+        function isToday(timeStr) {
+            if (!timeStr) return false;
+            const d = new Date(timeStr);
+            return !isNaN(d) && d.toDateString() === new Date().toDateString();
+        }
+
+        function updateSummaryTiles() {
+            const total = allNotifs.length;
+            const unread = allNotifs.filter(n => n.unread).length;
+            const read = total - unread;
+            const today = allNotifs.filter(n => isToday(n.time)).length;
+            const setTile = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+            setTile('tile-total', total);
+            setTile('tile-unread', unread);
+            setTile('tile-read', read);
+            setTile('tile-today', today);
+        }
+
+        // â”€â”€ Load from MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // Always the caller's own notifications — GET /api/notifications is
+        // own-scoped by targetEmail server-side regardless of role.
+        function loadNotifs() {
+            fetch('/api/notifications')
+                .then(r => r.json())
+                .then(data => {
+                    allNotifs = Array.isArray(data) ? data : [];
+                    render();
+                    updateSummaryTiles();
+                })
+                .catch(err => console.error('Failed to load notifications:', err));
+        }
+
+        function goToPage(p) { currentPage = p; render(); }
+
+        // ── Reusable windowed pagination (2026-07-29) ────────────────────────
+        // Replaces "1 2 3 4 5 6 7 8 9 10..." with a fixed-size window around
+        // the current page plus the first/last page and an ellipsis when
+        // there's a gap — e.g. "1 2 3 4 5 … 10" — instead of listing every
+        // page number. Pure function (current, total) -> array of
+        // page numbers / '…' markers, so it's easy to reuse for any other
+        // paginated list in the app without duplicating the windowing logic.
+        function buildPageList(current, total, maxVisible) {
+            maxVisible = maxVisible || 5;
+            if (total <= maxVisible + 2) {
+                return Array.from({ length: total }, (_, i) => i + 1);
+            }
+            let start = Math.max(1, current - Math.floor(maxVisible / 2));
+            let end = start + maxVisible - 1;
+            if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+            const pages = [];
+            for (let i = start; i <= end; i++) pages.push(i);
+            if (start > 1) { pages.unshift('…'); pages.unshift(1); }
+            if (end < total) { pages.push('…'); pages.push(total); }
+            return pages;
+        }
+
+        function buildPaginationHtml(current, total, onClickFn) {
+            if (total <= 1) return '';
+            const pageItem = (label, page, opts) => {
+                opts = opts || {};
+                const disabled = opts.disabled ? ' disabled' : '';
+                const active = opts.active ? ' active' : '';
+                const click = opts.disabled || opts.ellipsis ? '' : `onclick="${onClickFn}(${page})"`;
+                return `<li class="page-item${disabled}${active}"><a class="page-link" href="javascript:void(0)" ${click}>${label}</a></li>`;
+            };
+            let html = pageItem('<i class="ri-arrow-left-s-line"></i>', current - 1, { disabled: current === 1 });
+            buildPageList(current, total).forEach((p) => {
+                html += p === '…'
+                    ? pageItem('…', null, { ellipsis: true, disabled: true })
+                    : pageItem(p, p, { active: p === current });
+            });
+            html += pageItem('<i class="ri-arrow-right-s-line"></i>', current + 1, { disabled: current === total });
+            return `<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-sm m-0">${html}</ul></div>`;
+        }
+
+        function setPill(btn) {
+            const type = btn.dataset.type, val = btn.dataset.val;
+            const group = document.getElementById('pills-' + type);
+            group.querySelectorAll('.pill-btn').forEach(b => {
+                b.className = b.className.replace('btn-primary', 'btn-soft-secondary');
+            });
+            btn.className = btn.className.replace('btn-soft-secondary', 'btn-primary');
+            activeRead = val;
+            currentPage = 1;
+            render();
+        }
+
+        // â”€â”€ Mark all read â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        function markAllRead() {
+            fetch('/api/notifications/markallread/mine', { method: 'PATCH', headers: {'Content-Type':'application/json'} })
+                .then(r => r.json())
+                .then(() => {
+                    allNotifs.forEach(n => n.unread = false);
+                    const badge = document.getElementById('notif-badge');
+                    if (badge) badge.style.display = 'none';
+                    render();
+                    updateSummaryTiles();
+                })
+                .catch(err => console.error('markAllRead failed:', err));
+        }
+
+        // â”€â”€ Mark single read â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        function markRead(id) {
+            const n = allNotifs.find(x => x.id === id);
+            if (n && n.unread) {
+                apiPatchNotif(id, { unread: false })
+                    .then(() => {
+                        n.unread = false;
+                        const cnt = allNotifs.filter(x => x.unread).length;
+                        if (cnt === 0) { const b = document.getElementById('notif-badge'); if (b) b.style.display = 'none'; }
+                        render();
+                        updateSummaryTiles();
+                    })
+                    .catch(err => console.error('markRead failed:', err));
+            }
+        }
+
+        // Click a notification — mark read, then navigate to its Request
+        // Details page (if it has one). Clicks on the download or delete buttons
+        // are excluded so they don't also trigger navigation.
+        function openNotif(id, evt) {
+            if (evt && evt.target.closest('.notif-download-btn,.notif-delete-btn')) return;
+            const n = allNotifs.find(x => x.id === id);
+            markRead(id);
+            if (n && n.link) window.location.href = n.link;
+        }
+
+        // ── Delete a single notification (own only) ───────────────────────
+        function deleteNotif(id, evt) {
+            if (evt) evt.stopPropagation();
+            if (!confirm('Delete this notification? This cannot be undone.')) return;
+            fetch('/api/notifications/' + id, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.success || d.message === 'Notification deleted') {
+                        allNotifs = allNotifs.filter(x => x.id !== id);
+                        // Update header bell badge
+                        const unreadLeft = allNotifs.filter(x => x.unread).length;
+                        const badge = document.getElementById('notif-badge');
+                        if (badge) {
+                            if (unreadLeft > 0) { badge.textContent = unreadLeft; badge.style.display = ''; }
+                            else { badge.style.display = 'none'; }
+                        }
+                        render();
+                        updateSummaryTiles();
+                    } else {
+                        alert(d.error || 'Could not delete notification.');
+                    }
+                })
+                .catch(() => alert('Network error. Please try again.'));
+        }
+
+        function render() {
+            const filtered = allNotifs.filter(n => {
+                return activeRead === 'all' || (activeRead === 'unread' ? n.unread : !n.unread);
+            });
+
+            const feed = document.getElementById('notif-feed');
+            const countEl = document.getElementById('notif-count');
+            if (countEl) countEl.textContent = `${filtered.length} notifications`;
+            if (!filtered.length) {
+                feed.innerHTML = `<div class="card"><div class="card-body text-center py-5 text-muted">
+        <i class="ri-notification-off-line fs-1 d-block mb-2"></i>No notifications found.</div></div>`;
+                document.getElementById('notif-pagination').innerHTML = '';
+                return;
+            }
+
+            const totalPages = Math.ceil(filtered.length / itemsPerPage);
+            if (currentPage > totalPages) currentPage = Math.max(1, totalPages);
+            const startIdx = (currentPage - 1) * itemsPerPage;
+            const paged = filtered.slice(startIdx, startIdx + itemsPerPage);
+
+            const groups = {};
+            paged.forEach(n => {
+                const key = n.time && n.time.startsWith('Today') ? 'Today' : (n.time || '');
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(n);
+            });
+
+            let html = Object.entries(groups).map(([date, items], index) => `
+      <p class="text-uppercase fw-semibold text-muted fs-11 mb-2 ${index === 0 ? 'mt-0' : 'mt-3'}">${date}</p>
+      <div class="card mb-0">
+        <ul class="list-group list-group-flush">
+          ${items.map(n => {
+                return `
+            <li class="list-group-item px-3 py-3 ${n.unread ? 'bg-primary-subtle' : ''}" onclick="openNotif(${n.id}, event)" style="cursor:pointer;">
+              <div class="d-flex gap-3 align-items-start">
+                <div class="flex-shrink-0">
+                  <span class="avatar-xs avatar-title bg-${n.color}-subtle rounded-circle">
+                    <i class="${n.icon} text-${n.color}"></i>
+                  </span>
+                </div>
+                <div class="flex-grow-1">
+                  <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
+                    <span class="fw-semibold fs-13 ${n.unread ? 'text-dark' : 'text-muted'}">${n.title}</span>
+                    <span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>${n.time}</span>
+                  </div>
+                  <p class="text-muted fs-12 mb-1">${n.desc}</p>
+                  <span class="badge bg-${tagColor[n.module]}-subtle text-${tagColor[n.module]}">${n.tag}</span>
+                  ${n.downloadLink ? `<a href="${n.downloadLink}" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm ms-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>` : ''}
+                </div>
+                <div class="flex-shrink-0 d-flex flex-column align-items-end gap-1">
+                  ${n.unread ? '<span class="badge bg-primary rounded-circle" style="width:8px;height:8px;padding:0;"></span>' : ''}
+                  <button class="btn btn-icon btn-sm btn-soft-danger notif-delete-btn" onclick="deleteNotif(${n.id}, event)" title="Delete notification" style="width:28px;height:28px;line-height:1;">
+                    <i class="ri-delete-bin-line fs-14"></i>
+                  </button>
+                </div>
+              </div>
+            </li>`;
+            }).join('')}
+        </ul>
+      </div>`).join('');
+
+            feed.innerHTML = html;
+
+            document.getElementById('notif-pagination').innerHTML = buildPaginationHtml(currentPage, totalPages, 'goToPage');
+        }
+
+        document.addEventListener('DOMContentLoaded', loadNotifs);
+    </script>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+<script src="/velzon/assets/js/plugins.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+</body>
+</html>

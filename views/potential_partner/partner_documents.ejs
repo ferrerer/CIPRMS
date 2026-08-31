@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Document Library | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        .doc-card { transition: all 0.2s; border: 1px solid #e9ebec !important; }
+        .doc-card:hover { transform: translateY(-3px); border-color: #405189 !important; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .stat-box { padding: 12px; border: 1px solid #e9ebec; border-radius: 8px; text-align: center; }
+        .folder-list .list-group-item { border: none; padding: 0.6rem 1.25rem; transition: all 0.2s; display: flex; align-items: center; }
+        .folder-list .list-group-item:hover { background-color: #f3f6f9; }
+        .folder-list .list-group-item.active { background-color: #e2e5ed; color: #405189; font-weight: 600; }
+        .folder-list .list-group-item i.folder-icon { font-size: 16px; width: 24px; }
+        .folder-actions { display: none; white-space: nowrap; }
+        .folder-list .list-group-item:hover .folder-actions { display: inline-block; }
+        .folder-actions i { cursor: pointer; padding: 2px 4px; }
+        .folder-actions i:hover { color: #405189; }
+    </style>
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0"><i class="ri-folder-2-line me-2 text-primary"></i>Document Library</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Document Library</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-muted mb-3"><i class="ri-shield-check-line me-1"></i>You can only see documents your organization has uploaded — not documents belonging to other partners.</p>
+
+                <div class="row">
+                    <!-- Left Sidebar Panel -->
+                    <div class="col-xl-3">
+                        <!-- Summary Card -->
+                        <div class="card">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-dashboard-line me-2 align-bottom"></i>Summary</h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-2 text-center">
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-total">0</h5>
+                                            <p class="text-muted fs-11 mb-0">Total</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-moa">0</h5>
+                                            <p class="text-muted fs-11 mb-0">MOA</p>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="stat-box">
+                                            <h5 class="mb-1" id="stat-mou">0</h5>
+                                            <p class="text-muted fs-11 mb-0">MOU</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Type Filter -->
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="text-muted text-uppercase fw-semibold fs-11 mb-3">Type Filter</p>
+                                <div class="btn-group w-100 flex-wrap" role="group" id="type-filter-group">
+                                    <button type="button" class="btn btn-outline-primary btn-sm active" onclick="filterType('All', this)">All</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('MOA', this)">MOA</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('MOU', this)">MOU</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('Accreditation', this)">Accreditation</button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="filterType('Other', this)">Other</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Folders -->
+                        <div class="card">
+                            <div class="card-header align-items-center d-flex">
+                                <h4 class="card-title mb-0 flex-grow-1">Folders</h4>
+                                <button class="btn btn-soft-primary btn-sm" onclick="createFolderPrompt()"><i class="ri-add-line me-1"></i>New</button>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="folder-list">
+                                    <div class="list-group list-group-flush" id="folder-list-group"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-body bg-info-subtle">
+                                <div class="d-flex">
+                                    <div class="flex-shrink-0"><i class="ri-shield-check-line text-info fs-3"></i></div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <h6 class="fs-15">Your Documents Only</h6>
+                                        <p class="text-muted mb-0">Uploads are matched to your account automatically. You can view and download your files at any time.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Grid Area -->
+                    <div class="col-xl-9">
+                        <div class="card">
+                            <div class="card-header border-0 pb-0">
+                                <div class="row align-items-center g-3">
+                                    <div class="col-md-3">
+                                        <h4 class="card-title mb-0"><i class="ri-file-list-3-line me-2"></i>My Documents</h4>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="search-box">
+                                            <input type="text" class="form-control" placeholder="search by title..." id="searchLibrary">
+                                            <i class="ri-search-line search-icon"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-auto">
+                                        <div class="btn-group" role="group" aria-label="Grid or List view">
+                                            <button type="button" class="btn btn-outline-secondary" id="view-grid-btn" title="Grid View" onclick="setView('grid')">
+                                                <i class="ri-layout-grid-fill"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" id="view-list-btn" title="List View" onclick="setView('list')">
+                                                <i class="ri-list-check-2"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row" id="document-grid">
+                                    <div class="col-12 text-center py-5" id="loading-docs">
+                                        <div class="spinner-border text-primary" role="status"></div>
+                                        <p class="mt-2 text-muted">Loading documents...</p>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive" id="document-list" style="display:none">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width:48px"></th>
+                                                <th>Document Name</th>
+                                                <th>Type</th>
+                                                <th>Upload Date</th>
+                                                <th>Status</th>
+                                                <th>Folder</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="document-list-body"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script>
+    let allDocs = [];
+    let allFolders = [];
+    let currentType = 'All';
+    let currentSearch = '';
+    let currentFolder = 'all'; // 'all' | 'unfiled' | 'archived' | <folder id>
+    let currentView = localStorage.getItem('partnerDocLibraryView') === 'list' ? 'list' : 'grid';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        applyViewState();
+        loadFolders();
+        loadDocuments();
+
+        document.getElementById('searchLibrary').addEventListener('input', function (e) {
+            currentSearch = e.target.value.toLowerCase();
+            renderFiltered();
+        });
+    });
+
+    function loadDocuments() {
+        fetch('/api/documents/mine').then(function (r) { return r.json(); }).then(function (data) {
+            allDocs = data;
+            renderFiltered();
+            updateStats();
+        });
+    }
+
+    // ── Folders — real, per-owner, backed by /api/document-folders* (shared
+    // convention with the Administrator/Auth. Personnel Document Library) ──
+    function loadFolders() {
+        return fetch('/api/document-folders/mine').then(function (r) { return r.json(); }).then(function (data) {
+            allFolders = Array.isArray(data) ? data : [];
+            renderFolderList();
+        });
+    }
+
+    function filterFolder(folder) {
+        currentFolder = folder;
+        renderFolderList();
+        renderFiltered();
+    }
+
+    function renderFolderList() {
+        var container = document.getElementById('folder-list-group');
+        var activeFolders = allFolders.filter(function (f) { return !f.archived; });
+        var archivedCount = allFolders.filter(function (f) { return f.archived; }).length + allDocs.filter(function (d) { return d.archived; }).length;
+
+        var html = '' +
+          '<a href="#" class="list-group-item list-group-item-action ' + (currentFolder === 'all' ? 'active' : '') + '" onclick="filterFolder(\'all\');return false;">' +
+            '<i class="ri-folder-open-fill text-warning folder-icon"></i> All Documents</a>' +
+          '<a href="#" class="list-group-item list-group-item-action ' + (currentFolder === 'unfiled' ? 'active' : '') + '" onclick="filterFolder(\'unfiled\');return false;">' +
+            '<i class="ri-file-3-line text-muted folder-icon"></i> Unfiled</a>';
+        activeFolders.forEach(function (f) {
+            html += '' +
+              '<a href="#" class="list-group-item list-group-item-action ' + (currentFolder === f.id ? 'active' : '') + '" onclick="filterFolder(' + f.id + ');return false;">' +
+                '<i class="ri-folder-2-fill text-info folder-icon"></i>' +
+                '<span class="flex-grow-1 text-truncate">' + escHtml(f.name) + '</span>' +
+                '<span class="folder-actions">' +
+                  '<i class="ri-pencil-line" title="Rename" onclick="event.stopPropagation();event.preventDefault();renameFolderPrompt(' + f.id + ')"></i>' +
+                  '<i class="ri-archive-line" title="Archive folder" onclick="event.stopPropagation();event.preventDefault();toggleFolderArchive(' + f.id + ', true)"></i>' +
+                '</span></a>';
+        });
+        html += '' +
+          '<div class="dropdown-divider"></div>' +
+          '<a href="#" class="list-group-item list-group-item-action ' + (currentFolder === 'archived' ? 'active' : '') + '" onclick="filterFolder(\'archived\');return false;">' +
+            '<i class="ri-archive-fill text-muted folder-icon"></i> Archived <span class="badge bg-light text-dark ms-auto">' + archivedCount + '</span></a>';
+        container.innerHTML = html;
+    }
+
+    function createFolderPrompt() {
+        var name = prompt('New folder name:');
+        if (!name || !name.trim()) return;
+        fetch('/api/document-folders', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) loadFolders(); else alert(data.error || 'Failed to create folder.');
+        });
+    }
+
+    function renameFolderPrompt(id) {
+        var folder = allFolders.find(function (f) { return f.id === id; });
+        var name = prompt('Rename folder:', folder ? folder.name : '');
+        if (!name || !name.trim()) return;
+        fetch('/api/document-folders/' + id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) loadFolders(); else alert(data.error || 'Failed to rename folder.');
+        });
+    }
+
+    function toggleFolderArchive(id, archived) {
+        fetch('/api/document-folders/' + id, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: archived })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) { loadFolders(); if (currentFolder === id) filterFolder('all'); }
+            else alert(data.error || 'Failed to update folder.');
+        });
+    }
+
+    function moveDocument(docId, folderValue) {
+        var folderId = folderValue === '' ? null : parseInt(folderValue);
+        fetch('/api/documents/' + docId + '/organize', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folderId: folderId })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) {
+                var doc = allDocs.find(function (d) { return d.id === docId; });
+                if (doc) doc.folderId = folderId;
+                renderFiltered();
+            } else alert(data.error || 'Failed to move document.');
+        });
+    }
+
+    function toggleDocArchive(docId, archived) {
+        fetch('/api/documents/' + docId + '/organize', {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: archived })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) {
+                var doc = allDocs.find(function (d) { return d.id === docId; });
+                if (doc) doc.archived = archived;
+                renderFolderList();
+                renderFiltered();
+            } else alert(data.error || 'Failed to update document.');
+        });
+    }
+
+    function folderOptionsHtml(doc) {
+        var opts = '<option value="" ' + (doc.folderId == null ? 'selected' : '') + '>Unfiled</option>';
+        allFolders.filter(function (f) { return !f.archived; }).forEach(function (f) {
+            opts += '<option value="' + f.id + '" ' + (doc.folderId === f.id ? 'selected' : '') + '>' + escHtml(f.name) + '</option>';
+        });
+        return opts;
+    }
+
+    function updateStats() {
+        document.getElementById('stat-total').textContent = allDocs.length;
+        document.getElementById('stat-moa').textContent = allDocs.filter(d => d.type === 'MOA').length;
+        document.getElementById('stat-mou').textContent = allDocs.filter(d => d.type === 'MOU').length;
+    }
+
+    function setView(view) {
+        currentView = view;
+        localStorage.setItem('partnerDocLibraryView', view);
+        applyViewState();
+    }
+
+    function applyViewState() {
+        document.getElementById('view-grid-btn').classList.toggle('active', currentView === 'grid');
+        document.getElementById('view-list-btn').classList.toggle('active', currentView === 'list');
+        document.getElementById('document-grid').style.display = currentView === 'grid' ? '' : 'none';
+        document.getElementById('document-list').style.display = currentView === 'list' ? '' : 'none';
+    }
+
+    function filterType(type, el) {
+        currentType = type;
+        document.querySelectorAll('#type-filter-group .btn').forEach(btn => btn.classList.remove('active'));
+        el.classList.add('active');
+        renderFiltered();
+    }
+
+    function renderFiltered() {
+        const filtered = allDocs.filter(doc => {
+            if (currentFolder === 'archived') {
+                if (!doc.archived) return false;
+            } else {
+                if (doc.archived) return false;
+                if (currentFolder === 'unfiled' && doc.folderId != null) return false;
+                else if (currentFolder !== 'all' && currentFolder !== 'unfiled' && doc.folderId !== currentFolder) return false;
+            }
+            const matchesType = currentType === 'All' || doc.type === currentType;
+            // IDP upgrade (2026-07-28): also search the OCR-extracted text and
+            // keywords, so scanned documents are searchable by words that only
+            // ever appear inside the file itself (e.g. "Kyushu", "CHED").
+            const ocrText = (doc.ocrText || '').toLowerCase();
+            const kwText = (doc.searchKeywords || []).join(' ').toLowerCase();
+            const matchesSearch = !currentSearch || (doc.title || '').toLowerCase().includes(currentSearch)
+                || ocrText.includes(currentSearch) || kwText.includes(currentSearch);
+            return matchesType && matchesSearch;
+        });
+        renderGrid(filtered);
+        renderList(filtered);
+    }
+
+    function renderGrid(docs) {
+        var grid = document.getElementById('document-grid');
+        if (docs.length === 0) {
+            grid.innerHTML = '<div class="col-12 text-center py-5"><i class="ri-file-search-line fs-1 text-muted"></i><p class="mt-2 text-muted">No documents found.</p></div>';
+            return;
+        }
+        grid.innerHTML = docs.map(function (doc) {
+            var icon = doc.type === 'MOA' ? 'ri-file-text-line text-primary' :
+                       doc.type === 'MOU' ? 'ri-file-list-3-line text-info' :
+                       doc.type === 'Accreditation' ? 'ri-award-line text-warning' : 'ri-file-paper-2-line text-secondary';
+            var statusBadge = doc.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+            return '' +
+                '<div class="col-xl-4 col-md-6 mb-4">' +
+                    '<div class="card doc-card h-100 shadow-none mb-0">' +
+                        '<div class="card-body pb-1">' +
+                            '<div class="d-flex align-items-start mb-3">' +
+                                '<div class="avatar-sm flex-shrink-0 me-3"><span class="avatar-title bg-light rounded fs-3"><i class="' + icon + '"></i></span></div>' +
+                                '<div class="flex-grow-1 overflow-hidden">' +
+                                    '<h5 class="fs-14 mb-1 text-truncate" title="' + doc.title + '">' + doc.title + '</h5>' +
+                                    '<p class="text-muted fs-12 mb-0">' + (doc.date || '') + '</p>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="d-flex justify-content-between align-items-center mb-3">' +
+                                '<span class="fw-bold fs-12">' + doc.type + '</span>' +
+                                '<span class="badge ' + statusBadge + ' fs-10">' + doc.status + '</span>' +
+                            '</div>' +
+                            '<div class="d-flex gap-2 mb-2">' +
+                                '<a class="btn btn-sm btn-soft-primary flex-grow-1" href="' + (doc.fileLink || '#') + '" target="_blank" rel="noopener"><i class="ri-eye-line me-1"></i>Preview</a>' +
+                                '<a class="btn btn-sm btn-soft-success" href="' + (doc.fileLink || '#') + '" download title="Download"><i class="ri-download-2-line"></i></a>' +
+                            '</div>' +
+                            '<select class="form-select form-select-sm mb-2" title="Move to folder" onchange="moveDocument(' + doc.id + ', this.value)">' + folderOptionsHtml(doc) + '</select>' +
+                        '</div>' +
+                        '<div class="card-footer p-0 border-0">' +
+                            '<button class="btn ' + (doc.archived ? 'btn-soft-secondary' : 'btn-soft-info') + ' w-100 rounded-0 rounded-bottom py-2" onclick="toggleDocArchive(' + doc.id + ', ' + (!doc.archived) + ')">' +
+                                '<i class="ri-archive-line me-1"></i>' + (doc.archived ? 'Unarchive' : 'Archive') +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    function renderList(docs) {
+        var tbody = document.getElementById('document-list-body');
+        if (docs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="ri-file-search-line fs-1 d-block mb-2"></i>No documents found.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = docs.map(function (doc) {
+            var icon = doc.type === 'MOA' ? 'ri-file-text-line text-primary' :
+                       doc.type === 'MOU' ? 'ri-file-list-3-line text-info' :
+                       doc.type === 'Accreditation' ? 'ri-award-line text-warning' : 'ri-file-paper-2-line text-secondary';
+            var statusBadge = doc.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+            return '<tr>' +
+                '<td><span class="avatar-title bg-light rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="' + icon + '"></i></span></td>' +
+                '<td class="text-truncate" style="max-width:240px" title="' + doc.title + '">' + doc.title + '</td>' +
+                '<td>' + doc.type + '</td>' +
+                '<td>' + (doc.date || '—') + '</td>' +
+                '<td><span class="badge ' + statusBadge + ' fs-10">' + (doc.status || '—') + '</span></td>' +
+                '<td style="min-width:140px"><select class="form-select form-select-sm" title="Move to folder" onchange="moveDocument(' + doc.id + ', this.value)">' + folderOptionsHtml(doc) + '</select></td>' +
+                '<td class="text-end"><div class="btn-group btn-group-sm">' +
+                    '<a class="btn btn-soft-primary" href="' + (doc.fileLink || '#') + '" target="_blank" rel="noopener" title="Preview"><i class="ri-eye-line"></i></a>' +
+                    '<a class="btn btn-soft-success" href="' + (doc.fileLink || '#') + '" download title="Download"><i class="ri-download-2-line"></i></a>' +
+                    '<button class="btn ' + (doc.archived ? 'btn-soft-secondary' : 'btn-soft-info') + '" title="' + (doc.archived ? 'Unarchive' : 'Archive') + '" onclick="toggleDocArchive(' + doc.id + ', ' + (!doc.archived) + ')"><i class="ri-archive-line"></i></button>' +
+                '</div></td>' +
+            '</tr>';
+        }).join('');
+    }
+
+</script>
+</body>
+</html>

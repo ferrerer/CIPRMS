@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Settings | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0"><i class="ri-settings-3-line me-2 text-primary"></i>Settings</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Settings</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                    <!-- Left: avatar + identity -->
+                    <div class="col-xxl-3 col-lg-4">
+                        <div class="card">
+                            <div class="card-body p-4 text-center">
+                                <div class="position-relative d-inline-block mb-3" style="cursor:pointer;" onclick="document.getElementById('avatar-input').click()" title="Change photo">
+                                    <div id="avatar-preview" class="avatar-xl mx-auto rounded-circle d-flex align-items-center justify-content-center fs-1 fw-bold text-white"
+                                        style="width:96px;height:96px;background:linear-gradient(135deg,#405189,#0ab39c);overflow:hidden;background-size:cover;background-position:center;">P</div>
+                                    <span class="position-absolute bottom-0 end-0 badge rounded-pill bg-primary p-1" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">
+                                        <i class="ri-camera-fill fs-13"></i>
+                                    </span>
+                                    <input type="file" id="avatar-input" accept=".jpg,.jpeg,.png" style="display:none" onchange="uploadAvatar()">
+                                </div>
+                                <h5 class="mb-1" id="display-org">Your Organization</h5>
+                                <p class="text-muted mb-3" id="display-contact">—</p>
+                                <div class="border-top pt-3 text-start">
+                                    <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
+                                        <i class="ri-mail-line text-primary"></i>
+                                        <span id="display-email"><%= typeof userEmail !== 'undefined' ? userEmail : '' %></span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
+                                        <i class="ri-phone-line text-primary"></i>
+                                        <span id="display-phone">—</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 text-muted small">
+                                        <i class="ri-shield-user-line text-primary"></i>
+                                        <span>Partner</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: tabs -->
+                    <div class="col-xxl-9 col-lg-8">
+                        <div class="card">
+                            <div class="card-header border-0">
+                                <ul class="nav nav-tabs-custom rounded card-header-tabs border-bottom-0" role="tablist">
+                                    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-profile"><i class="ri-building-4-line me-1"></i>Organization Profile</a></li>
+                                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-password"><i class="ri-lock-line me-1"></i>Change Password</a></li>
+                                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-notif"><i class="ri-notification-3-line me-1"></i>Notification Preferences</a></li>
+                                </ul>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="tab-content">
+
+                                    <div class="tab-pane active" id="tab-profile">
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label">Organization Name</label>
+                                                <input type="text" class="form-control" id="p-org" oninput="updateCard()">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Contact Person Name</label>
+                                                <input type="text" class="form-control" id="p-contact" oninput="updateCard()">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Contact Number</label>
+                                                <input type="text" class="form-control" id="p-phone" placeholder="e.g. 0917-123-4567" oninput="updateCard()">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Email</label>
+                                                <input type="email" class="form-control" value="<%= typeof userEmail !== 'undefined' ? userEmail : '' %>" disabled>
+                                            </div>
+                                            <div class="col-12">
+                                                <label class="form-label">Address</label>
+                                                <textarea class="form-control" id="p-address" rows="2"></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-end mt-4 pt-3 border-top">
+                                            <button type="button" class="btn btn-success" onclick="saveProfile()"><i class="ri-save-3-line me-1"></i>Save Changes</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-pane" id="tab-password">
+                                        <div class="row g-3">
+                                            <div class="col-12">
+                                                <label class="form-label">Current Password</label>
+                                                <div class="position-relative">
+                                                    <input type="password" class="form-control pe-5" id="pw-old">
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-old', this)"><i class="ri-eye-line"></i></button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">New Password</label>
+                                                <div class="position-relative">
+                                                    <input type="password" class="form-control pe-5" id="pw-new">
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-new', this)"><i class="ri-eye-line"></i></button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Confirm New Password</label>
+                                                <div class="position-relative">
+                                                    <input type="password" class="form-control pe-5" id="pw-confirm">
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-confirm', this)"><i class="ri-eye-line"></i></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <p class="text-muted fs-13 mt-3">Must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.</p>
+                                        <div class="d-flex justify-content-end pt-3 border-top">
+                                            <button type="button" class="btn btn-success" onclick="changePassword()"><i class="ri-lock-line me-1"></i>Update Password</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="tab-pane" id="tab-notif">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="n-requests" checked>
+                                            <label class="form-check-label" for="n-requests">Request updates</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="n-approvals" checked>
+                                            <label class="form-check-label" for="n-approvals">Approval decisions</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="n-documents" checked>
+                                            <label class="form-check-label" for="n-documents">Document verification</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" id="n-meetings" checked>
+                                            <label class="form-check-label" for="n-meetings">Meeting schedules</label>
+                                        </div>
+                                        <div class="form-check form-switch mb-4">
+                                            <input class="form-check-input" type="checkbox" id="n-renewals" checked>
+                                            <label class="form-check-label" for="n-renewals">Renewal reminders</label>
+                                        </div>
+                                        <div class="d-flex justify-content-end pt-3 border-top">
+                                            <button type="button" class="btn btn-success" onclick="saveProfile()"><i class="ri-save-3-line me-1"></i>Save Preferences</button>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="settings-toast" style="position:fixed;bottom:20px;right:20px;z-index:9999;color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;font-size:.8125rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .3s;">
+    <span id="settings-toast-msg"></span>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script>
+    function showToast(msg, bg) {
+        var t = document.getElementById('settings-toast');
+        t.style.background = bg || '#405189';
+        document.getElementById('settings-toast-msg').textContent = msg;
+        t.style.opacity = '1';
+        clearTimeout(t._to);
+        t._to = setTimeout(function () { t.style.opacity = '0'; }, 3500);
+    }
+
+    function togglePwd(id, btn) {
+        var inp = document.getElementById(id);
+        var ico = btn.querySelector('i');
+        inp.type = inp.type === 'password' ? 'text' : 'password';
+        ico.className = inp.type === 'password' ? 'ri-eye-line' : 'ri-eye-off-line';
+    }
+
+    function updateCard() {
+        var org = document.getElementById('p-org').value.trim();
+        var contact = document.getElementById('p-contact').value.trim();
+        var phone = document.getElementById('p-phone').value.trim();
+        document.getElementById('display-org').textContent = org || 'Your Organization';
+        document.getElementById('display-contact').textContent = contact || '—';
+        document.getElementById('display-phone').textContent = phone || '—';
+
+        var avatar = document.getElementById('avatar-preview');
+        if (!avatar.dataset.hasPhoto) {
+            avatar.textContent = org ? org.trim()[0].toUpperCase() : 'P';
+        }
+    }
+
+    function applyAvatar(url) {
+        var el = document.getElementById('avatar-preview');
+        if (url) {
+            el.style.backgroundImage = 'url(\'' + url + '\')';
+            el.textContent = '';
+            el.dataset.hasPhoto = '1';
+        }
+    }
+
+    function loadProfile() {
+        fetch('/api/partner/profile').then(function (r) { return r.json(); }).then(function (p) {
+            document.getElementById('p-org').value = p.organization || '';
+            document.getElementById('p-contact').value = p.contactName || '';
+            document.getElementById('p-phone').value = p.contactNumber || '';
+            document.getElementById('p-address').value = p.address || '';
+            if (p.avatarUrl) applyAvatar(p.avatarUrl);
+            updateCard();
+
+            document.getElementById('n-requests').checked = p.notifyRequestUpdates !== false;
+            document.getElementById('n-approvals').checked = p.notifyApprovals !== false;
+            document.getElementById('n-documents').checked = p.notifyDocuments !== false;
+            document.getElementById('n-meetings').checked = p.notifyMeetings !== false;
+            document.getElementById('n-renewals').checked = p.notifyRenewals !== false;
+        });
+    }
+
+    function saveProfile() {
+        var payload = {
+            organization: document.getElementById('p-org').value.trim(),
+            contactName: document.getElementById('p-contact').value.trim(),
+            contactNumber: document.getElementById('p-phone').value.trim(),
+            address: document.getElementById('p-address').value.trim(),
+            notifyRequestUpdates: document.getElementById('n-requests').checked,
+            notifyApprovals: document.getElementById('n-approvals').checked,
+            notifyDocuments: document.getElementById('n-documents').checked,
+            notifyMeetings: document.getElementById('n-meetings').checked,
+            notifyRenewals: document.getElementById('n-renewals').checked
+        };
+        fetch('/api/partner/profile', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) { showToast('Saved.', '#0ab39c'); loadProfile(); }
+            else showToast(data.error || 'Failed to save.', '#f06548');
+        });
+    }
+
+    function changePassword() {
+        var oldPw = document.getElementById('pw-old').value;
+        var newPw = document.getElementById('pw-new').value;
+        var confirmPw = document.getElementById('pw-confirm').value;
+        if (newPw !== confirmPw) { showToast('New passwords do not match.', '#f06548'); return; }
+        fetch('/api/partner/password', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) {
+                showToast('Password updated.', '#0ab39c');
+                document.getElementById('pw-old').value = '';
+                document.getElementById('pw-new').value = '';
+                document.getElementById('pw-confirm').value = '';
+            } else showToast(data.error || 'Failed to update password.', '#f06548');
+        });
+    }
+
+    function uploadAvatar() {
+        var file = document.getElementById('avatar-input').files[0];
+        if (!file) return;
+        var formData = new FormData();
+        formData.append('avatar', file);
+        fetch('/api/partner/avatar', { method: 'POST', body: formData })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) { applyAvatar(data.avatarUrl); showToast('Profile picture updated.', '#0ab39c'); }
+                else showToast(data.error || 'Failed to upload image.', '#f06548');
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadProfile);
+</script>
+</body>
+</html>

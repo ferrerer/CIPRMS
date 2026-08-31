@@ -1,338 +1,197 @@
-<%
-const navTop = [
-  { href: '/dashboard', icon: 'fa-solid fa-house',           label: 'Dashboard', key: 'dashboard' },
-  { href: '/calendar',  icon: 'fa-regular fa-calendar-days', label: 'Calendar',  key: 'calendar'  },
-  { href: '/lifecycle', icon: 'fa-solid fa-rotate',          label: 'Lifecycle', key: 'lifecycle' },
-  { href: '/registry',  icon: 'fa-regular fa-file-lines',    label: 'Registry',  key: 'registry'  },
-  { href: '/requests',  icon: 'fa-solid fa-briefcase',       label: 'Requests',  key: 'requests'  },
-];
-const navBottom = [
-  { href: '/reports', icon: 'fa-solid fa-chart-bar', label: 'Reports', key: 'reports' },
-  { href: '/users',   icon: 'fa-solid fa-users',     label: 'Users',   key: 'users'   },
-];
-// Notifications will be loaded dynamically via JavaScript
-%>
-
-<style>
-  /* ── Notification panel ─────────────────────────── */
-  .notif-trigger { position: relative; }
-  .notif-badge {
-    position: absolute; top: 4px; right: 4px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #ef4444; border: 1.5px solid #fff;
-    pointer-events: none;
-  }
-  .notif-panel {
-    position: fixed; left: 70px; top: 64px;
-    width: 320px; background: #fff;
-    border: 1.5px solid #e2e8f0; border-radius: 14px;
-    box-shadow: 0 8px 32px rgba(0,0,0,.12);
-    z-index: 500; opacity: 0; pointer-events: none;
-    transform: translateX(-8px);
-    transition: opacity .18s ease, transform .18s ease;
-  }
-  .notif-panel.open { opacity: 1; pointer-events: all; transform: translateX(0); }
-  .np-header {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 14px 16px 10px; border-bottom: 1px solid #e2e8f0;
-  }
-  .np-title { font-size: 14px; font-weight: 700; color: #0d1b3e; }
-  .np-clear { font-size: 11px; color: #3b82f6; cursor: pointer; font-weight: 600; background: none; border: none; }
-  .np-clear:hover { text-decoration: underline; }
-  .np-row {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 10px 16px; border-bottom: 1px solid #f1f5f9;
-    cursor: pointer; transition: background .15s;
-  }
-  .np-row:last-of-type { border-bottom: none; }
-  .np-row:hover { background: #f8faff; }
-  .np-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
-  .np-text { flex: 1; font-size: 12.5px; color: #1e293b; line-height: 1.5; }
-  .np-time { font-size: 10.5px; color: #94a3b8; flex-shrink: 0; margin-top: 2px; }
-  .np-footer { padding: 10px 16px; text-align: center; }
-  .np-footer a { font-size: 12px; color: #3b82f6; font-weight: 600; text-decoration: none; }
-  .np-footer a:hover { text-decoration: underline; }
-
-  /* ── Dark Mode ──────────────────────────────────── */
-  body.dark-mode {
-    --bg:      #0d1520;
-    --surface: #172033;
-    --surface2: #1e2d45;
-    --border:  #2d3f5a;
-    --text:    #dde6f0;
-    --muted:   #7a90aa;
-    --accent:  #4a90d9;
-    background: var(--bg) !important;
-    color: var(--text) !important;
-  }
-
-  /* Surfaces */
-  body.dark-mode .top-header,
-  body.dark-mode .sidebar,
-  body.dark-mode .stat-card,
-  body.dark-mode .map-card,
-  body.dark-mode .table-card,
-  body.dark-mode .filter-card,
-  body.dark-mode .notif-panel,
-  body.dark-mode .custom-card,
-  body.dark-mode .report-card,
-  body.dark-mode .card,
-  body.dark-mode .notif-card,
-  body.dark-mode .req-card,
-  body.dark-mode .ft,
-  body.dark-mode .req-table-card,
-  body.dark-mode .modal-box,
-  body.dark-mode .tab-bar { background: var(--surface) !important; border-color: var(--border) !important; }
-
-  /* Table header area */
-  body.dark-mode .tc-header { border-color: var(--border) !important; }
-  body.dark-mode .gs-trigger-btn { background: var(--surface2) !important; border-color: var(--border) !important; color: var(--muted) !important; }
-  body.dark-mode .gs-trigger-btn:hover { background: #1e3a8a !important; color: #93c5fd !important; border-color: #1e3a8a !important; }
-
-  /* Headings / titles */
-  body.dark-mode .header-title,
-  body.dark-mode .map-card-title,
-  body.dark-mode .stat-value,
-  body.dark-mode .tc-title,
-  body.dark-mode .top5-heading,
-  body.dark-mode h1,
-  body.dark-mode h2 { color: var(--text) !important; }
-
-  /* Subtitles / labels / paragraphs */
-  body.dark-mode p,
-  body.dark-mode .stat-label,
-  body.dark-mode .top5-subtitle,
-  body.dark-mode .f-label,
-  body.dark-mode .sc-label,
-  body.dark-mode .form-label { color: var(--muted) !important; }
-
-  /* Table cells — use muted for generic td, but let inline color styles win */
-  body.dark-mode td { color: var(--text) !important; border-color: #1e2d45 !important; }
-  body.dark-mode th { color: var(--muted) !important; background: var(--surface2) !important; border-color: var(--border) !important; }
-  body.dark-mode tbody tr:hover { background: #1a2e48 !important; }
-  body.dark-mode tbody tr:last-child td { border-bottom: none !important; }
-
-  /* Inputs / selects / textareas */
-  body.dark-mode .f-input,
-  body.dark-mode .f-select,
-  body.dark-mode .form-input,
-  body.dark-mode .form-select,
-  body.dark-mode .form-textarea { background: var(--bg) !important; color: var(--text) !important; border-color: var(--border) !important; }
-  body.dark-mode .form-input::placeholder,
-  body.dark-mode .form-textarea::placeholder { color: var(--muted) !important; }
-  body.dark-mode .form-input:focus,
-  body.dark-mode .form-select:focus,
-  body.dark-mode .form-textarea:focus { border-color: #4a90d9 !important; }
-
-  /* Sidebar */
-  body.dark-mode .sidebar-icon { color: var(--muted) !important; }
-  body.dark-mode .sidebar-icon:hover { background: var(--surface2) !important; color: var(--text) !important; }
-  body.dark-mode .sidebar-icon.active { background: #1e3a8a !important; color: #93c5fd !important; }
-
-  /* Tabs */
-  body.dark-mode .tab-btn { color: var(--muted) !important; }
-  body.dark-mode .tab-btn.active { background: #1e3a8a !important; color: #fff !important; }
-  body.dark-mode .tab-content { color: var(--text) !important; }
-
-  /* Filter chips */
-  body.dark-mode .ft { color: var(--muted) !important; }
-  body.dark-mode .ft.active { background: #1e3a8a !important; border-color: #1e3a8a !important; color: #fff !important; }
-  body.dark-mode .filter-btn { background: var(--surface) !important; color: var(--text) !important; border-color: var(--border) !important; }
-
-  /* Badges */
-  body.dark-mode .badge-active   { background: #14532d !important; color: #86efac !important; border-color: #166534 !important; }
-  body.dark-mode .badge-expiring { background: #451a03 !important; color: #fcd34d !important; border-color: #78350f !important; }
-  body.dark-mode .badge-expired  { background: #450a0a !important; color: #fca5a5 !important; border-color: #7f1d1d !important; }
-  body.dark-mode .badge-pending  { background: #3d2a00 !important; color: #fbbf24 !important; border-color: #78350f !important; }
-  body.dark-mode .badge-review   { background: #172554 !important; color: #93c5fd !important; border-color: #1e3a8a !important; }
-  body.dark-mode .badge-approved { background: #14532d !important; color: #86efac !important; border-color: #166534 !important; }
-  body.dark-mode .badge-rejected { background: #450a0a !important; color: #fca5a5 !important; border-color: #7f1d1d !important; }
-
-  /* Modals */
-  body.dark-mode .modal-overlay { background: rgba(0,0,0,.65) !important; }
-  body.dark-mode .m-header { border-color: var(--border) !important; }
-  body.dark-mode .m-actions { border-color: var(--border) !important; }
-  body.dark-mode .m-title { color: var(--text) !important; }
-  body.dark-mode .m-close { color: var(--muted) !important; }
-  body.dark-mode .m-btn.secondary { background: var(--surface2) !important; color: var(--text) !important; border-color: var(--border) !important; }
-  body.dark-mode .kv-key { color: var(--muted) !important; }
-  body.dark-mode .kv-val { color: var(--text) !important; }
-
-  /* Action buttons */
-  body.dark-mode .act-btn.act-edit { border-color: #4a90d9 !important; color: #93c5fd !important; }
-  body.dark-mode .act-btn.act-edit:hover { background: #1e3a8a33 !important; }
-  body.dark-mode .act-btn.act-deact { border-color: #ef4444 !important; color: #fca5a5 !important; }
-  body.dark-mode .act-btn.act-deact:hover { background: #7f1d1d33 !important; }
-  body.dark-mode .act-btn.act-view { border-color: #4a90d9 !important; color: #93c5fd !important; }
-  body.dark-mode .act-btn.act-view:hover { background: #1e3a8a33 !important; }
-  body.dark-mode .act-btn.act-approve { border-color: #22c55e !important; color: #86efac !important; }
-  body.dark-mode .act-btn.act-reject { border-color: #ef4444 !important; color: #fca5a5 !important; }
-  body.dark-mode .act-btn.act-reactivate { border-color: #22c55e !important; color: #86efac !important; }
-
-  /* Top5 / dashboard */
-  body.dark-mode .top5-bar-track { background: #2d3f5a !important; }
-  body.dark-mode .top5-institution { color: var(--text) !important; }
-  body.dark-mode .top5-item:hover { background: #1a2e48 !important; }
-
-  /* Notifications */
-  body.dark-mode .np-row:hover { background: #1a2e48 !important; }
-  body.dark-mode .np-text { color: var(--text) !important; }
-  body.dark-mode .notif-row { border-color: var(--border) !important; }
-
-  /* Map, lifecycle, misc */
-  body.dark-mode .continent-tab { background: rgba(23,32,51,.9) !important; color: var(--text) !important; border-color: var(--border) !important; }
-  body.dark-mode .continent-tab.active { background: #1e3a8a !important; color: #fff !important; }
-  body.dark-mode .pg-btn { background: var(--surface) !important; color: var(--text) !important; border-color: var(--border) !important; }
-  body.dark-mode .r-desc { color: var(--muted) !important; }
-  body.dark-mode .r-title { color: var(--text) !important; }
-  body.dark-mode .search-result { border-color: var(--border) !important; }
-  body.dark-mode .doc-row { border-color: var(--border) !important; }
-  body.dark-mode .add-btn-hdr { background: #1e3a8a !important; }
-  body.dark-mode .add-btn-hdr:hover { background: #1e40af !important; }
-
-  /* RBAC */
-  body.dark-mode .perm-yes { color: #86efac !important; }
-  body.dark-mode .perm-no  { color: #334155 !important; }
-
-  /* Search palette */
-  body.dark-mode .gs-palette { background: var(--surface) !important; }
-  body.dark-mode .gs-input { background: transparent !important; color: var(--text) !important; }
-  body.dark-mode .gs-input::placeholder { color: var(--muted) !important; }
-  body.dark-mode .gs-item:hover, body.dark-mode .gs-item.selected { background: var(--surface2) !important; }
-  body.dark-mode .gs-footer { background: var(--bg) !important; border-color: var(--border) !important; }
-  body.dark-mode .gs-divider { background: var(--border) !important; }
-
-</style>
-
-<aside class="sidebar">
-  <div class="sidebar-top-icons">
-    <% navTop.forEach(item => { %>
-      <a href="<%= item.href %>"
-         class="sidebar-icon <%= activePage === item.key ? 'active' : '' %>"
-         title="<%= item.label %>">
-        <i class="<%= item.icon %>"></i>
-      </a>
-    <% }); %>
-
-    <!-- Notifications bell → full page -->
-    <a href="/notifications"
-       class="sidebar-icon notif-trigger <%= activePage === 'notifications' ? 'active' : '' %>"
-       title="Notifications">
-      <i class="fa-regular fa-bell"></i>
-      <span class="notif-badge" id="notif-badge"></span>
-    </a>
-  </div>
-
-  <div class="sidebar-bottom">
-    <!-- Dark mode toggle -->
-    <button class="sidebar-icon" title="Toggle Dark Mode" id="dark-toggle"
-            onclick="toggleDark()" style="background:none;border:none;width:42px;height:42px;">
-      <i class="fa-solid fa-moon" id="dark-icon"></i>
-    </button>
-    <% navBottom.forEach(item => { %>
-      <a href="<%= item.href %>"
-         class="sidebar-icon <%= activePage === item.key ? 'active' : '' %>"
-         title="<%= item.label %>">
-        <i class="<%= item.icon %>"></i>
-      </a>
-    <% }); %>
-    <!-- Logout -->
-    <a href="/logout" class="sidebar-icon" title="Logout"
-       style="color:#ef4444;"
-       onmouseenter="this.style.background='#fee2e2';this.style.color='#b91c1c';"
-       onmouseleave="this.style.background='';this.style.color='#ef4444';">
-      <i class="fa-solid fa-right-from-bracket"></i>
-    </a>
-    <button class="sidebar-icon" title="Account" style="background:none;border:none;width:42px;height:42px;">
-      <i class="fa-regular fa-circle-user" style="font-size:20px;"></i>
-    </button>
-  </div>
-</aside>
-
-<!-- Notification Panel -->
-<div class="notif-panel" id="notif-panel">
-  <div class="np-header">
-    <span class="np-title"><i class="fa-regular fa-bell"></i> Notifications</span>
-    <button class="np-clear" onclick="clearNotifs()">Mark all read</button>
-  </div>
-  <div id="notifications-container">
-    <!-- Notifications will be loaded dynamically -->
-    <div class="np-row">
-      <div class="np-text" style="text-align: center; color: #64748b; padding: 20px;">Loading notifications...</div>
+<!-- ========== Admin Sidebar ========== -->
+<div class="app-menu navbar-menu">
+    <!-- LOGO -->
+    <div class="navbar-brand-box">
+        <a href="/dashboard" class="logo logo-dark">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28"
+                    style="border-radius:50%;object-fit:cover;margin-right:8px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#405189;">CIPRMS</span>
+            </span>
+        </a>
+        <a href="/dashboard" class="logo logo-light">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28"
+                    style="border-radius:50%;object-fit:cover;margin-right:8px;">
+                <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#fff;">CIPRMS</span>
+            </span>
+        </a>
+        <button type="button" class="btn btn-sm p-0 fs-20 header-item float-end btn-vertical-sm-hover"
+            id="vertical-hover">
+            <i class="ri-record-circle-line"></i>
+        </button>
     </div>
-  </div>
-  <div class="np-footer"><a href="/notifications">View all notifications →</a></div>
+
+    <!-- Sidebar User Box (Velzon style) -->
+    <div class="dropdown sidebar-user m-1 rounded">
+        <button type="button" class="btn material-shadow-none" id="sidebar-user-dropdown" data-bs-toggle="dropdown"
+            aria-haspopup="true" aria-expanded="false">
+            <span class="d-flex align-items-center gap-2">
+                <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="Admin Avatar">
+                <span class="text-start">
+                    <span class="d-block fw-medium sidebar-user-name-text">
+                        <%= typeof user !== 'undefined' && user ? user.name || 'Administrator' : 'Administrator' %>
+                    </span>
+                    <span class="d-block fs-14 sidebar-user-name-sub-text"><i
+                            class="ri ri-circle-fill fs-10 text-success align-baseline"></i> <span
+                            class="align-middle"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : (user.role || 'Admin')) : 'Admin' %></span></span>
+                </span>
+            </span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end">
+            <h6 class="dropdown-header">Welcome!</h6>
+            <a class="dropdown-item" href="/admin/settings"><i
+                    class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Profile</span></a>
+            <a class="dropdown-item" href="/notifications"><i
+                    class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Notifications</span></a>
+            <div class="dropdown-divider"></div>
+            <a class="dropdown-item" href="/admin/settings"><i
+                    class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span
+                    class="align-middle">Settings</span></a>
+            <a class="dropdown-item" href="/logout"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i>
+                <span class="align-middle">Logout</span></a>
+        </div>
+    </div>
+
+    <div id="scrollbar">
+        <div class="container-fluid">
+            <div id="two-column-menu"></div>
+            <ul class="navbar-nav" id="navbar-nav">
+
+                <li class="menu-title"><span>Main Menu</span></li>
+
+                <!-- Dashboard -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'dashboard') ? 'active' : '' %>"
+                        href="/dashboard">
+                        <i class="ri-dashboard-2-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+
+                <!-- Calendar -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'calendar') ? 'active' : '' %>"
+                        href="/calendar">
+                        <i class="ri-calendar-2-line"></i>
+                        <span>Calendar</span>
+                    </a>
+                </li>
+
+                <!-- Lifecycle -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'lifecycle') ? 'active' : '' %>"
+                        href="/lifecycle">
+                        <i class="ri-refresh-line"></i>
+                        <span>Monitoring</span>
+                    </a>
+                </li>
+
+                                <!-- Requests -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'access-requests') ? 'active' : '' %>"
+                        href="/partnership-requests">
+                        <i class="ri-shield-user-line"></i>
+                        <span>Requests</span>
+                    </a>
+                </li>
+
+                <!-- Registry -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'registry') ? 'active' : '' %>"
+                        href="/registry">
+                        <i class="ri-file-list-3-line"></i>
+                        <span>Registry</span>
+                    </a>
+                </li>
+
+                <!-- Document Library -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'documents') ? 'active' : '' %>"
+                        href="/documents">
+                        <i class="ri-folder-zip-line"></i>
+                        <span>Document Library</span>
+                    </a>
+                </li>
+
+                <li class="menu-title"><span>Management</span></li>
+
+                <!-- Reports -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'reports') ? 'active' : '' %>"
+                        href="/reports">
+                        <i class="ri-bar-chart-grouped-line"></i>
+                        <span>Reports & Analytics</span>
+                    </a>
+                </li>
+
+                <!-- Users -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'users') ? 'active' : '' %>"
+                        href="/users">
+                        <i class="ri-group-line"></i>
+                        <span>User Management</span>
+                    </a>
+                </li>
+
+
+                <!-- Notifications -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'notifications') ? 'active' : '' %>"
+                        href="/notifications">
+                        <i class="ri-notification-3-line"></i>
+                        <span>Notifications</span>
+                        <span class="badge bg-danger rounded-pill" id="sidebar-notif-badge"
+                            style="display:none;margin-left:auto;"></span>
+                    </a>
+                </li>
+
+                <li class="menu-title"><span>Account</span></li>
+
+                <!-- Settings -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'settings') ? 'active' : '' %>"
+                        href="/admin/settings">
+                        <i class="ri-settings-3-line"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+
+                <!-- Logout -->
+                <li class="nav-item">
+                    <a class="nav-link menu-link" href="/logout">
+                        <i class="ri-logout-box-r-line"></i>
+                        <span>Logout</span>
+                    </a>
+                </li>
+
+            </ul>
+        </div>
+    </div>
+
+    <div class="sidebar-background"></div>
 </div>
+<!-- Overlay -->
+<div class="vertical-overlay"></div>
 
 <script>
-  // ── Notification panel ──────────────────────────
-  async function loadNotifications() {
-    try {
-      const response = await fetch('/api/notifications');
-      const notifications = await response.json();
-      
-      const container = document.getElementById('notifications-container');
-      container.innerHTML = '';
-      
-      notifications.forEach(n => {
-        const row = document.createElement('div');
-        row.className = 'np-row';
-        row.innerHTML = `
-          <div class="np-dot" style="background:${n.color};"></div>
-          <div class="np-text">${n.text}</div>
-          <div class="np-time">${n.time}</div>
-        `;
-        container.appendChild(row);
-      });
-      
-      // Update notification badge
-      const unreadCount = notifications.filter(n => !n.read).length;
-      const badge = document.getElementById('notif-badge');
-      if (unreadCount > 0) {
-        badge.style.display = 'block';
-      } else {
-        badge.style.display = 'none';
-      }
-      
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-      document.getElementById('notifications-container').innerHTML = 
-        '<div class="np-row"><div class="np-text" style="text-align: center; color: #64748b; padding: 20px;">Failed to load notifications</div></div>';
-    }
-  }
-  
-  function toggleNotifPanel(e) {
-    e.stopPropagation();
-    const panel = document.getElementById('notif-panel');
-    panel.classList.toggle('open');
-  }
-  function clearNotifs() {
-    document.getElementById('notif-badge').style.display = 'none';
-    document.getElementById('notif-panel').querySelectorAll('.np-dot').forEach(d => {
-      d.style.background = '#cbd5e1';
-    });
-    document.getElementById('notif-panel').classList.remove('open');
-  }
-  document.addEventListener('click', () => {
-    document.getElementById('notif-panel').classList.remove('open');
-  });
-  document.getElementById('notif-panel').addEventListener('click', e => e.stopPropagation());
-
-  // ── Dark mode ───────────────────────────────────
-  function toggleDark() {
-    const isDark = document.body.classList.toggle('dark-mode');
-    document.getElementById('dark-icon').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
-    localStorage.setItem('cirl-dark', isDark ? '1' : '');
-  }
-  // Restore preference on page load
-  (function() {
-    if (localStorage.getItem('cirl-dark')) {
-      document.body.classList.add('dark-mode');
-      const icon = document.getElementById('dark-icon');
-      if (icon) icon.className = 'fa-solid fa-sun';
-    }
-  })();
-  
-  // ── Load notifications on page load ─────────────
-  loadNotifications();
+    // Load notification badge in sidebar
+    fetch('/api/notifications/unread-count')
+        .then(r => r.json())
+        .then(d => {
+            const count = d.count || 0;
+            const badge = document.getElementById('sidebar-notif-badge');
+            if (badge && count > 0) {
+                badge.textContent = count;
+                badge.style.display = '';
+            }
+        }).catch(() => { });
 </script>

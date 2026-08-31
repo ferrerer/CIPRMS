@@ -1,0 +1,444 @@
+/* ============================================================
+   CIPRMS Bridge CSS — adapts legacy content classes to
+   work cleanly inside the Velzon layout shell.
+   ============================================================ */
+
+/* ── Layout overrides ─────────────────────────────────────── */
+/* Remove old full-screen layout assumptions */
+body {
+    height: auto !important;
+    overflow: auto !important;
+    display: block !important;
+    flex-direction: unset !important;
+}
+
+/* Main content area inherits Velzon spacing */
+.main-content .container-fluid {
+    padding-top: 0;
+}
+
+/* ── Page titles ──────────────────────────────────────────── */
+.page-content h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #495057;
+    margin-bottom: 4px;
+}
+.page-content p.page-sub,
+.page-content p[style*="color:#64748b"] {
+    font-size: 0.8125rem;
+    color: #878a99;
+    margin-bottom: 1.25rem;
+}
+
+/* ── Stats Row ────────────────────────────────────────────── */
+.stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: #fff;
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 2px rgba(56,65,74,.15);
+    border: 0;
+    transition: box-shadow .15s;
+}
+.stat-card:hover { box-shadow: 0 4px 12px rgba(56,65,74,.12); }
+
+.stat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .5rem;
+}
+.stat-label {
+    font-size: .8125rem;
+    font-weight: 500;
+    color: #878a99;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.stat-value {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #495057;
+    line-height: 1;
+    margin-bottom: .5rem;
+}
+.stat-footer-label {
+    font-size: .75rem;
+    font-weight: 500;
+}
+.stat-footer-label.positive { color: #0ab39c; }
+.stat-footer-label.warn     { color: #f7b84b; }
+.stat-footer-label.danger   { color: #f06548; }
+
+/* ── General Cards ────────────────────────────────────────── */
+.custom-card,
+.report-card,
+.map-card,
+.table-card,
+.filter-card,
+.notif-card,
+.breakdown-card,
+.settings-card {
+    background: #fff;
+    border-radius: .5rem;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 2px rgba(56,65,74,.15);
+    margin-bottom: 1.25rem;
+}
+
+/* ── Breakdown / analytics rows ───────────────────────────── */
+.breakdown-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+.bc-title {
+    font-size: .9rem;
+    font-weight: 700;
+    color: #343a40;
+    margin-bottom: 1rem;
+}
+
+/* ── Page-header pattern ──────────────────────────────────── */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+.page-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #343a40;
+    margin: 0;
+}
+
+/* ── Buttons (legacy) ─────────────────────────────────────── */
+.header-add-btn,
+.btn-add-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem 1rem;
+    background: #405189;
+    color: #fff;
+    border: none;
+    border-radius: .375rem;
+    font-size: .8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s;
+    text-decoration: none;
+}
+.header-add-btn:hover,
+.btn-add-primary:hover {
+    background: #364474;
+    color: #fff;
+}
+
+/* ── Tables ───────────────────────────────────────────────── */
+.data-table,
+.registry-table,
+table.table-custom {
+    width: 100%;
+    border-collapse: collapse;
+}
+.data-table th,
+.registry-table th {
+    background: #f3f6f9;
+    color: #6c757d;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #e9ebec;
+}
+.data-table td,
+.registry-table td {
+    padding: .75rem 1rem;
+    font-size: .8125rem;
+    color: #495057;
+    border-bottom: 1px solid #f1f3f5;
+    vertical-align: middle;
+}
+.data-table tr:hover td,
+.registry-table tr:hover td {
+    background: #f8f9fa;
+}
+
+/* ── Status badges ────────────────────────────────────────── */
+.status-badge, .badge-status {
+    display: inline-block;
+    padding: .25em .65em;
+    font-size: .7rem;
+    font-weight: 600;
+    border-radius: 50rem;
+    line-height: 1;
+}
+.status-active,   .badge-active   { background: #d1fae5; color: #065f46; }
+.status-expiring, .badge-expiring { background: #fef3c7; color: #92400e; }
+.status-expired,  .badge-expired  { background: #fee2e2; color: #991b1b; }
+.status-pending,  .badge-pending  { background: #e0e7ff; color: #3730a3; }
+.status-approved, .badge-approved { background: #d1fae5; color: #065f46; }
+.status-rejected, .badge-rejected { background: #fee2e2; color: #991b1b; }
+
+/* ── Filters / search bar row ─────────────────────────────── */
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+}
+.filter-row input[type="text"],
+.filter-row input[type="search"],
+.filter-row select {
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    padding: .4rem .75rem;
+    font-size: .8125rem;
+    color: #495057;
+    background: #fff;
+    outline: none;
+    transition: border-color .15s;
+}
+.filter-row input:focus,
+.filter-row select:focus {
+    border-color: #405189;
+    box-shadow: 0 0 0 2px rgba(64,81,137,.15);
+}
+
+/* ── Modals (legacy custom modals) ───────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1055;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.modal-overlay[style*="display:none"],
+.modal-overlay[style*="display: none"] { display: none !important; }
+
+.modal-box {
+    background: #fff;
+    border-radius: .75rem;
+    padding: 1.75rem;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.modal-box.modal-lg { max-width: 800px; }
+.modal-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #343a40;
+    margin-bottom: 1.25rem;
+}
+
+/* ── Notifications panel ──────────────────────────────────── */
+.notif-panel {
+    position: fixed;
+    left: 260px;
+    top: 70px;
+    width: 320px;
+    background: #fff;
+    border: 1px solid #e9ebec;
+    border-radius: .5rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,.12);
+    z-index: 600;
+}
+
+/* ── Calendar ─────────────────────────────────────────────── */
+.fc .fc-button-primary {
+    background-color: #405189 !important;
+    border-color: #405189 !important;
+}
+.fc .fc-button-primary:hover {
+    background-color: #364474 !important;
+}
+
+/* ── Settings ─────────────────────────────────────────────── */
+.settings-section { margin-bottom: 2rem; }
+.settings-section h3 {
+    font-size: .9375rem;
+    font-weight: 700;
+    color: #343a40;
+    margin-bottom: 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid #e9ebec;
+}
+
+/* ── Form controls (legacy) ───────────────────────────────── */
+.form-group { margin-bottom: 1rem; }
+.form-group label {
+    font-size: .8125rem;
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: .375rem;
+    display: block;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    border: 1px solid #ced4da;
+    border-radius: .375rem;
+    padding: .5rem .75rem;
+    font-size: .8125rem;
+    color: #495057;
+    background: #fff;
+    transition: border-color .15s;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #405189;
+    box-shadow: 0 0 0 2px rgba(64,81,137,.12);
+}
+
+/* ── Responsive fixes ─────────────────────────────────────── */
+@media (max-width: 768px) {
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .breakdown-row { grid-template-columns: 1fr; }
+    .filter-row { flex-direction: column; align-items: stretch; }
+    .page-header { flex-direction: column; align-items: flex-start; gap: .75rem; }
+}
+@media (max-width: 480px) {
+    .stats-row { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES
+   Applied when Velzon sets [data-bs-theme="dark"] on <html>.
+   Overrides the hardcoded light colors in the rules above so
+   every role's UI stays readable in dark mode without needing
+   per-role CSS or a separate dark-mode stylesheet.
+   ══════════════════════════════════════════════════════════════ */
+
+[data-bs-theme="dark"] .stat-card,
+[data-bs-theme="dark"] .custom-card,
+[data-bs-theme="dark"] .report-card,
+[data-bs-theme="dark"] .map-card,
+[data-bs-theme="dark"] .table-card,
+[data-bs-theme="dark"] .filter-card,
+[data-bs-theme="dark"] .notif-card,
+[data-bs-theme="dark"] .breakdown-card,
+[data-bs-theme="dark"] .settings-card {
+    background: #1e2533;
+    box-shadow: 0 1px 2px rgba(0,0,0,.3);
+    border-color: rgba(255,255,255,.07);
+}
+
+[data-bs-theme="dark"] .stat-label {
+    color: #adb5bd;
+}
+[data-bs-theme="dark"] .stat-value {
+    color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .page-title,
+[data-bs-theme="dark"] .bc-title,
+[data-bs-theme="dark"] .modal-title,
+[data-bs-theme="dark"] .settings-section h3 {
+    color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .page-content h1 {
+    color: #e9ecef;
+}
+[data-bs-theme="dark"] .page-content p.page-sub,
+[data-bs-theme="dark"] .page-content p[style*="color:#64748b"] {
+    color: #adb5bd;
+}
+
+/* ── Tables ── */
+[data-bs-theme="dark"] .data-table th,
+[data-bs-theme="dark"] .registry-table th {
+    background: #262d3d;
+    color: #adb5bd;
+    border-bottom-color: rgba(255,255,255,.08);
+}
+[data-bs-theme="dark"] .data-table td,
+[data-bs-theme="dark"] .registry-table td {
+    color: #ced4da;
+    border-bottom-color: rgba(255,255,255,.06);
+}
+[data-bs-theme="dark"] .data-table tr:hover td,
+[data-bs-theme="dark"] .registry-table tr:hover td {
+    background: rgba(255,255,255,.04);
+}
+
+/* ── Filter inputs ── */
+[data-bs-theme="dark"] .filter-row input[type="text"],
+[data-bs-theme="dark"] .filter-row input[type="search"],
+[data-bs-theme="dark"] .filter-row select {
+    border-color: rgba(255,255,255,.12);
+    background: #262d3d;
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .filter-row input:focus,
+[data-bs-theme="dark"] .filter-row select:focus {
+    border-color: #7094f5;
+    box-shadow: 0 0 0 2px rgba(112,148,245,.18);
+}
+
+/* ── Form controls ── */
+[data-bs-theme="dark"] .form-group input,
+[data-bs-theme="dark"] .form-group select,
+[data-bs-theme="dark"] .form-group textarea {
+    background: #262d3d;
+    border-color: rgba(255,255,255,.12);
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .form-group input:focus,
+[data-bs-theme="dark"] .form-group select:focus,
+[data-bs-theme="dark"] .form-group textarea:focus {
+    border-color: #7094f5;
+    box-shadow: 0 0 0 2px rgba(112,148,245,.15);
+}
+[data-bs-theme="dark"] .form-group label {
+    color: #adb5bd;
+}
+
+/* ── Modals ── */
+[data-bs-theme="dark"] .modal-box {
+    background: #1e2533;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+/* ── Notification panel ── */
+[data-bs-theme="dark"] .notif-panel {
+    background: #1e2533;
+    border-color: rgba(255,255,255,.08);
+}
+
+/* ── Settings section divider ── */
+[data-bs-theme="dark"] .settings-section h3 {
+    border-bottom-color: rgba(255,255,255,.08);
+}
+
+/* ── Buttons ── */
+[data-bs-theme="dark"] .header-add-btn,
+[data-bs-theme="dark"] .btn-add-primary {
+    background: #5a72d4;
+}
+[data-bs-theme="dark"] .header-add-btn:hover,
+[data-bs-theme="dark"] .btn-add-primary:hover {
+    background: #4a61b8;
+    color: #fff;
+}

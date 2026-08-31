@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Monitoring | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/sidebar_partner') %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                  <div class="col-12">
+                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                      <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
+                      <div class="page-title-right">
+                        <ol class="breadcrumb m-0">
+                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item active">Monitoring</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="text-muted mb-3"><i class="ri-shield-check-line me-1"></i>This page tracks only your own submitted requests, documents, and partnership record.</p>
+
+                <!-- Stat Cards -->
+                <div class="row">
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Total Requests</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="cnt-total">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-primary-subtle text-primary mb-0"><i class="ri-file-list-3-line align-middle"></i> Submitted</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-primary-subtle rounded-circle fs-2"><i class="ri-file-list-3-line text-primary"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">In Progress</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="cnt-progress">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-warning-subtle text-warning mb-0"><i class="ri-time-line align-middle"></i> Awaiting review</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-warning-subtle rounded-circle fs-2"><i class="ri-time-line text-warning"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Approved</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="cnt-approved">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-success-subtle text-success mb-0"><i class="ri-checkbox-circle-line align-middle"></i> Confirmed</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-success-subtle rounded-circle fs-2"><i class="ri-checkbox-circle-line text-success"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Documents on File</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="cnt-docs">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-info-subtle text-info mb-0"><i class="ri-file-shield-2-line align-middle"></i> Uploaded</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-info-subtle rounded-circle fs-2"><i class="ri-file-shield-2-line text-info"></i></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end stat cards -->
+
+                <!-- My Partnership Requests -->
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-header d-flex align-items-center">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-list-3-line me-2"></i>My Partnership Requests</h4>
+                                <a href="/partner/requests" class="btn btn-soft-primary btn-sm"><i class="ri-add-line me-1"></i>New Request</a>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Institution</th><th>Request Type</th><th>Status</th>
+                                                <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
+                                                <th>Administrator</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pr-monitor-body">
+                                            <tr><td colspan="9" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- My Document Requests -->
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-header d-flex align-items-center">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-shield-2-line me-2"></i>My Document Requests</h4>
+                                <a href="/partner/requests" class="btn btn-soft-primary btn-sm"><i class="ri-add-line me-1"></i>New Request</a>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Institution</th><th>Request Type</th><th>Status</th>
+                                                <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
+                                                <th>Administrator</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="dr-monitor-body">
+                                            <tr><td colspan="9" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Approval Progress -->
+                    <div class="col-xl-6">
+                        <div class="card">
+                            <div class="card-header"><h4 class="card-title mb-0"><i class="ri-progress-4-line me-2"></i>Approval Progress</h4></div>
+                            <div class="card-body" id="approval-progress-body">
+                                <div class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Verification Status -->
+                    <div class="col-xl-6">
+                        <div class="card">
+                            <div class="card-header"><h4 class="card-title mb-0"><i class="ri-file-shield-2-line me-2"></i>Document Verification Status</h4></div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead class="table-light"><tr><th>Document</th><th>Status</th></tr></thead>
+                                        <tbody id="doc-verification-body">
+                                            <tr><td colspan="2" class="text-center text-muted py-4">Loading…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Renewal Status -->
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-header"><h4 class="card-title mb-0"><i class="ri-refresh-line me-2"></i>Renewal Status</h4></div>
+                            <div class="card-body" id="renewal-status-body">
+                                <div class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Draft Collaboration Modal -->
+        <div class="modal fade" id="pr-draft-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="pr-draft-modal-title"><i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="pr-draft-timeline" class="mb-3"></div>
+                        <div id="pr-draft-upload-wrap" class="border-top pt-3">
+                            <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
+                            <div class="mb-2">
+                                <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+                            </div>
+                            <div class="mb-2">
+                                <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
+                                <i class="ri-upload-2-line me-1"></i>Upload New Draft
+                            </button>
+                            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. CIRL is notified of your revision.</small>
+                        </div>
+                        <div id="pr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
+                            <i class="ri-lock-line me-1"></i>This request has already been decided — no further documents can be added.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Request Draft Collaboration Modal -->
+        <div class="modal fade" id="dr-draft-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="dr-draft-modal-title"><i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="dr-draft-timeline" class="mb-3"></div>
+                        <div id="dr-draft-upload-wrap" class="border-top pt-3">
+                            <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
+                            <div class="mb-2">
+                                <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+                            </div>
+                            <div class="mb-2">
+                                <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
+                                <i class="ri-upload-2-line me-1"></i>Upload New Draft
+                            </button>
+                            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. CIRL is notified of your revision.</small>
+                        </div>
+                        <div id="dr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
+                            <i class="ri-lock-line me-1"></i>This document request has already been decided — no further documents can be added.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Draft Preview Modal — shared by both the Partnership Request and
+             Document Request draft timelines; opens on top of whichever
+             draft-collaboration modal triggered it. -->
+        <div class="modal fade" id="draft-preview-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="ri-eye-line me-2 text-primary"></i>Draft Preview</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="draft-preview-body" class="mb-3"></div>
+                        <div class="border-top pt-3">
+                            <p class="fs-13 fw-medium mb-1" id="draft-preview-filename">—</p>
+                            <p class="fs-13 text-muted mb-1">Uploaded by: <span id="draft-preview-uploader">—</span></p>
+                            <p class="fs-13 text-muted mb-1">Date: <span id="draft-preview-when">—</span></p>
+                            <p class="fs-13 text-muted mb-0">Note: <span id="draft-preview-note">—</span></p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <a href="#" id="draft-preview-download-btn" class="btn btn-success btn-sm"><i class="ri-download-2-line me-1"></i>Download</a>
+                        <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Request Renewal Modal -->
+        <div class="modal fade" id="renewal-request-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="ri-refresh-line me-2 text-primary"></i>Request Renewal</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-3">Requesting renewal for <strong id="rr-institution">—</strong>. Current expiry: <span id="rr-current-end">—</span>.</p>
+                        <div class="mb-3">
+                            <label class="form-label">Proposed New End Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="rr-end-date">
+                        </div>
+                        <div class="mb-1">
+                            <label class="form-label">Notes</label>
+                            <textarea class="form-control" id="rr-notes" rows="3" placeholder="Optional context for the renewal…"></textarea>
+                        </div>
+                        <div class="alert alert-danger d-none mt-3 mb-0 py-2 fs-13" id="rr-error"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="rr-submit-btn" onclick="submitRenewalRequest()">
+                            <i class="ri-send-plane-line me-1"></i>Submit Request
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="mon-toast" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;font-size:.8125rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .3s;"></div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script>
+    function showToast(msg, bg) {
+        var t = document.getElementById('mon-toast');
+        t.style.background = bg || '#405189'; t.textContent = msg; t.style.opacity = '1';
+        clearTimeout(t._to); t._to = setTimeout(function () { t.style.opacity = '0'; }, 3000);
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function statusBadgeClass(status) {
+        if (status === 'Approved' || status === 'Fulfilled') return 'bg-success-subtle text-success';
+        if (status === 'Rejected') return 'bg-danger-subtle text-danger';
+        if (status === 'Withdrawn') return 'bg-secondary-subtle text-secondary';
+        if (status === 'Draft') return 'bg-light text-dark';
+        return 'bg-warning-subtle text-warning';
+    }
+
+    // "Current Stage" is a human-readable phase name derived from the same
+    // `status` field the Status column already shows — not a separate piece
+    // of backend state — so the two columns never disagree.
+    var PR_STAGE_LABEL = {
+        'Draft': 'Draft — Not Submitted', 'Pending': 'Awaiting Review',
+        'Under Review': 'Under Review by CIRL', 'Approved': 'Approved',
+        'Rejected': 'Rejected', 'Withdrawn': 'Withdrawn'
+    };
+    var DR_STAGE_LABEL = {
+        'Pending': 'Awaiting Fulfillment', 'Under Review': 'Additional Info Requested',
+        'Fulfilled': 'Fulfilled', 'Rejected': 'Rejected'
+    };
+
+    function fmtWhen(iso, fallback) {
+        if (!iso) return fallback || '—';
+        var d = new Date(iso);
+        return isNaN(d) ? (fallback || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Attached Documents = the submitter's own OCR-attached file (Partnership
+    // Requests only) plus any supporting documents CIRL staff uploaded during
+    // review — both are already-archived Document Library entries, never a
+    // second copy of the same file.
+    function renderAttachedDocs(r) {
+        var docs = [];
+        if (r.attachmentLink) docs.push({ link: r.attachmentLink, label: 'Your upload' });
+        (r.supportingDocuments || []).forEach(function (d) {
+            docs.push({ link: d.fileLink, label: d.originalFilename || 'CIRL document' });
+        });
+        if (!docs.length) return '<span class="text-muted fs-12">—</span>';
+        return docs.map(function (d) {
+            return '<a href="' + d.link + '" target="_blank" rel="noopener" class="btn btn-sm btn-soft-info me-1 mb-1" title="' + escapeHtml(d.label) + '"><i class="ri-download-2-line"></i></a>';
+        }).join('');
+    }
+
+    function setCount(id, n) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = n;
+    }
+
+    /* ─── DRAFT / DOCUMENT COLLABORATION (own requests only — the request's
+       own submittedByEmail is the ownership boundary, enforced server-side
+       on POST /api/requests/:id/documents; myRequests itself is already
+       scoped to "mine" by GET /api/requests/mine, so there is no way to
+       reach another user's request id from this page). ─── */
+    var ROLE_LABEL = {
+        'Administrator': 'Administrator', 'Staff': 'Staff',
+        'Auth. Personnel': 'Auth. Personnel', 'potential_partner': 'Partner',
+        'Requester': 'You'
+    };
+
+    function fileKind(filename, mime) {
+        var ext = String(filename || '').split('.').pop().toLowerCase();
+        if ((mime && mime.indexOf('pdf') !== -1) || ext === 'pdf') return 'pdf';
+        if ((mime && mime.indexOf('image/') === 0) || ['jpg', 'jpeg', 'png'].indexOf(ext) !== -1) return 'image';
+        return 'other';
+    }
+
+    function fmtFileSize(bytes) {
+        if (!bytes) return '';
+        return bytes > 1e6 ? (bytes / 1e6).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
+    }
+
+    // Every draft/version gets its own dedicated "Draft Preview" modal
+    // (opened on top of the pr-draft-modal/dr-draft-modal that's already
+    // showing) rather than an inline expand — same-screen, never navigates
+    // away, and carries uploader/date/note context alongside the file.
+    var DRAFT_TIMELINE_ITEMS = {};
+
+    // Bootstrap 5 doesn't reliably support two modals open at once (the
+    // second one's backdrop can render behind the first, eating clicks), so
+    // instead of stacking, this SWAPS: hide whichever draft-collaboration
+    // modal triggered it, show the preview modal, then restore the
+    // original one when the preview is closed.
+    var draftPreviewReturnTo = null;
+    document.getElementById('draft-preview-modal').addEventListener('hidden.bs.modal', function () {
+        if (draftPreviewReturnTo) {
+            var returnEl = document.getElementById(draftPreviewReturnTo);
+            draftPreviewReturnTo = null;
+            if (returnEl) new bootstrap.Modal(returnEl).show();
+        }
+    });
+
+    function openDraftPreviewModal(prefix, idx) {
+        var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
+        if (!item || !item.link) return;
+        var kind = fileKind(item.filename, item.fileType);
+        var body = document.getElementById('draft-preview-body');
+        if (kind === 'pdf') {
+            body.innerHTML = '<iframe src="' + item.link + '" style="width:100%;height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></iframe>';
+        } else if (kind === 'image') {
+            body.innerHTML = '<div class="text-center"><img src="' + item.link + '" style="max-width:100%;max-height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></div>';
+        } else {
+            body.innerHTML = '<div class="text-center text-muted py-5"><i class="ri-file-3-line fs-1 d-block mb-2"></i>Preview not available for this file type.</div>';
+        }
+        document.getElementById('draft-preview-filename').textContent = item.filename;
+        document.getElementById('draft-preview-uploader').textContent = item.uploadedBy + ' (' + (ROLE_LABEL[item.role] || item.role) + ')';
+        document.getElementById('draft-preview-when').textContent = item.when;
+        document.getElementById('draft-preview-note').textContent = item.note || '—';
+        var downloadBtn = document.getElementById('draft-preview-download-btn');
+        downloadBtn.href = item.link;
+        downloadBtn.setAttribute('download', item.filename);
+
+        var sourceEl = document.getElementById((prefix || 'pr') + '-draft-modal');
+        var sourceInstance = sourceEl && bootstrap.Modal.getInstance(sourceEl);
+        draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
+        if (sourceInstance) sourceInstance.hide();
+
+        new bootstrap.Modal(document.getElementById('draft-preview-modal')).show();
+    }
+
+    function draftItemHtml(item, idx, prefix) {
+        var roleLabel = ROLE_LABEL[item.role] || item.role || 'Reviewer';
+        var isReviewerRole = item.role === 'Administrator' || item.role === 'Staff';
+        var avatar = '<div class="flex-shrink-0"><span class="avatar-title ' + (isReviewerRole ? 'bg-primary-subtle text-primary' : 'bg-success-subtle text-success') + ' rounded-circle" style="width:36px;height:36px;"><i class="ri-' + (isReviewerRole ? 'shield-star-line' : 'user-line') + '"></i></span></div>';
+        var header = '<div class="d-flex justify-content-between flex-wrap gap-1">' +
+            '<div><span class="fw-semibold fs-13">' + escapeHtml(item.uploadedBy) + '</span> <span class="badge ' + (isReviewerRole ? 'bg-primary-subtle text-primary' : 'bg-success-subtle text-success') + ' fs-10 ms-1">' + escapeHtml(roleLabel) + '</span></div>' +
+            '<span class="text-muted fs-12">' + escapeHtml(item.when) + '</span>' +
+            '</div>';
+        if (!item.link) {
+            return '<div class="d-flex gap-3 mb-3">' + avatar +
+                '<div class="flex-grow-1 border rounded p-3">' + header +
+                (item.note ? '<div class="fs-13 text-muted mt-1">' + escapeHtml(item.note) + '</div>' : '') +
+                '</div></div>';
+        }
+        var kind = fileKind(item.filename, item.fileType);
+        var sizeStr = fmtFileSize(item.fileSize);
+        var previewBtn = (kind === 'pdf' || kind === 'image')
+            ? '<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal(\'' + (prefix || 'pr') + '\', ' + idx + ')"><i class="ri-eye-line me-1"></i>Preview</button>'
+            : '<span class="text-muted fs-12 align-self-center">Preview not available for this file type</span>';
+        return '<div class="d-flex gap-3 mb-3">' + avatar +
+            '<div class="flex-grow-1 border rounded p-3">' + header +
+            '<div class="fs-13 fw-medium mt-1">' + escapeHtml(item.filename) + (sizeStr ? ' <span class="text-muted fs-12">(' + sizeStr + ')</span>' : '') + '</div>' +
+            (item.note ? '<div class="fs-13 text-muted mt-1 fst-italic">"' + escapeHtml(item.note) + '"</div>' : '') +
+            '<div class="d-flex align-items-center gap-2 mt-2">' + previewBtn + ' <a href="' + escapeHtml(item.link) + '" download="' + escapeHtml(item.filename) + '" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a></div>' +
+            '</div></div>';
+    }
+
+    function buildDraftTimelineItems(r) {
+        var items = [];
+        if (r.attachmentLink) {
+            items.push({
+                uploadedBy: r.requestedBy || 'You', role: 'Requester', when: r.date || '—',
+                filename: String(r.attachmentLink).split('/').pop(), link: r.attachmentLink,
+                note: 'Initial submission', fileType: '', fileSize: 0
+            });
+        }
+        (r.supportingDocuments || []).forEach(function (d) {
+            items.push({
+                uploadedBy: d.uploadedBy || 'Unknown', role: d.uploaderRole || 'Reviewer',
+                when: d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—',
+                filename: d.originalFilename || 'Document', link: d.fileLink,
+                note: d.note || '', fileType: d.fileType, fileSize: d.fileSize
+            });
+        });
+        return items;
+    }
+
+    function renderDraftTimeline(r) {
+        var items = buildDraftTimelineItems(r);
+        DRAFT_TIMELINE_ITEMS.pr = items;
+        var wrap = document.getElementById('pr-draft-timeline');
+        wrap.innerHTML = items.length
+            ? items.map(function (it, idx) { return draftItemHtml(it, idx, 'pr'); }).join('')
+            : '<p class="text-muted fs-13 mb-0">No draft documents yet.</p>';
+    }
+
+    /* ─── DOCUMENT REQUEST DRAFT / DOCUMENT COLLABORATION ───
+       Mirrors the Partnership Request draft timeline above, sharing every
+       helper (fileKind, fmtFileSize, togglePreview, draftItemHtml,
+       ROLE_LABEL) — only the data source (myDocRequests) and the synthetic
+       first entry ("Request submitted") differ. */
+    function buildDRDraftTimelineItems(r) {
+        var items = [{
+            uploadedBy: r.requestedBy || 'You', role: 'Requester',
+            when: r.submittedAt
+                ? new Date(r.submittedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+                : (r.date || '—'),
+            note: 'Request submitted'
+        }];
+        (r.supportingDocuments || []).forEach(function (d) {
+            items.push({
+                uploadedBy: d.uploadedBy || 'Unknown', role: d.uploaderRole || 'Reviewer',
+                when: d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—',
+                filename: d.originalFilename || 'Document', link: d.fileLink,
+                note: d.note || '', fileType: d.fileType, fileSize: d.fileSize
+            });
+        });
+        return items;
+    }
+
+    function renderDRDraftTimeline(r) {
+        var items = buildDRDraftTimelineItems(r);
+        DRAFT_TIMELINE_ITEMS.dr = items;
+        var wrap = document.getElementById('dr-draft-timeline');
+        wrap.innerHTML = items.map(function (it, idx) { return draftItemHtml(it, idx, 'dr'); }).join('');
+    }
+
+    var currentDraftDRId = null;
+    function openDRDraftModal(id) {
+        var r = myDocRequests.find(function (x) { return x.id === id; });
+        if (!r) return;
+        currentDraftDRId = id;
+        document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
+        renderDRDraftTimeline(r);
+        var closed = ['Fulfilled', 'Rejected'].indexOf(r.status) !== -1;
+        document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
+        document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
+        document.getElementById('dr-draft-file').value = '';
+        document.getElementById('dr-draft-note').value = '';
+        new bootstrap.Modal(document.getElementById('dr-draft-modal')).show();
+    }
+
+    function uploadDRDraftDocument() {
+        var fileInput = document.getElementById('dr-draft-file');
+        var noteInput = document.getElementById('dr-draft-note');
+        var file = fileInput.files[0];
+        if (!file || !currentDraftDRId) { showToast('Choose a file first.', '#f06548'); return; }
+        var btn = document.getElementById('dr-draft-upload-btn');
+        var originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+        var formData = new FormData();
+        formData.append('document', file);
+        formData.append('note', noteInput.value.trim());
+        fetch('/api/document-requests/' + currentDraftDRId + '/documents', { method: 'POST', body: formData })
+            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (result) {
+                if (!result.ok) throw new Error(result.data.error || 'Upload failed.');
+                var idx = myDocRequests.findIndex(function (x) { return x.id === currentDraftDRId; });
+                if (idx !== -1 && result.data.request) myDocRequests[idx] = result.data.request;
+                renderDRDraftTimeline(myDocRequests.find(function (x) { return x.id === currentDraftDRId; }));
+                renderDRTable();
+                fileInput.value = '';
+                noteInput.value = '';
+                showToast('New draft version uploaded.', '#0ab39c');
+            })
+            .catch(function (e) { showToast(e.message, '#f06548'); })
+            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
+    }
+
+    var currentDraftPRId = null;
+    function openDraftModal(id) {
+        var r = myRequests.find(function (x) { return x.id === id; });
+        if (!r) return;
+        currentDraftPRId = id;
+        document.getElementById('pr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
+        renderDraftTimeline(r);
+        var closed = ['Approved', 'Rejected', 'Withdrawn'].indexOf(r.status) !== -1;
+        document.getElementById('pr-draft-upload-wrap').style.display = closed ? 'none' : '';
+        document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
+        document.getElementById('pr-draft-file').value = '';
+        document.getElementById('pr-draft-note').value = '';
+        new bootstrap.Modal(document.getElementById('pr-draft-modal')).show();
+    }
+
+    function uploadDraftDocument() {
+        var fileInput = document.getElementById('pr-draft-file');
+        var noteInput = document.getElementById('pr-draft-note');
+        var file = fileInput.files[0];
+        if (!file || !currentDraftPRId) { showToast('Choose a file first.', '#f06548'); return; }
+        var btn = document.getElementById('pr-draft-upload-btn');
+        var originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
+        var formData = new FormData();
+        formData.append('document', file);
+        formData.append('note', noteInput.value.trim());
+        fetch('/api/requests/' + currentDraftPRId + '/documents', { method: 'POST', body: formData })
+            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+            .then(function (result) {
+                if (!result.ok) throw new Error(result.data.error || 'Upload failed.');
+                var idx = myRequests.findIndex(function (x) { return x.id === currentDraftPRId; });
+                if (idx !== -1 && result.data.request) myRequests[idx] = result.data.request;
+                renderDraftTimeline(myRequests.find(function (x) { return x.id === currentDraftPRId; }));
+                renderPRTable();
+                fileInput.value = '';
+                noteInput.value = '';
+                showToast('New draft version uploaded.', '#0ab39c');
+            })
+            .catch(function (e) { showToast(e.message, '#f06548'); })
+            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
+    }
+
+    var myRequests = [];
+    var myDocRequests = [];
+
+    function renderPRTable() {
+        var body = document.getElementById('pr-monitor-body');
+        if (!myRequests.length) {
+            body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = myRequests.map(function (r) {
+            var actions = '';
+            if (r.status === 'Draft') {
+                actions = '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>';
+            } else if (r.status === 'Pending' || r.status === 'Under Review') {
+                actions = '<button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ')" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
+            } else {
+                actions = '';
+            }
+            if (r.status !== 'Draft') {
+                actions += ' <button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line me-1"></i>Draft</button>';
+            }
+            if (!actions) actions = '<span class="text-muted fs-12">—</span>';
+            return '<tr data-pr-id="' + r.id + '">' +
+                '<td>' + (escapeHtml(r.institution) || '<span class="text-muted">(untitled draft)</span>') + '</td>' +
+                '<td>' + (r.isRenewal ? 'Renewal' : 'Partnership') + '</td>' +
+                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
+                '<td>' + (r.date || '—') + '</td>' +
+                '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
+                '<td>' + (PR_STAGE_LABEL[r.status] || r.status) + '</td>' +
+                '<td>' + (r.decidedBy || '—') + '</td>' +
+                '<td>' + renderAttachedDocs(r) + '</td>' +
+                '<td class="text-end">' + actions + '</td></tr>';
+        }).join('');
+    }
+
+    function renderDRTable() {
+        var body = document.getElementById('dr-monitor-body');
+        if (!myDocRequests.length) {
+            body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No document requests yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = myDocRequests.map(function (r) {
+            var actions =
+                '<button class="btn btn-sm btn-soft-info me-1" onclick="openDRDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line"></i></button>' +
+                '<a href="/document-requests/' + r.id + '/print" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary me-1" title="Print"><i class="ri-printer-line"></i></a>' +
+                '<a href="/api/document-requests/' + r.id + '/pdf" class="btn btn-sm btn-soft-info me-1" title="Download PDF"><i class="ri-file-download-line"></i></a>' +
+                (r.status === 'Pending'
+                    ? '<button class="btn btn-sm btn-soft-danger" onclick="cancelDocRequest(' + r.id + ')" title="Cancel"><i class="ri-close-circle-line me-1"></i>Cancel</button>'
+                    : '');
+            return '<tr data-dr-id="' + r.id + '">' +
+                '<td>' + escapeHtml(r.institution) + '</td>' +
+                '<td>' + escapeHtml(r.documentType) + '</td>' +
+                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
+                '<td>' + (r.date || '—') + '</td>' +
+                '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
+                '<td>' + (DR_STAGE_LABEL[r.status] || r.status) + '</td>' +
+                '<td>' + (r.decidedBy || '—') + '</td>' +
+                '<td>' + renderAttachedDocs(r) + '</td>' +
+                '<td class="text-end">' + actions + '</td></tr>';
+        }).join('');
+    }
+
+    function withdrawRequest(id) {
+        if (!confirm('Withdraw this partnership request?')) return;
+        fetch('/api/requests/' + id + '/withdraw', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) { showToast('Request withdrawn.', '#15803d'); loadPRRequests(); }
+            else showToast(data.error || 'Failed to withdraw request.', '#f06548');
+        });
+    }
+
+    function cancelDocRequest(id) {
+        if (!confirm('Cancel this document request?')) return;
+        fetch('/api/document-requests/' + id, { method: 'DELETE' }).then(function (r) { return r.json(); }).then(function (data) {
+            if (data.success) { showToast('Request cancelled.', '#15803d'); loadDRRequests(); }
+            else showToast(data.error || 'Failed to cancel request.', '#f06548');
+        });
+    }
+
+    function loadPRRequests() {
+        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
+            myRequests = Array.isArray(requests) ? requests : [];
+            var real = myRequests.filter(function (r) { return r.status !== 'Draft'; });
+
+            setCount('cnt-total', real.length);
+            setCount('cnt-progress', real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length);
+            setCount('cnt-approved', real.filter(function (r) { return r.status === 'Approved'; }).length);
+
+            renderPRTable();
+
+            var progBox = document.getElementById('approval-progress-body');
+            var total = real.length;
+            var approved = real.filter(function (r) { return r.status === 'Approved'; }).length;
+            var pct = total ? Math.round((approved / total) * 100) : 0;
+            progBox.innerHTML =
+                '<div class="d-flex justify-content-between mb-1"><span>Approved</span><span>' + approved + ' / ' + total + '</span></div>' +
+                '<div class="progress mb-3" style="height:10px"><div class="progress-bar bg-success" style="width:' + pct + '%"></div></div>' +
+                '<div class="row g-2 text-center">' +
+                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0">' + real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length + '</h5><small class="text-muted">In Progress</small></div></div>' +
+                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
+                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-danger">' + real.filter(function (r) { return r.status === 'Rejected'; }).length + '</h5><small class="text-muted">Rejected</small></div></div>' +
+                '</div>';
+
+            return openFromQuery();
+        }).catch(function () {
+            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('approval-progress-body').innerHTML = '';
+        });
+    }
+
+    function loadDRRequests() {
+        return fetch('/api/document-requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
+            myDocRequests = Array.isArray(requests) ? requests : [];
+            renderDRTable();
+            return openFromQuery();
+        }).catch(function () {
+            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+        });
+    }
+
+    // Deep-link support so a notification ("Partnership Request Approved",
+    // "Document Request Fulfilled", etc.) can jump straight to and highlight
+    // the matching row — `type` disambiguates Partnership vs Document Request
+    // ids, which are not unique with respect to each other.
+    function openFromQuery() {
+        var params = new URLSearchParams(window.location.search);
+        var id = params.get('id');
+        var type = params.get('type');
+        if (!id || !type) return;
+        var row = document.querySelector('#' + (type === 'dr' ? 'dr' : 'pr') + '-monitor-body tr[data-' + (type === 'dr' ? 'dr' : 'pr') + '-id="' + id + '"]');
+        if (!row) return;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('table-warning');
+        setTimeout(function () { row.classList.remove('table-warning'); }, 3000);
+    }
+
+    fetch('/api/documents/mine').then(function (r) { return r.json(); }).then(function (docs) {
+        setCount('cnt-docs', docs.length);
+        var body = document.getElementById('doc-verification-body');
+        if (docs.length === 0) {
+            body.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">No documents uploaded yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = docs.map(function (d) {
+            var badge = d.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+            var label = d.status === 'Needs Review' ? 'Pending Verification' : 'Verified';
+            return '<tr><td>' + d.title + '</td><td><span class="badge ' + badge + '">' + label + '</span></td></tr>';
+        }).join('');
+    }).catch(function () {
+        document.getElementById('doc-verification-body').innerHTML = '<tr><td colspan="2" class="text-center text-danger py-4">Failed to load documents.</td></tr>';
+    });
+
+    var myPartnerships = [];
+
+    Promise.all([
+        fetch('/api/partnerships/mine').then(function (r) { return r.json(); }),
+        fetch('/api/requests/mine').then(function (r) { return r.json(); })
+    ]).then(function (results) {
+        var partnerships = Array.isArray(results[0]) ? results[0] : [];
+        var reqs = Array.isArray(results[1]) ? results[1] : [];
+        myPartnerships = partnerships;
+
+        // Partnerships that already have a renewal request awaiting a decision.
+        var pendingRenewalIds = new Set(
+            reqs
+                .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
+                .map(function (r) { return r.renewalPartnershipId; })
+        );
+
+        var box = document.getElementById('renewal-status-body');
+        if (partnerships.length === 0) {
+            box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
+            return;
+        }
+        box.innerHTML = partnerships.map(function (p) {
+            var status = p.status || 'Unknown';
+            var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+            var inst = p.inst || p.institution || '';
+            var renewalPending = pendingRenewalIds.has(p.id);
+            var actionHtml = renewalPending
+                ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
+                : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
+            return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
+                '<div><strong>' + inst + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
+                '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
+        }).join('');
+    }).catch(function () {
+        document.getElementById('renewal-status-body').innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
+    });
+
+    var renewalModal = null;
+    var renewingPartnershipId = null;
+
+    function openRenewalModal(id) {
+        var p = myPartnerships.find(function (x) { return x.id === id; });
+        if (!p) return;
+        renewingPartnershipId = id;
+        document.getElementById('rr-institution').textContent = p.inst || p.institution || '';
+        document.getElementById('rr-current-end').textContent = p.end || '—';
+        document.getElementById('rr-end-date').value = '';
+        document.getElementById('rr-notes').value = '';
+        document.getElementById('rr-error').classList.add('d-none');
+        if (!renewalModal) renewalModal = new bootstrap.Modal(document.getElementById('renewal-request-modal'));
+        renewalModal.show();
+    }
+
+    function submitRenewalRequest() {
+        if (!renewingPartnershipId) return;
+        var endDate = document.getElementById('rr-end-date').value;
+        var notes = document.getElementById('rr-notes').value.trim();
+        var errBox = document.getElementById('rr-error');
+        errBox.classList.add('d-none');
+
+        if (!endDate) {
+            errBox.textContent = 'Please choose a proposed new end date.';
+            errBox.classList.remove('d-none');
+            return;
+        }
+
+        var btn = document.getElementById('rr-submit-btn');
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Submitting…';
+
+        fetch('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proposedEndDate: endDate, notes: notes })
+        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            if (res.ok && res.data.success) {
+                renewalModal.hide();
+                location.reload();
+            } else {
+                errBox.textContent = res.data.error || 'Failed to submit renewal request.';
+                errBox.classList.remove('d-none');
+            }
+        }).catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = orig;
+            errBox.textContent = 'Network error while submitting the request.';
+            errBox.classList.remove('d-none');
+        });
+    }
+
+    loadPRRequests();
+    loadDRRequests();
+</script>
+</body>
+</html>

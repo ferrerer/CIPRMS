@@ -1,0 +1,502 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <title>Calendar | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet"/>
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet"/>
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet"/>
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet"/>
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet"/>
+    <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
+</head>
+<body>
+<div id="layout-wrapper">
+    <%- include('../partials/header') %>
+    <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+    <div class="main-content">
+        <div class="page-content">
+            <div class="container-fluid">
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                            <h4 class="mb-sm-0">Calendar</h4>
+                            <div class="page-title-right">
+                                <ol class="breadcrumb m-0">
+                                    <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                    <li class="breadcrumb-item active">Calendar</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12">
+                        <div class="row">
+
+                            <!-- col-xl-3 sidebar â€” exact from apps-calendar.html -->
+                            <% var canManageCalendar = typeof user !== 'undefined' && user && user.role === 'Administrator'; %>
+                            <div class="col-xl-3">
+                                <% if (canManageCalendar) { %>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <button class="btn btn-primary w-100" id="btn-new-event">
+                                            <i class="mdi mdi-plus"></i> Create New Event
+                                        </button>
+                                        <div id="external-events">
+                                            <br>
+                                            <p class="text-muted">Drag and drop your event or click in the calendar</p>
+                                            <div class="external-event fc-event bg-success-subtle text-success" data-class="bg-success-subtle"><i class="mdi mdi-checkbox-blank-circle me-2"></i>Renewal</div>
+                                            <div class="external-event fc-event bg-danger-subtle text-danger" data-class="bg-danger-subtle"><i class="mdi mdi-checkbox-blank-circle me-2"></i>Expiry / Deadline</div>
+                                            <div class="external-event fc-event bg-primary-subtle text-primary" data-class="bg-primary-subtle"><i class="mdi mdi-checkbox-blank-circle me-2"></i>Meeting</div>
+                                            <div class="external-event fc-event bg-warning-subtle text-warning" data-class="bg-warning-subtle"><i class="mdi mdi-checkbox-blank-circle me-2"></i>Mobility / Exchange</div>
+                                            <div class="external-event fc-event bg-info-subtle text-info" data-class="bg-info-subtle"><i class="mdi mdi-checkbox-blank-circle me-2"></i>Partnership Review</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <% } %>
+
+                                <div>
+                                    <h5 class="mb-1">Upcoming Events</h5>
+                                    <p class="text-muted">Don't miss scheduled events</p>
+                                    <div class="pe-2 me-n1 mb-3" data-simplebar style="height:400px">
+                                        <div id="upcoming-event-list"></div>
+                                    </div>
+                                </div>
+
+                                <div class="card">
+                                    <div class="card-body bg-info-subtle">
+                                        <div class="d-flex">
+                                            <div class="flex-shrink-0">
+                                                <i data-feather="calendar" class="text-info icon-dual-info"></i>
+                                            </div>
+                                            <div class="flex-grow-1 ms-3">
+                                                <h6 class="fs-15">Partnership Calendar</h6>
+                                                <% if (canManageCalendar) { %>
+                                                <p class="text-muted mb-0">Click a date or drag an event type onto the calendar. Click events to view, edit, or delete.</p>
+                                                <% } else { %>
+                                                <p class="text-muted mb-0">Click an event to view its details.</p>
+                                                <% } %>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div><!-- end col-xl-3 -->
+
+                            <!-- col-xl-9 main calendar â€” exact from apps-calendar.html -->
+                            <div class="col-xl-9">
+                                <div class="card card-h-100">
+                                    <div class="card-body">
+                                        <div id="calendar"></div>
+                                    </div>
+                                </div>
+                            </div><!-- end col-xl-9 -->
+                        </div><!-- end row -->
+
+                        <div style="clear:both"></div>
+
+                        <!-- Event Modal â€” same structure as apps-calendar.html -->
+                        <div class="modal fade" id="event-modal" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0">
+                                    <div class="modal-header p-3 bg-info-subtle">
+                                        <h5 class="modal-title" id="modal-title">Event</h5>
+                                        <span class="badge bg-success-subtle text-success ms-2 d-none" id="v-gcal-badge" title="Recipients were invited via Google Calendar"><i class="ri-google-fill me-1"></i>Synced to Google Calendar</span>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <!-- View mode -->
+                                        <div id="view-mode">
+                                            <div class="d-flex mb-2">
+                                                <div class="flex-shrink-0 me-3"><i class="ri-calendar-event-line text-muted fs-16"></i></div>
+                                                <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="v-date"></h6></div>
+                                            </div>
+                                            <div class="d-flex align-items-center mb-2">
+                                                <div class="flex-shrink-0 me-3"><i class="ri-time-line text-muted fs-16"></i></div>
+                                                <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="v-time"></h6></div>
+                                            </div>
+                                            <div class="d-flex align-items-center mb-2">
+                                                <div class="flex-shrink-0 me-3"><i class="ri-map-pin-line text-muted fs-16"></i></div>
+                                                <div class="flex-grow-1"><h6 class="fw-semibold mb-0" id="v-location"></h6></div>
+                                            </div>
+                                            <div class="d-flex mb-3">
+                                                <div class="flex-shrink-0 me-3"><i class="ri-discuss-line text-muted fs-16"></i></div>
+                                                <div class="flex-grow-1"><p class="text-muted mb-0" id="v-desc"></p></div>
+                                            </div>
+                                        </div>
+                                        <!-- Edit/Add form -->
+                                        <div id="edit-mode" class="d-none">
+                                            <div class="mb-3">
+                                                <label class="form-label">Event Type</label>
+                                                <select class="form-select" id="f-type">
+                                                    <option value="bg-primary-subtle">Meeting</option>
+                                                    <option value="bg-danger-subtle">Expiry / Deadline</option>
+                                                    <option value="bg-success-subtle">Renewal</option>
+                                                    <option value="bg-warning-subtle">Mobility / Exchange</option>
+                                                    <option value="bg-info-subtle">Partnership Review</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Event Name <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" id="f-title" placeholder="e.g. MOA Renewal â€“ Osaka University">
+                                                <div class="invalid-feedback">Please provide an event name.</div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Date <span class="text-danger">*</span></label>
+                                                <input type="date" class="form-control" id="f-date">
+                                            </div>
+                                            <div class="row mb-3">
+                                                <div class="col-6">
+                                                    <label class="form-label">Start Time</label>
+                                                    <input type="time" class="form-control" id="f-start">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label">End Time</label>
+                                                    <input type="time" class="form-control" id="f-end">
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Institution / Location</label>
+                                                <input type="text" class="form-control" id="f-location" placeholder="e.g. Osaka University">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Notes</label>
+                                                <textarea class="form-control" id="f-desc" rows="2" placeholder="Additional notes..."></textarea>
+                                            </div>
+                                            <div class="mb-3" id="f-recipients-wrap">
+                                                <label class="form-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
+                                                <select class="form-select" id="f-recipients" multiple size="6">
+                                                    <optgroup label="Roles">
+                                                        <option value="all">All Users</option>
+                                                        <option value="Administrator">Administrators</option>
+                                                        <option value="Auth. Personnel">Auth. Personnel</option>
+                                                        <option value="potential_partner">Partner</option>
+                                                        <option value="Staff">Staff Users</option>
+                                                    </optgroup>
+                                                    <optgroup label="Individual Users" id="f-recipients-individuals"></optgroup>
+                                                </select>
+                                                <div class="form-text">Ctrl/Cmd-click to select multiple. Only the users selected here will be notified. Leave blank to create the event without notifying anyone.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-soft-danger d-none" id="btn-delete"><i class="ri-close-line"></i> Delete</button>
+                                        <button type="button" class="btn btn-soft-primary d-none" id="btn-edit-toggle"><i class="ri-edit-line"></i> Edit</button>
+                                        <button type="button" class="btn btn-success d-none" id="btn-save"><i class="ri-save-line"></i> Save</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div><!-- end modal -->
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="footer">
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+                    <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+                </div>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+<script src="/velzon/assets/libs/fullcalendar/index.global.min.js"></script>
+<script src="/velzon/assets/libs/dragula/dragula.min.js"></script>
+
+<script>
+(function(){
+
+// Auth. Personnel lost calendar create/edit/delete 2026-07-23 — view-only
+// unless another existing permission explicitly grants editing (currently
+// none does). Administrator keeps full management, unchanged.
+var CAN_MANAGE = <%- JSON.stringify(canManageCalendar) %>;
+
+var cal, bsModal, currentEv = null, isAdding = false;
+
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function str_dt(dt){
+  if(!dt) return '';
+  return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+function str_tm(dt){
+  if(!dt) return '';
+  return dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+function str_tm_input(dt){
+  if(!dt) return '';
+  return String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+}
+
+// â”€â”€ Upcoming events sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function upcomingEvent(){
+  if(!cal) return;
+  var now = new Date();
+  var evs = cal.getEvents().filter(function(e){ return e.start && e.start >= now; })
+              .sort(function(a,b){ return a.start - b.start; }).slice(0,10);
+  var html = '';
+  evs.forEach(function(e){
+    var cls = e.classNames[0] || 'bg-primary-subtle';
+    var tc  = cls.replace('-subtle','').replace('bg-','text-');
+    html += '<div class="card mb-2"><div class="card-body p-3">'
+      + '<div class="d-flex mb-1"><div class="flex-grow-1"><i class="mdi mdi-checkbox-blank-circle me-2 '+tc+'"></i>'
+      + '<span class="fw-medium">'+str_dt(e.start)+'</span></div>'
+      + '<div class="flex-shrink-0"><small class="badge bg-primary-subtle text-primary ms-auto">'+str_tm(e.start)+'</small></div></div>'
+      + '<h6 class="card-title fs-14 mb-1">'+e.title+'</h6>'
+      + '<p class="text-muted text-truncate mb-0 fs-12">'+(e.extendedProps.description||'')+'</p>'
+      + '</div></div>';
+  });
+  document.getElementById('upcoming-event-list').innerHTML = html || '<p class="text-muted fs-12">No upcoming events.</p>';
+}
+
+// â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function apiPost(payload){ return fetch('/api/calendarevents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}); }
+function apiPatch(id,payload){ return fetch('/api/calendarevents/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}); }
+function apiDelete(id){ return fetch('/api/calendarevents/'+id,{method:'DELETE'}).then(function(r){return r.json();}); }
+
+// â”€â”€ Modal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function showView(ev){
+  currentEv = ev; isAdding = false;
+  document.getElementById('modal-title').textContent = ev.title;
+  document.getElementById('view-mode').classList.remove('d-none');
+  document.getElementById('edit-mode').classList.add('d-none');
+  document.getElementById('v-date').textContent = str_dt(ev.start);
+  document.getElementById('v-time').textContent = ev.allDay ? 'All day' : (str_tm(ev.start)+(ev.end?' â€“ '+str_tm(ev.end):''));
+  document.getElementById('v-location').textContent = ev.extendedProps.location || 'â€”';
+  document.getElementById('v-desc').textContent     = ev.extendedProps.description || 'â€”';
+  document.getElementById('v-gcal-badge').classList.toggle('d-none', !ev.extendedProps.googleEventId);
+  document.getElementById('btn-delete').classList.toggle('d-none', !CAN_MANAGE);
+  document.getElementById('btn-edit-toggle').classList.toggle('d-none', !CAN_MANAGE);
+  document.getElementById('btn-save').classList.add('d-none');
+  bsModal.show();
+}
+
+function showAdd(dateStr){
+  currentEv = null; isAdding = true;
+  document.getElementById('modal-title').textContent = 'Add Event';
+  document.getElementById('view-mode').classList.add('d-none');
+  document.getElementById('edit-mode').classList.remove('d-none');
+  document.getElementById('f-title').value    = '';
+  document.getElementById('f-date').value     = dateStr || '';
+  document.getElementById('f-start').value    = '';
+  document.getElementById('f-end').value      = '';
+  document.getElementById('f-location').value = '';
+  document.getElementById('f-desc').value     = '';
+  document.getElementById('f-type').value     = 'bg-primary-subtle';
+  document.getElementById('v-gcal-badge').classList.add('d-none');
+  document.getElementById('f-recipients-wrap').classList.remove('d-none');
+  Array.from(document.getElementById('f-recipients').options).forEach(function(o){ o.selected = false; });
+  document.getElementById('btn-delete').classList.add('d-none');
+  document.getElementById('btn-edit-toggle').classList.add('d-none');
+  document.getElementById('btn-save').classList.remove('d-none');
+  bsModal.show();
+}
+
+function showEdit(){
+  if(!currentEv) return;
+  document.getElementById('modal-title').textContent = 'Edit Event';
+  document.getElementById('view-mode').classList.add('d-none');
+  document.getElementById('edit-mode').classList.remove('d-none');
+  document.getElementById('f-title').value    = currentEv.title;
+  document.getElementById('f-date').value     = currentEv.start ? currentEv.start.toISOString().slice(0,10) : '';
+  document.getElementById('f-start').value    = currentEv.allDay ? '' : str_tm_input(currentEv.start);
+  document.getElementById('f-end').value      = currentEv.end && !currentEv.allDay ? str_tm_input(currentEv.end) : '';
+  document.getElementById('f-location').value = currentEv.extendedProps.location    || '';
+  document.getElementById('f-desc').value     = currentEv.extendedProps.description || '';
+  document.getElementById('f-type').value     = currentEv.classNames[0] || 'bg-primary-subtle';
+  // Recipients only apply at creation time — editing an existing event never re-notifies.
+  document.getElementById('f-recipients-wrap').classList.add('d-none');
+  document.getElementById('btn-delete').classList.remove('d-none');
+  document.getElementById('btn-edit-toggle').classList.add('d-none');
+  document.getElementById('btn-save').classList.remove('d-none');
+}
+
+// â”€â”€ Build FullCalendar event object from DB doc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function docToFcEvent(doc){
+  return {
+    id:        doc.id,
+    title:     doc.title,
+    start:     doc.start,
+    end:       doc.end || undefined,
+    allDay:    doc.allDay || false,
+    className: doc.className || 'bg-primary-subtle',
+    extendedProps: {
+      location:    doc.location    || '',
+      description: doc.description || '',
+      dbId:        doc.id,
+      googleEventId: doc.googleEventId || null
+    }
+  };
+}
+
+// â”€â”€ DOMContentLoaded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+document.addEventListener('DOMContentLoaded', function(){
+  bsModal = new bootstrap.Modal(document.getElementById('event-modal'));
+  var calEl = document.getElementById('calendar');
+
+  // Deep-link support so a "New event" notification can jump straight to that
+  // event's detail modal: /calendar?id=5. FullCalendar loads its events feed
+  // asynchronously, so this only runs once the feed finishes loading.
+  var deepLinkOpened = false;
+  function openFromQuery(){
+    if (deepLinkOpened) return;
+    var id = new URLSearchParams(window.location.search).get('id');
+    if (!id) { deepLinkOpened = true; return; }
+    var ev = cal.getEventById(id);
+    if (ev) { deepLinkOpened = true; showView(ev); }
+  }
+
+  // Individual-user recipient options — /api/users is Administrator-only, so
+  // Auth. Personnel (who can also reach this page) simply won't see this
+  // group populated; the role-based options above still work for them.
+  function escapeHtml(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  fetch('/api/users').then(function(r){ return r.ok ? r.json() : []; }).then(function(users){
+    var group = document.getElementById('f-recipients-individuals');
+    group.innerHTML = users.map(function(u){ return '<option value="'+escapeHtml(u.email)+'">'+escapeHtml(u.name)+' ('+escapeHtml(u.email)+')</option>'; }).join('');
+  }).catch(function(){ /* Auth. Personnel: no individual-user list, role options still work */ });
+
+  cal = new FullCalendar.Calendar(calEl, {
+    timeZone:    'local',
+    headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay,listMonth' },
+    initialView: 'dayGridMonth',
+    editable:    CAN_MANAGE,
+    droppable:   CAN_MANAGE,
+    selectable:  CAN_MANAGE,
+    navLinks:    true,
+    events:      '/api/calendarevents',   // FullCalendar fetches & maps automatically
+    dayMaxEvents: 3,
+
+    // FullCalendar JSON feed: map raw docs to FC event objects
+    eventDataTransform: function(doc){ return docToFcEvent(doc); },
+
+    windowResize: function(){
+      var w = window.innerWidth;
+      cal.changeView(w < 768 ? 'listMonth' : w < 1200 ? 'timeGridWeek' : 'dayGridMonth');
+    },
+    select:      function(info){ showAdd(info.startStr.slice(0,10)); },
+    eventClick:  function(info){ showView(info.event); },
+
+    // Drag-drop updates end date in DB
+    eventDrop: function(info){
+      var dbId = info.event.extendedProps.dbId || info.event.id;
+      var updates = { start: info.event.start.toISOString() };
+      if(info.event.end) updates.end = info.event.end.toISOString();
+      updates.allDay = info.event.allDay;
+      apiPatch(dbId, updates).catch(function(){ info.revert(); });
+      upcomingEvent();
+    },
+
+    // Resize updates end time in DB
+    eventResize: function(info){
+      var dbId = info.event.extendedProps.dbId || info.event.id;
+      var updates = {};
+      if(info.event.end) updates.end = info.event.end.toISOString();
+      apiPatch(dbId, updates).catch(function(){ info.revert(); });
+      upcomingEvent();
+    },
+
+    // Drag external event tile onto calendar
+    drop: function(info){
+      var cls   = info.draggedEl.dataset.class || 'bg-primary-subtle';
+      var title = info.draggedEl.innerText.trim();
+      var payload = { title: title, start: info.dateStr, allDay: true, className: cls, location: '', description: '' };
+      apiPost(payload).then(function(data){
+        if(data.success){
+          cal.addEvent(docToFcEvent(data.event));
+          upcomingEvent();
+        }
+      });
+    },
+
+    eventDidMount: function(){ upcomingEvent(); },
+    loading: function(isLoading){ if (!isLoading) openFromQuery(); }
+  });
+
+  cal.render();
+
+  // Draggable external events (Administrator only — the palette isn't rendered otherwise)
+  if(CAN_MANAGE && typeof FullCalendar.Draggable !== 'undefined'){
+    new FullCalendar.Draggable(document.getElementById('external-events'),{
+      itemSelector: '.external-event',
+      eventData: function(el){ return { title: el.innerText.trim(), className: el.dataset.class }; }
+    });
+  }
+
+  var btnNewEvent = document.getElementById('btn-new-event');
+  if (btnNewEvent) btnNewEvent.addEventListener('click', function(){ showAdd(''); });
+  document.getElementById('btn-edit-toggle').addEventListener('click', showEdit);
+
+  // â”€â”€ Save (add or edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  document.getElementById('btn-save').addEventListener('click', function(){
+    var title  = document.getElementById('f-title').value.trim();
+    var date   = document.getElementById('f-date').value;
+    var tinput = document.getElementById('f-title');
+    if(!title || !date){ tinput.classList.add('is-invalid'); return; }
+    tinput.classList.remove('is-invalid');
+
+    var st    = document.getElementById('f-start').value;
+    var et    = document.getElementById('f-end').value;
+    var start = st ? date + 'T' + st : date;
+    var end   = et ? date + 'T' + et : null;
+    var cls   = document.getElementById('f-type').value;
+    var loc   = document.getElementById('f-location').value.trim();
+    var desc  = document.getElementById('f-desc').value.trim();
+
+    if(currentEv && !isAdding){
+      // EDIT â€” persist to MongoDB then update FC event
+      var dbId   = currentEv.extendedProps.dbId || currentEv.id;
+      var updates = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc };
+      apiPatch(dbId, updates).then(function(data){
+        if(data.success){
+          currentEv.setProp('title', title);
+          currentEv.setProp('classNames', [cls]);
+          currentEv.setStart(start);
+          if(end) currentEv.setEnd(end);
+          currentEv.setExtendedProp('location', loc);
+          currentEv.setExtendedProp('description', desc);
+          bsModal.hide(); upcomingEvent();
+        }
+      }).catch(function(e){ console.error(e); alert('Error saving event.'); });
+    } else {
+      // ADD â€” persist to MongoDB then add to FC
+      var recipients = Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
+      var payload = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc, recipients:recipients };
+      apiPost(payload).then(function(data){
+        if(data.success){
+          cal.addEvent(docToFcEvent(data.event));
+          bsModal.hide(); upcomingEvent();
+        }
+      }).catch(function(e){ console.error(e); alert('Error saving event.'); });
+    }
+  });
+
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  document.getElementById('btn-delete').addEventListener('click', function(){
+    if(!currentEv) return;
+    if(!confirm('Delete "' + currentEv.title + '"?')) return;
+    var dbId = currentEv.extendedProps.dbId || currentEv.id;
+    apiDelete(dbId).then(function(data){
+      if(data.success){ currentEv.remove(); bsModal.hide(); upcomingEvent(); }
+    }).catch(function(e){ console.error(e); alert('Error deleting event.'); });
+  });
+});
+
+})();
+</script>
+
+</body>
+</html>
