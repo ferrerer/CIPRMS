@@ -49,7 +49,7 @@ afterAll(async () => {
   await closeDB();
 });
 
-test('Staff (reviewer) uploads a draft version with a note — recorded with full metadata, request moves to Under Review', async () => {
+test('Staff (reviewer) uploads a draft version with a note — recorded with full metadata, request auto-advances Received to Preparing', async () => {
   const res = await staffAgent
     .post(`/api/document-requests/${requestId}/documents`)
     .field('note', 'Please revise section 2.')
@@ -57,7 +57,10 @@ test('Staff (reviewer) uploads a draft version with a note — recorded with ful
 
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
-  expect(res.body.request.status).toBe('Under Review');
+  expect(res.body.request.status).toBe('Preparing');
+  expect(res.body.request.statusHistory[res.body.request.statusHistory.length - 1]).toEqual(
+    expect.objectContaining({ from: 'Received', to: 'Preparing' })
+  );
   const docs = res.body.request.supportingDocuments;
   expect(docs.length).toBe(1);
   expect(docs[0].note).toBe('Please revise section 2.');
@@ -146,8 +149,14 @@ test('Activity log records the note text for a draft upload', async () => {
 });
 
 test('Uploads are blocked once the document request has been decided', async () => {
-  const decideRes = await adminAgent.patch(`/api/document-requests/${requestId}`).send({ status: 'Fulfilled' });
+  // Request is already at 'Preparing' (auto-advanced by the first draft
+  // upload above) — walk the rest of the pipeline to its terminal stage.
+  await adminAgent.patch(`/api/document-requests/${requestId}`).send({ status: 'Awaiting for Approval' });
+  await adminAgent.patch(`/api/document-requests/${requestId}`).send({ status: 'Approved' });
+  await adminAgent.patch(`/api/document-requests/${requestId}`).send({ status: 'Release' });
+  const decideRes = await adminAgent.patch(`/api/document-requests/${requestId}`).send({ status: 'Completed' });
   expect(decideRes.status).toBe(200);
+  expect(decideRes.body.request.status).toBe('Completed');
 
   const uploadRes = await staffAgent
     .post(`/api/document-requests/${requestId}/documents`)

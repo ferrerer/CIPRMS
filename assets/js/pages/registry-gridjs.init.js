@@ -3,6 +3,12 @@
 var partnerships = [];
 var filtered = [];
 
+// Set while the Add New Partnership modal was opened via "Approve" on a
+// pending Partnership Request (see checkFromRequestParam()) — carries the
+// source request's id so submitPartnership() can link the two records.
+// Cleared whenever the modal closes, whether or not it was saved.
+var pendingRequestConversion = null;
+
 // ── Institution autocomplete — worldwide university search ───────────────────
 // Backed by the /api/institutions proxy (universities.hipolabs.com). Country
 // auto-fills exactly from the matched record; region auto-fills from a best-
@@ -36,6 +42,130 @@ function escapeHtml(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
+
+// ── "Responsible Unit" combobox — searchable multi-select restricted to the
+// predefined CSPC unit list, with removable chips (2026-09-03). Unlike the
+// Document Request combobox elsewhere in this app, no custom/free-text
+// entries are allowed here — only these six values are ever selectable.
+var UNIT_OPTIONS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
+
+function createUnitCombo(prefix) {
+  var selected = [];
+  var chips = document.getElementById(prefix + '-unit-chips');
+  var input = document.getElementById(prefix + '-unit-input');
+  var dropdown = document.getElementById(prefix + '-unit-dropdown');
+  // A blur (e.g. clicking a chip's remove button, which isn't
+  // mousedown-guarded like dropdown options are) schedules a delayed close
+  // rather than an immediate one. If the input regains focus before that
+  // timer fires, it must be cancelled — otherwise it can fire asynchronously
+  // in the middle of a later, unrelated interaction and wipe the dropdown
+  // out from under it.
+  var blurTimer = null;
+
+  function renderChips() {
+    chips.innerHTML = selected.map(function (val, i) {
+      return '<span class="unit-chip">' + escapeHtml(val) +
+        '<button type="button" data-i="' + i + '" aria-label="Remove ' + escapeHtml(val) + '">&times;</button></span>';
+    }).join('');
+    chips.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selected.splice(parseInt(btn.getAttribute('data-i'), 10), 1);
+        renderChips();
+        input.classList.remove('is-invalid');
+      });
+    });
+  }
+
+  function closeDropdown() {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+    input.setAttribute('aria-expanded', 'false');
+  }
+
+  function addValue(val) {
+    if (!val || selected.indexOf(val) !== -1) { input.value = ''; closeDropdown(); return; }
+    selected.push(val);
+    renderChips();
+    input.value = '';
+    input.classList.remove('is-invalid');
+    closeDropdown();
+    input.focus();
+  }
+
+  function openDropdown() {
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+    var q = input.value.trim().toLowerCase();
+    // 'focus' and 'click' both fire on a mouse click into an unfocused input,
+    // and both call this function — without this guard, the second call
+    // rebuilds the option list (a fresh set of DOM nodes) a moment after the
+    // first, which can detach the very node a fast synthetic click (e.g.
+    // Playwright) is already mid-click on. Skip the rebuild when the
+    // dropdown is already open showing this exact query's results.
+    if (dropdown.style.display === 'block' && dropdown.dataset.q === q) return;
+    dropdown.dataset.q = q;
+    var available = UNIT_OPTIONS.filter(function (u) { return selected.indexOf(u) === -1; });
+    var matches = q ? available.filter(function (u) { return u.toLowerCase().indexOf(q) !== -1; }) : available;
+    dropdown.innerHTML = matches.length
+      ? matches.map(function (u) { return '<div class="unit-combo-option" data-val="' + escapeHtml(u) + '">' + escapeHtml(u) + '</div>'; }).join('')
+      : '<div class="unit-combo-empty">' + (available.length ? 'No matching unit.' : 'All units selected.') + '</div>';
+    dropdown.style.display = 'block';
+    input.setAttribute('aria-expanded', 'true');
+    dropdown.querySelectorAll('.unit-combo-option').forEach(function (opt) {
+      opt.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        addValue(opt.getAttribute('data-val'));
+      });
+    });
+  }
+
+  input.addEventListener('focus', openDropdown);
+  // 'click' (not just 'focus') so re-clicking an already-focused input
+  // reopens the dropdown after a selection closed it — selecting an option
+  // calls input.focus(), which is a no-op (and fires no 'focus' event) when
+  // the input is already the active element.
+  input.addEventListener('click', openDropdown);
+  input.addEventListener('input', openDropdown);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var q = input.value.trim().toUpperCase();
+      var match = UNIT_OPTIONS.filter(function (u) { return selected.indexOf(u) === -1; })
+        .find(function (u) { return u.toUpperCase() === q || u.toUpperCase().indexOf(q) === 0; });
+      if (match) addValue(match);
+    } else if (e.key === 'Backspace' && !input.value && selected.length) {
+      selected.pop();
+      renderChips();
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+    }
+  });
+  input.addEventListener('blur', function () { blurTimer = setTimeout(closeDropdown, 120); });
+
+  return {
+    getValues: function () { return selected.slice(); },
+    setValues: function (vals) {
+      // Accepts an array (new records) or a single legacy string value
+      // (records created before the 2026-09-03 multi-unit combobox).
+      var arr = Array.isArray(vals) ? vals : (vals ? [vals] : []);
+      selected = arr.filter(function (v) { return UNIT_OPTIONS.indexOf(v) !== -1; });
+      renderChips();
+      input.value = '';
+    },
+    clear: function () { selected = []; renderChips(); input.value = ''; closeDropdown(); },
+    markInvalid: function () { input.classList.add('is-invalid'); }
+  };
+}
+
+document.addEventListener('click', function (e) {
+  ['f', 'e'].forEach(function (prefix) {
+    var dropdown = document.getElementById(prefix + '-unit-dropdown');
+    var input = document.getElementById(prefix + '-unit-input');
+    if (dropdown && input && e.target !== input && !dropdown.contains(e.target)) {
+      dropdown.style.display = 'none';
+      dropdown.innerHTML = '';
+    }
+  });
+});
 
 function instIds(prefix) {
   return {
@@ -150,6 +280,14 @@ document.addEventListener('click', function (e) {
   });
 });
 
+// Days remaining until `end` — negative once expired. Used by the table's
+// "Days Left" column, the Urgent list, and DSS Smart Alerts (all merged in
+// from the former separate Monitoring/Lifecycle page, 2026-09-05).
+function computeDays(endStr) {
+  var d = new Date(endStr);
+  return isNaN(d) ? 0 : Math.ceil((d - new Date()) / 86400000);
+}
+
 // Load partnerships from MongoDB API
 fetch('/api/partnerships')
   .then(function(r) { return r.json(); })
@@ -173,12 +311,12 @@ fetch('/api/partnerships')
         start:        p.start || '',
         end:          p.end   || '',
         status:       p.status || '',
-        remarks:      p.remarks || ''
+        remarks:      p.remarks || '',
+        days:         computeDays(p.end)
       };
     });
     filtered = partnerships.slice();
     buildGrid();
-    initCounters();
   })
   .catch(function(err) {
     console.error('Failed to load partnerships:', err);
@@ -189,6 +327,50 @@ fetch('/api/partnerships')
 function sbadge(s) {
   var m = { 'Active':'bg-success-subtle text-success', 'Expiring Soon':'bg-warning-subtle text-warning', 'Expired':'bg-danger-subtle text-danger', 'Pending Approval':'bg-info-subtle text-info' };
   return '<span class="badge ' + (m[s]||'bg-secondary-subtle text-secondary') + '">' + s + '</span>';
+}
+
+// Days-remaining badge for the table's "Days Left" column — ported from the
+// former separate Monitoring/Lifecycle page's own table (2026-09-05 page
+// consolidation), so that validity information isn't lost when the two
+// tables were merged into one.
+function daysBadgeHtml(d, s) {
+  if (s === 'Expired') return '<span class="badge bg-danger-subtle text-danger">Expired</span>';
+  if (d <= 14)         return '<span class="badge bg-danger">Critical (' + d + 'd)</span>';
+  if (d <= 90)         return '<span class="badge bg-warning-subtle text-warning">' + d + ' days</span>';
+  return '<span class="badge bg-success-subtle text-success">' + d + ' days</span>';
+}
+
+// DSS Smart Alerts — ported from the former separate Monitoring/Lifecycle
+// page (2026-09-05 consolidation); same data source (`partnerships`), so the
+// advice always matches what the Partnership Registry table below shows.
+function renderDssAlerts() {
+  var expiringSoon = partnerships.filter(function(p){ return p.status==='Expiring Soon'; }).sort(function(a,b){ return a.days-b.days; });
+  var expired = partnerships.filter(function(p){ return p.status==='Expired'; });
+
+  var actionEl = document.getElementById('dss-action-text');
+  if (actionEl) {
+    if (expiringSoon.length) {
+      var soonest = expiringSoon[0];
+      actionEl.innerHTML = '<span class="fw-semibold">Action Required:</span> '
+        + soonest.inst + ' ' + soonest.type + ' expires in <strong>' + soonest.days + ' day' + (soonest.days===1?'':'s') + '</strong>. '
+        + (expiringSoon.length > 1 ? (expiringSoon.length-1) + ' other partnership' + (expiringSoon.length>2?'s are':' is') + ' also expiring within 90 days.' : 'Consider initiating renewal.');
+    } else {
+      actionEl.textContent = 'No partnerships are currently expiring within the next 90 days.';
+    }
+  }
+
+  var reviewEl = document.getElementById('dss-review-text');
+  if (reviewEl) {
+    if (expired.length) {
+      var mostOverdue = expired.slice().sort(function(a,b){ return a.days-b.days; })[0];
+      var overdueDays = Math.abs(mostOverdue.days);
+      reviewEl.innerHTML = '<span class="fw-semibold">Review Suggested:</span> '
+        + mostOverdue.inst + ' ' + mostOverdue.type + ' expired ' + overdueDays + ' day' + (overdueDays===1?'':'s') + ' ago. '
+        + (expired.length > 1 ? (expired.length-1) + ' other expired partnership' + (expired.length>2?'s remain':' remains') + ' unrenewed.' : 'Renew or archive this record.');
+    } else {
+      reviewEl.textContent = 'No expired partnerships currently require review.';
+    }
+  }
 }
 
 function applyFilter() {
@@ -206,7 +388,10 @@ function applyFilter() {
         && (!cat || p.cat === cat)
         && (!st  || p.status === st)
         && (!reg || p.region === reg)
-        && (!unt || p.unit === unt)
+        // unit is an array on records created via the multi-unit combobox
+        // (legacy records still hold a single string) — the filter matches
+        // if the chosen unit is any one of the partnership's units.
+        && (!unt || (Array.isArray(p.unit) ? p.unit.indexOf(unt) !== -1 : p.unit === unt))
         && (!yrs || p.startYear == yrs)
         && (!yre || p.endYear == yre);
   });
@@ -224,41 +409,56 @@ function buildGrid() {
   var total    = partnerships.length;
   var nActive  = partnerships.filter(function(p){return p.status==='Active';}).length;
   var nExpiring= partnerships.filter(function(p){return p.status==='Expiring Soon';}).length;
+  var nExpiring30 = partnerships.filter(function(p){return p.status==='Expiring Soon' && p.days<=30;}).length;
   var nExpired = partnerships.filter(function(p){return p.status==='Expired';}).length;
   var nMOA     = partnerships.filter(function(p){return p.type==='MOA';}).length;
   var nMOU     = partnerships.filter(function(p){return p.type==='MOU';}).length;
   var nIntl    = partnerships.filter(function(p){return p.cat==='International';}).length;
   var nLocal   = partnerships.filter(function(p){return p.cat==='Local';}).length;
+  var activeRate = total ? Math.round(nActive/total*100) : 0;
   function setText(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
   setText('cnt-total',total); setText('cnt-active',nActive); setText('cnt-expiring',nExpiring); setText('cnt-expired',nExpired);
   setText('reg-count', filtered.length+' of '+total+' records');
-  setText('ov-total',total); setText('ov-active',nActive); setText('ov-expiring',nExpiring); setText('ov-expired',nExpired);
+  // Overview (Section 2) — Total/Active/Expiring(30d & 90d split)/Expired/Active
+  // Rate/MOA/MOU/International/Local, all from this same `partnerships` array —
+  // the one source of truth also driving the KPI cards and the table below.
+  setText('ov-total',total); setText('ov-active',nActive);
+  setText('ov-expiring30',nExpiring30); setText('ov-expiring90',nExpiring);
+  setText('ov-expired',nExpired); setText('ov-active-rate',activeRate+'%');
   setText('ov-moa',nMOA); setText('ov-mou',nMOU); setText('ov-intl',nIntl); setText('ov-local',nLocal);
-  var moaBar=document.getElementById('ov-moa-bar'), mouBar=document.getElementById('ov-mou-bar');
+  var activeBar=document.getElementById('ov-active-bar'), moaBar=document.getElementById('ov-moa-bar'), mouBar=document.getElementById('ov-mou-bar');
+  if(activeBar) activeBar.style.width = activeRate+'%';
   if(moaBar) moaBar.style.width = total ? Math.round(nMOA/total*100)+'%' : '0%';
   if(mouBar) mouBar.style.width = total ? Math.round(nMOU/total*100)+'%' : '0%';
 
+  // Urgent (Section 4) — one list, days-based (soonest/most-overdue first),
+  // sourced from the same `partnerships` array as everything else on this page.
   var urgent = partnerships.filter(function(p){ return p.status==='Expiring Soon'||p.status==='Expired'; })
-    .sort(function(a,b){ return (a.status==='Expired'?0:1)-(b.status==='Expired'?0:1); });
+    .sort(function(a,b){ return a.days-b.days; })
+    .slice(0,7);
   var ul = document.getElementById('urgent-list');
   if (ul) ul.innerHTML = urgent.length===0
-    ? '<li class="list-group-item px-3 py-2 text-muted fs-12">No urgent items.</li>'
+    ? '<li class="list-group-item px-3 py-2 text-muted fs-12">No urgent partnerships.</li>'
     : urgent.map(function(p){
-        var dot=p.status==='Expired'?'bg-danger':'bg-warning';
-        var sub=p.status==='Expired'?'text-danger':'text-warning';
-        return '<li class="list-group-item px-3 py-2"><div class="d-flex align-items-center gap-2"><span class="badge '+dot+' rounded-circle p-1">&nbsp;</span><div><div class="fw-semibold fs-13">'+p.inst+'</div><div class="text-muted fs-12">'+p.type+' &middot; <strong class="'+sub+'">'+p.status+'</strong></div></div></div></li>';
+        var critical = p.status==='Expired' || p.days<=14;
+        var dot = critical ? 'bg-danger' : 'bg-warning';
+        var sub = critical ? 'text-danger' : 'text-warning';
+        var label = p.status==='Expired' ? 'Expired' : (p.days+' days');
+        return '<li class="list-group-item px-3 py-2"><div class="d-flex align-items-center gap-2"><span class="badge '+dot+' rounded-circle p-1">&nbsp;</span><div><div class="fw-semibold fs-13">'+p.inst+'</div><div class="text-muted fs-12">'+p.type+' &middot; <strong class="'+sub+'">'+label+'</strong></div></div></div></li>';
       }).join('');
+
+  renderDssAlerts();
 
   var data = filtered.map(function(p) {
     var typeBadge   = '<span class="badge '+(p.type==='MOU'?'bg-info-subtle text-info':'bg-primary-subtle text-primary')+'">'+p.type+'</span>';
-    var unitBadge   = '<span class="badge bg-success-subtle text-success">'+p.unit+'</span>';
+    var unitBadge   = '<span class="badge bg-success-subtle text-success">'+(Array.isArray(p.unit)?p.unit.join(', '):p.unit)+'</span>';
     var statusBadge = sbadge(p.status);
     var endColor    = p.status==='Expired'?'#dc2626':p.status==='Expiring Soon'?'#d97706':'#15803d';
     var instHtml    = p.inst+(p.coordinator?'<div class="text-muted fs-11"><i class="ri-user-line me-1"></i>'+p.coordinator+'</div>':'');
     var countryHtml = p.country+'<div class="text-muted fs-11"><i class="ri-map-pin-line me-1"></i>'+p.region+'</div>';
     var endHtml     = '<span style="color:'+endColor+';font-weight:600">'+p.end+'</span>';
-    // Mutation controls (Edit/Approve/Renew/Delete) are Administrator-only — the
-    // View button always shows, matching Staff's read-only Registry access.
+    // Mutation controls (Edit/Approve/Renew/Delete) are Administrator- and
+    // Staff-only — the View button always shows for every other role.
     // POST/PATCH/DELETE /api/partnerships enforce this server-side regardless.
     var canManage = typeof CAN_MANAGE_REGISTRY !== 'undefined' && CAN_MANAGE_REGISTRY;
     var actions = '<div class="d-flex gap-1 flex-wrap">'
@@ -270,17 +470,17 @@ function buildGrid() {
         ?'<button class="btn btn-sm btn-soft-warning" onclick="openRenewModal('+p.id+')"><i class="ri-refresh-line"></i></button>':''))
       +(canManage ? '<button class="btn btn-sm btn-soft-danger" onclick="openDeleteModal('+p.id+')"><i class="ri-delete-bin-line"></i></button>' : '')
       +'</div>';
-    return [gridjs.html(instHtml), gridjs.html(countryHtml), gridjs.html(typeBadge), p.nature, gridjs.html(unitBadge), p.start, gridjs.html(endHtml), gridjs.html(statusBadge), gridjs.html(actions)];
+    return [gridjs.html(instHtml), gridjs.html(countryHtml), gridjs.html(typeBadge), p.nature, gridjs.html(unitBadge), p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
   });
 
   if (window._regGrid) { window._regGrid.updateConfig({data:data}).forceRender(); return; }
   document.getElementById('reg-grid') && (window._regGrid = new gridjs.Grid({
     columns:[
-      {name:'Institution',width:'22%'},{name:'Country/Region',width:'13%'},
-      {name:'Type',width:'7%',sort:false},{name:'Nature',width:'12%'},
-      {name:'Unit',width:'7%',sort:false},{name:'Start',width:'10%'},
-      {name:'End',width:'10%'},{name:'Status',width:'10%',sort:false},
-      {name:'Actions',width:'9%',sort:false}
+      {name:'Institution',width:'19%'},{name:'Country/Region',width:'11%'},
+      {name:'Type',width:'6%',sort:false},{name:'Nature',width:'9%'},
+      {name:'Unit',width:'7%',sort:false},{name:'Start',width:'8%'},
+      {name:'End',width:'9%'},{name:'Days Left',width:'9%',sort:false},
+      {name:'Status',width:'9%',sort:false},{name:'Actions',width:'8%',sort:false}
     ],
     data:data, search:true, pagination:{limit:6}, sort:true,
     className:{table:'table table-hover align-middle mb-0',thead:'table-light',search:'mb-3'},
@@ -304,7 +504,7 @@ function openViewModal(id) {
     +'<div class="col-sm-6"><div class="text-muted fs-12">Start Date</div><div class="fw-semibold">'+p.start+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">End Date</div><div class="fw-semibold">'+p.end+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Status</div><div>'+sbadge(p.status)+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Responsible Unit</div><div class="fw-semibold">'+p.unit+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Responsible Unit</div><div class="fw-semibold">'+(Array.isArray(p.unit)?p.unit.join(', '):p.unit)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">CIRL Coordinator</div><div class="fw-semibold">'+(p.coordinator||'—')+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Partner Email</div><div>'+(p.partnerEmail?'<a href="mailto:'+p.partnerEmail+'">'+p.partnerEmail+'</a>':'—')+'</div></div>'
     +'<div class="col-sm-12"><div class="text-muted fs-12">Document Link</div><div>'+(p.docLink?'<a href="'+p.docLink+'" target="_blank">'+p.docLink+'</a>':'— Not uploaded')+'</div></div>'
@@ -338,6 +538,7 @@ function confirmDelete(){
 }
 
 var editingId=null;
+var eUnitCombo = createUnitCombo('e');
 function openEditModal(id){
   var p=partnerships.find(function(x){return x.id===id;}); if(!p) return; editingId=id;
   var toISO=function(s){var d=new Date(s);return isNaN(d)?'':d.toISOString().slice(0,10);};
@@ -346,28 +547,33 @@ function openEditModal(id){
   document.getElementById('e-type').value=p.type; document.getElementById('e-nature').value=p.nature;
   document.getElementById('e-cat').value=p.cat; document.getElementById('e-start').value=toISO(p.start);
   document.getElementById('e-end').value=toISO(p.end); document.getElementById('e-status').value=p.status;
-  document.getElementById('e-unit').value=p.unit; document.getElementById('e-coordinator').value=p.coordinator||'';
+  eUnitCombo.setValues(p.unit); document.getElementById('e-coordinator').value=p.coordinator||'';
   document.getElementById('e-doclink').value=p.docLink||''; document.getElementById('e-remarks').value=p.remarks||'';
   new bootstrap.Modal(document.getElementById('editPartnershipModal')).show();
 }
 function computeEditStatus(){var v=document.getElementById('e-end').value;if(!v)return;var d=Math.ceil((new Date(v)-new Date())/86400000);document.getElementById('e-status').value=d<0?'Expired':d<=90?'Expiring Soon':'Active';}
 function saveEdit(){
   var inst=document.getElementById('e-inst').value.trim(),end=document.getElementById('e-end').value;
-  if(!inst||!end){alert('Institution name and End Date are required.');return;}
+  var units=eUnitCombo.getValues();
+  if(!inst||!end||!units.length){
+    if(!units.length) eUnitCombo.markInvalid();
+    alert('Institution name, End Date, and at least one Responsible Unit are required.');
+    return;
+  }
   var fmt=function(v){return new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
   var p=partnerships.find(function(x){return x.id===editingId;}); if(!p) return;
   var updates={inst:inst,country:document.getElementById('e-country').value.trim(),region:document.getElementById('e-region').value,
     partnerEmail:document.getElementById('e-partner-email').value.trim(),type:document.getElementById('e-type').value,
     nature:document.getElementById('e-nature').value,cat:document.getElementById('e-cat').value,
     start:fmt(document.getElementById('e-start').value),end:fmt(end),endYear:new Date(end).getFullYear(),
-    status:document.getElementById('e-status').value,unit:document.getElementById('e-unit').value,
+    status:document.getElementById('e-status').value,unit:units,
     coordinator:document.getElementById('e-coordinator').value.trim(),docLink:document.getElementById('e-doclink').value.trim(),
     remarks:document.getElementById('e-remarks').value.trim()};
   fetch('/api/partnerships/'+editingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(updates)})
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.success){
-        Object.assign(p,updates);
+        Object.assign(p,updates); p.days=computeDays(p.end);
         bootstrap.Modal.getInstance(document.getElementById('editPartnershipModal'))?.hide();
         applyFilter();showToast('"'+inst+'" updated successfully.');
       }
@@ -403,7 +609,7 @@ function saveRenew(){
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.success){
-        Object.assign(p,updates);
+        Object.assign(p,updates); p.days=computeDays(p.end);
         bootstrap.Modal.getInstance(document.getElementById('renewPartnershipModal'))?.hide();
         applyFilter();showToast('"'+p.inst+'" renewed \u2014 new end date: '+p.end+'.');
       }
@@ -606,54 +812,171 @@ function dismissOcrResult() {
   document.getElementById('ocr-file-input').value = '';
 }
 
+// ── Approved-Request → Registry conversion ──────────────────────────────────
+// "Approve" on a pending Partnership Request (partnership_requests.ejs)
+// redirects here as /registry?fromRequest=<id> instead of flipping the
+// request's status directly — the request is only marked Approved once the
+// reviewer actually saves a partnership from this same Add New Partnership
+// form (see submitPartnership() below and POST /api/partnerships).
+function hideFromRequestBanner() {
+  var banner = document.getElementById('from-request-banner');
+  // Bootstrap's d-flex utility is !important — toggle it off along with
+  // adding d-none rather than setting style.display, or d-flex would win.
+  if (banner) { banner.classList.remove('d-flex'); banner.classList.add('d-none'); }
+  var instEl = document.getElementById('from-request-inst');
+  if (instEl) instEl.textContent = '';
+}
+
+function clearFromRequestParam() {
+  if (window.location.search.indexOf('fromRequest=') === -1) return;
+  var url = new URL(window.location.href);
+  url.searchParams.delete('fromRequest');
+  window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+}
+
+// Mirrors applyOcrToForm()'s field-by-field, only-apply-if-recognized
+// approach — request field options don't perfectly overlap the Registry
+// form's own option lists (e.g. Nature of Partnership), so anything that
+// doesn't match exactly is simply left for the reviewer to pick themselves
+// rather than forcing a wrong value in.
+function applyRequestToForm(r) {
+  function set(id, value) {
+    if (!value) return;
+    var el = document.getElementById(id);
+    if (el) el.value = value;
+  }
+
+  set('f-inst', r.institution);
+  set('f-country', r.country);
+  set('f-region', r.region);
+  set('f-cat', r.category);
+
+  if (r.type === 'MOA' || r.type === 'MOU') set('f-type', r.type);
+
+  if (r.nature) {
+    var natureSelect = document.getElementById('f-nature');
+    if (natureSelect) {
+      var opt = Array.prototype.find.call(natureSelect.options, function (o) {
+        return o.value.toLowerCase() === r.nature.toLowerCase();
+      });
+      if (opt) set('f-nature', opt.value);
+    }
+  }
+
+  var startIso = ocrIsoDate(r.startDate);
+  var endIso = ocrIsoDate(r.endDate);
+  if (startIso) set('f-start', startIso);
+  if (endIso) { set('f-end', endIso); computeStatus(); }
+
+  if (r.unit) fUnitCombo.setValues(r.unit);
+
+  var remarksParts = ['[From Partnership Request #REQ-' + String(r.id).padStart(3, '0') + ']'];
+  if (r.notes) remarksParts.push(r.notes);
+  document.getElementById('f-remarks').value = remarksParts.join(' ');
+
+  var banner = document.getElementById('from-request-banner');
+  if (banner) { banner.classList.remove('d-none'); banner.classList.add('d-flex'); }
+  var instEl = document.getElementById('from-request-inst');
+  if (instEl) instEl.textContent = r.institution ? (' — ' + r.institution) : '';
+
+  var firstTab = document.getElementById('add-step1-tab');
+  if (firstTab) new bootstrap.Tab(firstTab).show();
+}
+
+// Runs once on page load. Reuses the existing /api/requests endpoint (already
+// returns every request to Administrator/Staff — see REQUEST_REVIEWER_ROLES
+// in cirl.js) rather than adding a new single-request route.
+function checkFromRequestParam() {
+  var params = new URLSearchParams(window.location.search);
+  var raw = params.get('fromRequest');
+  if (!raw) return;
+  var reqId = parseInt(raw, 10);
+  if (!reqId) return;
+
+  fetch('/api/requests')
+    .then(function (r) { return r.json(); })
+    .then(function (list) {
+      var match = Array.isArray(list) ? list.find(function (x) { return x.id === reqId; }) : null;
+      if (!match) {
+        showToast('Could not open the source partnership request — it may have been removed.');
+        clearFromRequestParam();
+        return;
+      }
+      if (match.linkedPartnershipId) {
+        showToast('This request has already been converted to a Registry partnership.');
+        clearFromRequestParam();
+        return;
+      }
+      if (match.status !== 'Pending' && match.status !== 'Under Review') {
+        showToast('This request is no longer available for conversion (status: ' + match.status + ').');
+        clearFromRequestParam();
+        return;
+      }
+
+      pendingRequestConversion = reqId;
+      var modalEl = document.getElementById('addPartnershipModal');
+      if (!modalEl) return;
+      var modal = new bootstrap.Modal(modalEl);
+      modalEl.addEventListener('shown.bs.modal', function onShown() {
+        modalEl.removeEventListener('shown.bs.modal', onShown);
+        applyRequestToForm(match);
+      });
+      modal.show();
+    })
+    .catch(function () {
+      showToast('Could not load the source partnership request. Please try Approve again.');
+      clearFromRequestParam();
+    });
+}
+
 function highlight(id,on){var el=document.getElementById(id);if(!el)return;el.style.borderColor=on?'#dc2626':'';el.addEventListener('input',function(){el.style.borderColor='';},{once:true});}
+
+var fUnitCombo = createUnitCombo('f');
 
 function submitPartnership(){
   var inst=document.getElementById('f-inst').value.trim(),type=document.getElementById('f-type').value,
       start=document.getElementById('f-start').value,end=document.getElementById('f-end').value,
-      unit=document.getElementById('f-unit').value,region=document.getElementById('f-region').value;
+      units=fUnitCombo.getValues(),region=document.getElementById('f-region').value;
   if(!inst)highlight('f-inst',true);if(!type)highlight('f-type',true);
-  if(!start)highlight('f-start',true);if(!end)highlight('f-end',true);if(!unit)highlight('f-unit',true);
-  if(!inst||!type||!start||!end||!unit)return;
+  if(!start)highlight('f-start',true);if(!end)highlight('f-end',true);if(!units.length)fUnitCombo.markInvalid();
+  if(!inst||!type||!start||!end||!units.length)return;
   var fmt=function(v){return new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
   var d=Math.ceil((new Date(end)-new Date())/86400000);
   var status=document.getElementById('f-status').value||(d<0?'Expired':d<=90?'Expiring Soon':'Active');
   var payload={inst:inst,country:document.getElementById('f-country').value.trim()||'—',
     region:region||'—',type:type,nature:document.getElementById('f-nature').value||'—',
-    cat:document.getElementById('f-cat').value||'International',unit:unit,
+    cat:document.getElementById('f-cat').value||'International',unit:units,
     coordinator:document.getElementById('f-coordinator').value.trim(),
     partnerEmail:document.getElementById('f-partner-email').value.trim(),
     docLink:document.getElementById('f-doc-link').value.trim(),
     startYear:new Date(start).getFullYear(),endYear:new Date(end).getFullYear(),
     start:fmt(start),end:fmt(end),status:status,remarks:document.getElementById('f-remarks').value.trim()};
+  if(pendingRequestConversion) payload.sourceRequestId=pendingRequestConversion;
   fetch('/api/partnerships',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data.success){
-        partnerships.push(data.partnership);filtered=partnerships.slice();applyFilter();
+    .then(function(r){return r.json().then(function(data){return {ok:r.ok,data:data};});})
+    .then(function(res){
+      var data=res.data;
+      if(res.ok&&data.success){
+        // If this was already converted by an earlier attempt, the returned
+        // partnership may already be in the list — avoid a visible duplicate row.
+        if(!partnerships.some(function(p){return p.id===data.partnership.id;})){
+          data.partnership.days = computeDays(data.partnership.end);
+          partnerships.push(data.partnership);
+        }
+        filtered=partnerships.slice();applyFilter();
+        pendingRequestConversion=null;
         bootstrap.Modal.getInstance(document.getElementById('addPartnershipModal'))?.hide();
-        showToast('"'+inst+'" added to the registry.');
+        showToast(data.alreadyConverted
+          ? '"'+inst+'" was already converted to a Registry partnership.'
+          : '"'+inst+'" added to the registry.');
+      } else {
+        showToast(data.error||'Error saving partnership. Please try again.');
       }
-    }).catch(function(e){console.error(e);showToast('Error saving partnership.');});
-}
-
-// Counter animation (card stat numbers)
-function initCounters() {
-  document.querySelectorAll('.counter-value').forEach(function (el) {
-    var target = parseInt(el.dataset.target);
-    if (isNaN(target)) return;
-    var start = 0, duration = 1200, fps = 60;
-    var step = target / (duration / (1000 / fps));
-    var timer = setInterval(function () {
-      start += step;
-      if (start >= target) { el.textContent = target; clearInterval(timer); }
-      else el.textContent = Math.floor(start);
-    }, 1000 / fps);
-  });
+    }).catch(function(e){console.error(e);showToast('Error saving partnership. Please try again.');});
 }
 
 // ── DOMContentLoaded ─────────────────────────────────────────────────────────
-// Note: buildGrid() and initCounters() are called by the fetch().then() above
+// Note: buildGrid() is called by the fetch().then() above
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.nexttab').forEach(function(btn){
     btn.addEventListener('click',function(){var t=document.getElementById(this.getAttribute('data-nexttab'));if(t)new bootstrap.Tab(t).show();});
@@ -665,8 +988,20 @@ document.addEventListener('DOMContentLoaded', function() {
   if(addModal) addModal.addEventListener('show.bs.modal',function(){
     var ft=document.getElementById('add-step1-tab');if(ft)new bootstrap.Tab(ft).show();
     document.getElementById('addPartnershipForm').reset();
+    fUnitCombo.clear();
     dismissOcrResult();
     ocrShow('ocr-progress-wrap', false);
+    hideFromRequestBanner();
   });
+  if(addModal) addModal.addEventListener('hidden.bs.modal',function(){
+    // Fires on every close — a successful save (already cleared above), a
+    // cancelled request-conversion, or a plain manual Add — so a stale
+    // sourceRequestId never leaks into an unrelated later save.
+    pendingRequestConversion=null;
+    hideFromRequestBanner();
+    clearFromRequestParam();
+  });
+
+  checkFromRequestParam();
 });
 

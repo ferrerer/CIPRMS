@@ -123,15 +123,16 @@
                                                      canManageCalendar flag hides the create/edit/delete UI for
                                                      every role except Administrator).
                                                    - Monitoring: Administrator and Staff share the exact same
-                                                     Partnership Lifecycle Monitoring page (/lifecycle, /staff/lifecycle)
-                                                     with full Renew/Edit/Delete authority (CAN_MANAGE_LIFECYCLE, and
-                                                     the underlying POST/PATCH/DELETE /api/partnerships routes, are
-                                                     requireStaffAccess). Auth. Personnel/Partner's "Monitoring" is a
-                                                     different feature — tracking their own submitted requests.
-                                                   - Registry: Administrator and Staff share full CRUD
-                                                     (POST/PATCH/DELETE /api/partnerships are requireStaffAccess;
-                                                     CAN_MANAGE_REGISTRY is true for both) on the same /registry
-                                                     page (/staff/registry reuses it via sidebarPartial).
+                                                     consolidated Monitoring page (/lifecycle, /staff/lifecycle —
+                                                     2026-09-05 merge of the former separate Registry page into this
+                                                     one: KPIs, Overview, DSS Smart Alerts, Urgent, and the full
+                                                     Partnership Registry table/filters/Add/Edit/Renew/Delete) with
+                                                     full CRUD authority (CAN_MANAGE_REGISTRY, and the underlying
+                                                     POST/PATCH/DELETE /api/partnerships routes, are
+                                                     requireStaffAccess). /registry and /staff/registry still exist as
+                                                     redirects to /lifecycle and /staff/lifecycle for compatibility.
+                                                     Auth. Personnel/Partner's "Monitoring" is a different feature —
+                                                     tracking their own submitted requests.
                                                    - User Management: Administrator and Staff share full CRUD
                                                      (GET/POST/PATCH/DELETE /api/users are all requireStaffAccess) on
                                                      the same /users page — EXCEPT Staff can never create, edit, or

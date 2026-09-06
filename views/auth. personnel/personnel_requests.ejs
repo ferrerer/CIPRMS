@@ -117,6 +117,50 @@
           .dr-form-header { flex-wrap: wrap; }
           .dr-form-header .dr-form-code { margin-left: 0; text-align: left; }
       }
+
+      /* ── "Document(s) Requested" combobox — searchable multi-select with
+         removable chips + free-text custom entries (2026-09-02). ── */
+      .doc-combo { width: 100%; }
+      .doc-combo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      .doc-combo-chips:empty { display: none; }
+      .doc-chip {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #e7ebfa; color: #405189; border: 1px solid #c9d2f5;
+          border-radius: 20px; padding: 5px 8px 5px 14px; font-size: .8rem; font-weight: 600;
+          max-width: 100%;
+      }
+      .doc-chip span.doc-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+      .doc-chip button {
+          border: none; background: rgba(64,81,137,.14); color: #405189; border-radius: 50%;
+          width: 18px; height: 18px; line-height: 1; font-size: .85rem; flex-shrink: 0;
+          cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+      }
+      .doc-chip button:hover { background: rgba(64,81,137,.28); }
+      .doc-combo-input-wrap { position: relative; }
+      .doc-combo-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+          background: #fff; border: 1px solid #dfe3ea; border-radius: 8px;
+          box-shadow: 0 10px 28px rgba(20,25,45,.14); max-height: 260px; overflow-y: auto; padding: 6px;
+      }
+      .doc-combo-option {
+          padding: 8px 10px; border-radius: 6px; font-size: .85rem; color: #313a46;
+          cursor: pointer; display: flex; align-items: center; gap: 8px;
+      }
+      .doc-combo-option:hover, .doc-combo-option.active { background: #f0f2fb; color: #405189; }
+      .doc-combo-option.custom { color: #0ab39c; font-weight: 600; }
+      .doc-combo-option .doc-combo-option-hint { margin-left: auto; font-size: .68rem; color: #878a99; text-transform: uppercase; letter-spacing: .3px; }
+      .doc-combo-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+
+      [data-bs-theme="dark"] .doc-chip { background: rgba(96,126,224,.18); color: #a9bcf5; border-color: rgba(96,126,224,.35); }
+      [data-bs-theme="dark"] .doc-chip button { background: rgba(169,188,245,.18); color: #a9bcf5; }
+      [data-bs-theme="dark"] .doc-combo-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+      [data-bs-theme="dark"] .doc-combo-option { color: #d3d5db; }
+      [data-bs-theme="dark"] .doc-combo-option:hover, [data-bs-theme="dark"] .doc-combo-option.active { background: #363c4c; color: #a9bcf5; }
+      [data-bs-theme="dark"] .doc-combo-option.custom { color: #4bd1b0; }
+
+      @media (max-width: 576px) {
+          .doc-chip span.doc-chip-label { max-width: 200px; }
+      }
     </style>
 </head>
 
@@ -309,13 +353,14 @@
                                             <div class="dr-row dr-row-tall">
                                                 <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
                                                 <div class="dr-value" style="display:block">
-                                                    <select class="form-select" id="f-type">
-                                                        <option value="">Select type...</option>
-                                                        <option>MOA</option>
-                                                        <option>MOU</option>
-                                                        <option>Accreditation</option>
-                                                    </select>
-                                                    <small class="text-muted d-block mt-2">CSPC-CIRL issues MOA, MOU, or Accreditation documents.</small>
+                                                    <div class="doc-combo" id="f-type-combo">
+                                                        <div class="doc-combo-chips" id="f-type-chips"></div>
+                                                        <div class="doc-combo-input-wrap">
+                                                            <input type="text" class="form-control" id="f-type-input" placeholder="Type or search document..." autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                                            <div class="doc-combo-dropdown" id="f-type-dropdown" role="listbox" style="display:none"></div>
+                                                        </div>
+                                                    </div>
+                                                    <small class="text-muted d-block mt-2">Pick a suggestion or type any custom document name, then press Enter or select it to add. You can add multiple.</small>
                                                 </div>
                                             </div>
                                             <div class="dr-row dr-row-tall">
@@ -662,13 +707,120 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       DOCUMENT REQUEST (unchanged from the previous
-       standalone page — same /api/document-requests
-       endpoint; tracking/detail-view now live on
-       /personnel/monitoring, not this page)
+       DOCUMENT REQUEST — same /api/document-requests
+       endpoint; tracking/detail-view live on
+       /personnel/monitoring, not this page.
        ═══════════════════════════════════════════════════ */
+    var DOC_TYPE_SUGGESTIONS = [
+        'Compliance requirements for international linkages and consortia (MAN)',
+        'Universitas Airlangga - MOA',
+        'MOUs',
+        'Photos/Docs - IMC Japan',
+        'Terminal Reports (International Activity); Year end report of activities',
+        'QS Star Rating result',
+        'Handbook or manual regarding student participation on internationalization',
+        'International Linkages; International students/faculty'
+    ];
+
+    /* Searchable multi-select combobox: predefined suggestions + free-text
+       custom entries, rendered as removable chips. Mounted on
+       #<prefix>-combo / #<prefix>-chips / #<prefix>-input / #<prefix>-dropdown. */
+    function createDocCombo(prefix) {
+        var selected = [];
+        var chips = document.getElementById(prefix + '-chips');
+        var input = document.getElementById(prefix + '-input');
+        var dropdown = document.getElementById(prefix + '-dropdown');
+
+        function renderChips() {
+            chips.innerHTML = selected.map(function (val, i) {
+                return '<span class="doc-chip"><span class="doc-chip-label">' + escapeHtml(val) + '</span>' +
+                    '<button type="button" data-i="' + i + '" aria-label="Remove">&times;</button></span>';
+            }).join('');
+            chips.querySelectorAll('button').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    selected.splice(parseInt(btn.getAttribute('data-i'), 10), 1);
+                    renderChips();
+                    input.classList.remove('is-invalid');
+                });
+            });
+        }
+
+        function addValue(raw) {
+            var val = (raw || '').trim();
+            if (!val) return;
+            var existingIdx = selected.findIndex(function (v) { return v.toLowerCase() === val.toLowerCase(); });
+            if (existingIdx !== -1) { input.value = ''; closeDropdown(); return; }
+            var canonical = DOC_TYPE_SUGGESTIONS.find(function (s) { return s.toLowerCase() === val.toLowerCase(); });
+            selected.push(canonical || val);
+            renderChips();
+            input.value = '';
+            input.classList.remove('is-invalid');
+            closeDropdown();
+            input.focus();
+        }
+
+        function closeDropdown() {
+            dropdown.style.display = 'none';
+            dropdown.innerHTML = '';
+            input.setAttribute('aria-expanded', 'false');
+        }
+
+        function openDropdown() {
+            var q = input.value.trim().toLowerCase();
+            var available = DOC_TYPE_SUGGESTIONS.filter(function (s) {
+                return !selected.some(function (v) { return v.toLowerCase() === s.toLowerCase(); });
+            });
+            var matches = q ? available.filter(function (s) { return s.toLowerCase().indexOf(q) !== -1; }) : available;
+            var exact = q && available.some(function (s) { return s.toLowerCase() === q; });
+
+            var html = matches.map(function (s) {
+                return '<div class="doc-combo-option" data-val="' + escapeHtml(s) + '">' + escapeHtml(s) + '</div>';
+            }).join('');
+            if (q && !exact) {
+                html += '<div class="doc-combo-option custom" data-val="' + escapeHtml(input.value.trim()) + '">' +
+                    '<i class="ri-add-line"></i> Add "' + escapeHtml(input.value.trim()) + '"' +
+                    '<span class="doc-combo-option-hint">Custom</span></div>';
+            }
+            if (!html) html = '<div class="doc-combo-empty">No matching suggestions — keep typing to add a custom document.</div>';
+            dropdown.innerHTML = html;
+            dropdown.style.display = 'block';
+            input.setAttribute('aria-expanded', 'true');
+            dropdown.querySelectorAll('.doc-combo-option').forEach(function (opt) {
+                opt.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    addValue(opt.getAttribute('data-val'));
+                });
+            });
+        }
+
+        input.addEventListener('focus', openDropdown);
+        input.addEventListener('input', openDropdown);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (input.value.trim()) addValue(input.value);
+            } else if (e.key === 'Backspace' && !input.value && selected.length) {
+                selected.pop();
+                renderChips();
+            } else if (e.key === 'Escape') {
+                closeDropdown();
+            }
+        });
+        input.addEventListener('blur', function () { setTimeout(closeDropdown, 120); });
+
+        return {
+            getValues: function () { return selected.slice(); },
+            clear: function () { selected = []; renderChips(); input.value = ''; closeDropdown(); },
+            markInvalid: function () { input.classList.add('is-invalid'); },
+            clearInvalid: function () { input.classList.remove('is-invalid'); }
+        };
+    }
+
+    var fTypeCombo = createDocCombo('f-type');
+
     function resetForm() {
         document.getElementById('docRequestForm').reset();
+        fTypeCombo.clear();
     }
 
     function setDrDateTimeDisplay() {
@@ -679,16 +831,16 @@
 
     function submitRequest() {
         const inst = document.getElementById('f-inst').value.trim();
-        const type = document.getElementById('f-type').value;
+        const documentTypes = fTypeCombo.getValues();
         const notes = document.getElementById('f-notes').value.trim();
         const contactNumber = document.getElementById('f-contact').value.trim();
         const documentFormEl = document.querySelector('input[name="f-form"]:checked');
         const documentForm = documentFormEl ? documentFormEl.value : '';
 
-        if (!inst || !type) {
+        if (!inst || documentTypes.length === 0) {
             showToast('<i class="ri-error-warning-line me-2"></i> Please fill in all required fields.', '#e0a800');
             if (!inst) document.getElementById('f-inst').classList.add('is-invalid');
-            if (!type) document.getElementById('f-type').classList.add('is-invalid');
+            if (documentTypes.length === 0) fTypeCombo.markInvalid();
             return;
         }
 
@@ -701,7 +853,7 @@
 
         fetch('/api/document-requests', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ institution: inst, documentType: type, notes, contactNumber, documentForm })
+            body: JSON.stringify({ institution: inst, documentTypes, notes, contactNumber, documentForm })
         }).then(res => res.json().then(data => ({ ok: res.ok, data })))
         .then(({ ok, data }) => {
             btn.disabled = false;
@@ -709,6 +861,7 @@
             if (ok && data.success) {
                 showToast('<i class="ri-checkbox-circle-line me-2"></i> Document request submitted!', '#15803d');
                 document.getElementById('docRequestForm').reset();
+                fTypeCombo.clear();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
                 showToast('<i class="ri-error-warning-line me-2"></i> ' + (data.error || 'Error submitting request.'), '#f06548');

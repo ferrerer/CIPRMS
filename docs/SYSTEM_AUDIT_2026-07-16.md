@@ -2796,3 +2796,458 @@ Preview and Download both route through the existing `GET /uploads/documents/:fi
 ### Known limitations
 
 - None found. Every item in the acceptance checklist (preview/download for requester, Staff, Administrator, in both directions, across multiple historical drafts, with file-integrity and authorization verified at both the API and live-browser level) was verified, and the one real bug this pass surfaced (modal-stacking swallowing the Download click) was fixed and re-verified rather than reported as a residual gap.
+
+## Document Request "Attached Documents" Preview/Download — 2026-08-29 (follow-up)
+
+A distinct, smaller gap from the same area: the requester's Monitoring page (both the "Attached Documents" table column and the plain "View Details" modal — separate from the richer "View Draft" collaboration timeline built in the two revisions above) rendered every file as a single bare icon-link (`target="_blank"`, no separate Preview/Download, no original filename on save). Fixed for both Partnership Requests and Document Requests, in both `views/auth. personnel/personnel_monitoring.ejs` and `views/potential_partner/partner_monitoring.ejs`.
+
+`renderAttachedDocs(r)` now delegates to the same `buildDraftTimelineItems`/`buildDRDraftTimelineItems` builders the "View Draft" timeline already uses (filtered to file-bearing entries only — the synthetic "Request submitted" entry is skipped here since it's not a file), so every attached file gets a real Preview button (opens the shared `#draft-preview-modal`, same one the timeline uses) and a Download link with the original filename preserved. Items are cached under a per-request key (`attach-pr-{id}` / `attach-dr-{id}`) rather than the timeline's shared `'pr'`/`'dr'` slot, since multiple rows render their own summaries at once on the same page.
+
+No backend or route changes — this was purely a frontend gap in a second rendering path that hadn't been touched by the preceding two revisions.
+
+**Testing**: Playwright (2 new tests, real Chromium, `acceptDownloads: true`) — confirmed the row's Attached Documents cell and the "View Details" modal both show a real Preview button (opens the modal, `<img>` renders, correct uploader "Staff" and filename) and a Download that produces the exact original bytes under the exact original filename. Full Jest suite re-confirmed at 204/204 (this feature involves no backend logic, so no new Jest tests were needed). All disposable test data cleaned, zero residue.
+
+## Document Request "Document(s) Requested" Redesign + Approval/Release Template — 2026-09-02
+
+Two related changes to the Document Request workflow, scoped to Auth. Personnel/potential_partner (requesters) and Staff/Administrator (reviewers, full parity since 2026-08-27): (1) the submission form's single fixed "Select Type" dropdown became a free-form multi-select combobox, and (2) the Fulfilled request's printable/PDF form gained a real approval/release signature section with a fixed institutional approver and dynamically-sourced Released By/Received By. No new system was built — both changes extend the existing Document Request schema, upload/print/PDF architecture, and RBAC exactly as they stood.
+
+### 1. "Document(s) Requested" — searchable multi-select combobox
+
+**Before**: a single `<select id="f-type">` restricted to exactly one of `MOA` / `MOU` / `Accreditation`, enforced server-side by a hard `DOCUMENT_REQUEST_TYPES` allow-list in `POST /api/document-requests`.
+
+**After**: a hand-built combobox (`views/auth. personnel/personnel_requests.ejs` `#f-type-combo`, `views/potential_partner/partner_requests.ejs` `#dr-f-type-combo` — each file keeps its own copy of the widget, consistent with this codebase's existing convention of no shared frontend JS module) that lets the requester:
+
+- Click into a text input to see all 8 predefined suggestions (see below) in a dropdown.
+- Type to filter the suggestions by substring (case-insensitive).
+- Select any number of suggestions — each becomes a removable chip.
+- Type any custom document name not in the list and press Enter (or click the dropdown's "Add "…"" row) to add it as-is — custom text is never rejected or coerced into a predefined value, and casing/wording is preserved exactly as entered (except when it case-insensitively matches an existing suggestion, in which case the suggestion's canonical casing is used, purely to avoid two near-identical entries).
+- Remove a selected document (chip's × button) any time before submitting, or via Backspace on an empty input.
+
+Predefined suggestions (client-side constants, identical in both files):
+
+1. Compliance requirements for international linkages and consortia (MAN)
+2. Universitas Airlangga - MOA
+3. MOUs
+4. Photos/Docs - IMC Japan
+5. Terminal Reports (International Activity); Year end report of activities
+6. QS Star Rating result
+7. Handbook or manual regarding student participation on internationalization
+8. International Linkages; International students/faculty
+
+These are suggestions only — `POST /api/document-requests` no longer enforces any allow-list.
+
+**Backend (`cirl.js`)**: `DOCUMENT_REQUEST_TYPES` (the old 3-value enum) was replaced by `DOCUMENT_TYPE_SUGGESTIONS` (the 8 strings above, kept for documentation/parity with the frontend list but not used to validate). The route now accepts `documentTypes` (array), trims each entry, drops blanks and non-strings, caps each item at 300 characters and the whole array at 20 items, and requires at least one surviving item — the array is never trusted as-is from the client. For backward compatibility with any caller still sending the old singular `documentType` string (existing Jest tests included), the route falls back to wrapping it in a one-item array when `documentTypes` is absent.
+
+**Storage — array + backward-compatible joined string, not a breaking schema change**: this is a schemaless MongoDB collection with no migration step, so old `documentrequests` rows only ever had a single `documentType` string. Rather than migrate historical rows or special-case two shapes everywhere, new records get **both** fields: `documentTypes` (the real array, used for the itemized print/PDF list and the reviewer's multi-item badge display) and `documentType` (the array joined with `", "`, kept purely so every pre-existing call site that reads `documentType` as a display string — notification titles/descriptions, activity-log messages, the Requests table's type column, the Document Library archive metadata — keeps working completely unchanged). Old records (only `documentType`, no `documentTypes`) still render correctly everywhere via fallback: `drDocTypeItems(r)` (admin/staff review UI) and `drFormFields()`'s `documentItems` (print/PDF) both fall back to treating the legacy singular value as a one-item list.
+
+**Reviewer UI (`views/administrator/partnership_requests.ejs`, shared by Administrator and Staff)**: the Document Requests table's type column now shows the first requested item as a badge plus a "+N more" badge (full list on hover via `title`); the request detail view's "Document Type" field renders every item as a numbered list when there's more than one. The type filter dropdown (previously an exact-match `MOA`/`MOU`/`Accreditation` select) now matches as a case-insensitive substring against the joined string, since exact equality would silently stop matching almost every new-style multi-item request.
+
+### 2. Approval/Release signature section on the Fulfilled printable form
+
+**Before**: the printed CSPC-F-CIRL-04 form's "Approved By" line showed `decidedBy` — whichever Staff/Administrator account last touched the request's status (including a non-final "Under Review" nudge, not just an actual approval). "Released By"/"Received By" were optional free-text inputs a reviewer could type anything into, saved as-is only when fulfilling.
+
+**After**:
+
+- **Approved By** is now always the fixed institutional signatory — **Filmor J. Murillo, Head, Center for International Relations and Linkages (CIRL)** (`DR_APPROVER_NAME`/`DR_APPROVER_TITLE` constants in `cirl.js`) — never the account that happened to click Fulfill. This line (and its date) only appears once the request's status is actually `Fulfilled`; a Pending/Under Review/Rejected request's form leaves it blank, since no approval has (or will) happen. `drFormFields()` returns `isFulfilled`/`approverName`/`approverTitle`, consumed identically by the HTML print view (`views/print/document_request_print.ejs`) and the PDFKit generator (`renderDocumentRequestPdf`) so both outputs stay in lockstep as before.
+- **Released By** is now always the actual authenticated Staff/Administrator performing the fulfillment — set server-side from `req.session.user.name` in `PATCH /api/document-requests/:id` when `status === 'Fulfilled'`, never taken from client input. The admin/staff review UI's old "Released By" text field was replaced with a read-only note ("Recorded automatically as you when fulfilled").
+- **Received By** defaults to the request's own requester (`current.requestedBy`, real request data — never fabricated) but a reviewer may still override it with a different name, for the real-world case of someone else physically collecting the documents on the requester's behalf. The review UI's "Received By" field is now pre-filled with the requester's name when the detail modal opens, rather than starting blank.
+- The internal "Sign-off on Record" summary shown to reviewers (distinct from the printed form) was relabeled from "Approved By" to "Decided By" to avoid implying the account shown there is the same identity that prints on the official form.
+
+**Document list on the printed form**: "Document/s to be Requested" now renders every requested item — one per numbered line when there's more than one, exactly as `documentTypes` was submitted (or the single legacy-format line for pre-redesign records). The PDFKit version measures each line's wrapped height via `doc.heightOfString()` before drawing (rather than assuming a fixed row height), since several of the predefined suggestions are long enough to wrap across two lines and a fixed height would let them visually overlap the next form row.
+
+### RBAC
+
+No RBAC surface changed. Submission stays gated by `requireRequester` (Administrator, Auth. Personnel, potential_partner — **not** Staff, per the 2026-08-15 change removing Staff's ability to submit any Partnership/Document Request); review/fulfill/upload/print/PDF stay gated exactly as the 2026-08-27 full-parity revision and the draft-collaboration work left them (`requireStaffAccess`, `canAccessDocumentRequest`, `REQUEST_REVIEWER_ROLES`). The only query-shape change is the type filter's exact-match → substring-match fix above, which loosens a client-side display filter, not a server-side authorization check.
+
+### Testing
+
+- **`test/document-request-print.test.js`** — the submission test was rewritten to send a multi-item `documentTypes` array (two predefined suggestions + one custom string) and assert both the array and the backward-compatible joined `documentType` string; added a rejection test for an empty array and a backward-compatibility test for the legacy singular `documentType` string. The Fulfill test was rewritten: a client-supplied `releasedBy` is proven to be ignored (asserted `not.toBe` the injected value; asserted `toBe` the actual acting Administrator's name instead), a `receivedBy` override is honored, and the print output is asserted to contain "Filmor J. Murillo" / the CIRL Head title and NOT the injected fake name. A new test creates a second request and fulfills it with no `receivedBy` override, asserting it defaults to the original requester's name. **11/11 passing** in this file (up from 6; one pre-existing test's assertions were updated because they encoded exactly the old, now-intentionally-removed behavior — the hand-typed Released By — not weakened).
+- **`test/document-request-document-types.test.js`** (new, 6 tests) — server-side normalization the UI can't be trusted to enforce alone: whitespace trimming, blank-entry filtering, non-string entries rejected without crashing the request, per-item 300-character cap, 20-item array cap, and institution still required alongside a valid `documentTypes` array.
+- **Full Jest suite**: 213/213 passing (204 pre-existing + 3 rewritten assertions in the Fulfill test group + 6 new document-type-validation tests), zero regressions.
+- **Playwright** (5 tests, real Chromium, disposable `zztest_pw_dr_*` accounts and `pwtest`-prefixed data): (A) Auth. Personnel opens the Document Request form, confirms the old fixed `<select>` is gone, opens the combobox and sees all 8 suggestions, filters by typing ("Airlangga" → 1 match + a "custom" row), selects two predefined suggestions, adds a custom entry, removes one chip, and submits — the persisted `documentTypes` array is asserted directly from the API response. (B) Staff opens the request, confirms the multi-item "+1 more" badge and the itemized document list, uploads a new draft with a note through the existing draft-collaboration modal, previews it (confirms an `<img>` renders) and downloads it (confirms the original filename is preserved), confirms "Received By" is pre-filled with the requester's real name, and fulfills the request. (C) The printed form is confirmed to show "Filmor J. Murillo" and the CIRL Head title, the actual Staff account as Released By, the actual requester as Received By, and every requested document (predefined + custom). (D) The original requester sees the Fulfilled status and the Staff-uploaded draft on their own Monitoring page, and can preview/download it. (E) An unrelated Auth. Personnel account is confirmed blocked (403) from the print view and the PDF API via a real second browser session, and an unauthenticated context is confirmed redirected. All disposable accounts/requests/documents/logs/notifications were deleted afterward; a residue check confirmed zero remaining rows.
+
+### Files changed
+
+- `cirl.js` — `DOCUMENT_REQUEST_TYPES` replaced by `DOCUMENT_TYPE_SUGGESTIONS`; `DR_APPROVER_NAME`/`DR_APPROVER_TITLE` constants added; `POST /api/document-requests` validation rewritten for the `documentTypes` array (with legacy-string fallback); `PATCH /api/document-requests/:id`'s Fulfilled branch rewritten to source `releasedBy` from the session and default `receivedBy` from the requester; `drFormFields()` rewritten to return `documentItems`/`isFulfilled`/`approverName`/`approverTitle` instead of a single `docTypeLabel` sourced from `decidedBy`; `renderDocumentRequestPdf()` updated to match (dynamic per-item row height via `doc.heightOfString()`, fixed Approved-By signatory).
+- `views/print/document_request_print.ejs` — itemized `<ol>` for multiple document types; Approved By now renders `approverName`/`approverTitle` gated on `isFulfilled`.
+- `views/auth. personnel/personnel_requests.ejs`, `views/potential_partner/partner_requests.ejs` — old `<select>` replaced with the combobox markup/CSS/JS (light + dark mode via `[data-bs-theme="dark"]`); `submitRequest()`/`submitDocRequest()` send `documentTypes` instead of `documentType`.
+- `views/administrator/partnership_requests.ejs` — `drDocTypeItems`/`drDocTypeBadges`/`drDocTypeList` helpers added; table badge, detail view, and type filter updated for multi-item display; "Released By" input replaced with a read-only note, "Received By" pre-filled with the requester's name; `resolveDR()` no longer sends a client-typed `releasedBy`; internal sign-off summary relabeled "Decided By".
+- `test/document-request-print.test.js` — submission/fulfill tests rewritten and extended (see Testing above).
+- `test/document-request-document-types.test.js` — new file, 6 tests.
+
+### Known limitations
+
+- None found against this task's scope. Every predefined suggestion, custom-entry, multi-select, chip-removal, itemized print/PDF rendering, and the fixed/dynamic signature fields were verified working end-to-end in a real browser, not just inferred from the code.
+
+## Registry "Responsible Unit" Multi-Select Combobox — 2026-09-03
+
+The Registry → Add/Edit Partnership → CSPC-CIRL Details → **Responsible Unit** field, previously a single-value `<select>` restricted to one of six fixed CSPC units, became a searchable multi-select combobox: type to filter, select any number of units, remove one without clearing the others. Unlike the Document Request combobox above, this field stays a **closed list** — no custom/free-text unit names are ever accepted, matching the requirement that only the six predefined units are selectable.
+
+### Scope and architecture
+
+`unit` on the `partnerships` collection was a plain string (`"CCS"`) read/written by `POST`/`PATCH /api/partnerships`, the Add and Edit modals in `views/administrator/registry.ejs`, the Registry table's type badge and Unit filter, the View modal, `/api/partnerships/stats`' `byUnit` breakdown, the Custom Report Builder and Comparison engines (filtering, "By College/Unit" grouping, dimension-value lookups), and two report exports (Comparison PDF/Excel per-record tables). Every one of these was inspected before changing anything — this was **not** a search-and-replace: some needed no change at all, because MongoDB's query engine already treats `{unit: 'CCS'}` as matching both a scalar `"CCS"` and an array containing `"CCS"` (and `distinct('unit')` already flattens array values automatically), so the existing filter/PATCH filter-building code, the `/api/reports/dimension-values` "Compare Against" picker, and every plain-equality Mongo query kept working against the new array shape with **zero changes**.
+
+Places that genuinely needed updating, because they do their own JS-side aggregation or direct string rendering rather than a Mongo query:
+
+- **`sanitizePartnershipFields()`** (`cirl.js`) — `PARTNERSHIP_FIELDS.unit` changed from `'string'` to a new `'stringArray'` type: accepts a real array (the combobox's shape) or, for backward compatibility, a single string wrapped into a one-item array; each item is trimmed, validated against `VALID_PARTNERSHIP_UNITS = ['CCS','CILS','CETE','CNAS','CAMS','CIRL']` (anything else is a 400), and case-insensitively de-duplicated server-side (defense-in-depth — the UI already prevents duplicate selection). The `requireCore`-required-field check was generalized to treat an empty array as "missing," matching the existing string-empty check.
+- **`/api/partnerships/stats`'s `byUnit` breakdown** and **`computeCustomReportData()`'s "By College / Unit" comparison grouping** — both used to key a tally object directly by `p.unit`; a multi-unit partnership now fans out and counts toward **each** of its units (e.g. `['CCS','CIRL']` increments both CCS's and CIRL's tallies), rather than forming one combined `"CCS,CIRL"` bucket distinct from either unit alone.
+- **`renderComparisonReportPdf`**'s per-record table and **`buildComparisonExcel`**'s per-group Excel sheets — the only two report outputs that write `p.unit` directly into a rendered cell (the primary Custom Report PDF/Excel and the main Registry Excel export never included a Unit column at all, confirmed by inspection, so they needed no change). Both now join an array with `", "` before rendering rather than passing the raw array to PDFKit's `String()` coercion or an ExcelJS cell (which expects a primitive value, not an array).
+- **`views/administrator/registry.ejs`** — both the Add form's `#f-unit` and the Edit modal's `#e-unit` `<select>` were replaced with the same combobox pattern (`createUnitCombo(prefix)` in `assets/js/pages/registry-gridjs.init.js`, mirroring the architecture of the Document Request combobox above but restricted to the closed unit list — no "add as custom" row). This incidentally fixed a pre-existing inconsistency: the Edit modal's old `<select>` was missing `CAMS` and had a stray non-unit `"All"` option that the Add form and the Unit filter dropdown didn't have; both now share the identical six-value list.
+- **`registry-gridjs.init.js`** — `applyFilter()`'s Unit filter, the table's `unitBadge`, and `openViewModal()`'s Responsible Unit display all changed from `p.unit` (assumed a string) to an array-aware form (`Array.isArray(p.unit) ? p.unit.join(', ') : p.unit` for display; `.indexOf(unt) !== -1` for the filter match) so both legacy single-unit and new multi-unit records render and filter correctly side by side.
+- **`views/administrator/reports.ejs`**'s Custom Report preview table — same array-aware join before `escapeHtml()`.
+
+### RBAC
+
+No RBAC surface changed. `POST`/`PATCH`/`DELETE /api/partnerships` stay `requireStaffAccess` (Administrator and Staff share full authority, unchanged since the 2026-08-27 full-parity revision); every other role keeps read-only access. The Add/Edit combobox is rendered identically regardless of which of the two roles is looking at it.
+
+### A real widget bug caught by testing, not assumed away
+
+Live Playwright testing surfaced (and this pass fixed) a genuine race condition in the combobox widget, not just a test-script issue:
+
+1. **Stale close timer**: clicking a chip's remove button shifts focus away from the text input (the button isn't `mousedown`-guarded the way dropdown options are), which fires the input's `blur` handler — a **delayed** `setTimeout(closeDropdown, 120)` (the standard combobox pattern to let a dropdown-option click register before blur closes it). If the input regained focus and the dropdown reopened before that 120ms elapsed, the stale timer was still armed and could fire asynchronously in the middle of a *later, unrelated* click, wiping the dropdown's contents out from under it (observed in Playwright as "element is not stable" → "element was detached from the DOM"). Fixed by cancelling the pending timer at the top of `openDropdown()`.
+2. A smaller, related hardening: `openDropdown()` now no-ops if the dropdown is already open showing the exact same query's results, since both `focus` and `click` fire on the same first click into an unfocused input and previously each rebuilt the entire option list from scratch.
+
+This was root-caused via three consecutive live-browser failures (a real detachment race, not flakiness assumed away) before being fixed and re-verified twice to confirm the fix wasn't merely lucky.
+
+### Testing
+
+- **`test/partnerships.test.js`** — extended with a `describe('Responsible Unit — multi-select combobox (array field)')` block (7 tests): multiple units stored and returned as an array; duplicate values silently de-duplicated; a value outside the predefined list rejected (400); an empty array rejected (400, "at least one is required"); editing a legacy single-unit record to multiple units and persisting; Staff creating a multi-unit partnership (full parity); and `/api/partnerships/stats`'s `byUnit` tallying a multi-unit record toward each of its units. The pre-existing "Add Partnership Record" test gained an assertion that a legacy singular string input (`unit: 'CCS'`) normalizes to `['CCS']` on write.
+- **`test/reports.test.js`** — two pre-existing assertions that compared `p.unit === 'CIRL'` directly were updated to `Array.isArray(p.unit) ? p.unit.includes('CIRL') : p.unit === 'CIRL'`, since records created through the now-array-typed `unit` field no longer match a bare string equality — this is a necessary consequence of the intentional schema change, not a weakened assertion (both branches still fail if the value is genuinely absent).
+- **Full Jest suite**: 220/220 passing (213 pre-existing + 7 new Responsible Unit tests), zero regressions.
+- **Playwright** (5 tests, real Chromium, disposable `zztest_pw_unit_*` accounts and `pwtest`-prefixed data), matching the task's own acceptance script: (1) Administrator opens Add Partnership, confirms the old `<select>` is gone, opens the dropdown (6 options), selects CCS then CIRL as chips, removes CCS and confirms CIRL alone remains, re-adds CCS, saves, and confirms both the API response and a direct MongoDB read show `unit: ['CCS','CIRL']`, then opens the View modal and confirms both units display. (2) A legacy single-string record (`unit: 'CETE'`) is seeded directly in the database, confirmed to display correctly in the table, opened in Edit (showing one pre-filled chip), extended to a second unit, and saved — proving old records both display and remain editable. (3) The Registry Unit filter dropdown, combined with the grid's own search box, finds the new multi-unit record. (4) Staff repeats the create flow with full parity. (5) The Custom Report preview API, filtered by `unit=CIRL`, returns the multi-unit record with its array intact. All disposable data was deleted afterward; a residue check confirmed zero remaining rows.
+- Two intermediate Playwright failures were root-caused to real bugs (the widget race above, and a wizard-step mix-up in the test itself where `#f-type` was assumed to live on step 1 but is actually on step 2 of the Add Partnership form) rather than being papered over — both were fixed at the source, and the fixed suite was run twice more to confirm the widget fix wasn't a lucky pass.
+
+### Files changed
+
+- `cirl.js` — `VALID_PARTNERSHIP_UNITS` added; `PARTNERSHIP_FIELDS.unit` changed to a new `'stringArray'` type with predefined-value validation and de-duplication in `sanitizePartnershipFields()`; `/api/partnerships/stats`'s `byUnit` and `computeCustomReportData()`'s "By College / Unit" grouping made array-aware (fan-out per unit); `renderComparisonReportPdf`/`buildComparisonExcel` join `unit` arrays for display.
+- `views/administrator/registry.ejs` — Add form's `#f-unit` and Edit modal's `#e-unit` `<select>` replaced with the combobox markup; combobox CSS (light + dark via `[data-bs-theme="dark"]`) added.
+- `assets/js/pages/registry-gridjs.init.js` — `createUnitCombo(prefix)` factory added; `submitPartnership()`, `openEditModal()`/`saveEdit()`, `applyFilter()`, the table's `unitBadge`, and `openViewModal()` all updated for the array field.
+- `views/administrator/reports.ejs` — Custom Report preview table's Unit column made array-aware.
+- `test/partnerships.test.js` — 7 new tests plus one extended assertion.
+- `test/reports.test.js` — 2 assertions updated for the array field shape.
+
+### Known limitations
+
+- None found against this task's scope. Multi-select, chip removal, duplicate/invalid-value rejection, backward compatibility with legacy single-unit records (both display and edit), Registry filtering, Reports filtering, and Administrator/Staff parity were all verified working end-to-end in a real browser, and the one real widget bug this pass surfaced was fixed at its root cause and re-verified rather than reported as a residual flake.
+
+## Partnership Request Approval → Registry → Dashboard/Map Conversion — 2026-09-04
+
+**Before**: clicking "Approve" on a pending (non-renewal) Partnership Request in `PATCH /api/requests/:id` flipped its status straight to `Approved` — no Registry partnership was ever created from it, so a reviewer had to separately re-type the same institution's details into Registry → Add New Partnership by hand, with nothing linking the two records.
+
+**After**: "Approve" on a new (non-renewal) request now hands off to Registry → Add New Partnership, pre-filled from the request, and the request is only marked `Approved` — with a permanent link to the partnership it produced — once the reviewer actually saves that form. Renewal requests are untouched: approving one still directly extends its already-linked partnership exactly as before (`PATCH /api/requests/:id`'s existing `isRenewal`/`renewalPartnershipId` branch).
+
+### Architecture — reused the existing Registry creation path, not a second one
+
+Per the task's explicit instruction not to build a second Registry-writing system, the conversion is implemented as an *optional extra step* inside the same `POST /api/partnerships` endpoint the normal "Add New Partnership" form already calls — there is exactly one code path that ever inserts into the `partnerships` collection.
+
+- **`views/administrator/partnership_requests.ejs`** (shared by Administrator at `/partnership-requests` and Staff at `/staff/requests`) — `resolvePR(uid, 'Approved')` no longer calls `PATCH /api/requests/:id` for a non-renewal request. It instead redirects to `REGISTRY_BASE_PATH + '?fromRequest=' + id`, where `REGISTRY_BASE_PATH` is computed server-side per the viewer's actual role (`/registry` for Administrator, `/staff/registry` for Staff — these are two different `requireAdmin`/`requireStaffAccess`-gated routes rendering the same `registry.ejs`, mirroring the existing `/partnership-requests` vs `/staff/requests` split). A renewal request's Approve is unchanged — it still PATCHes directly and extends the linked partnership.
+- **`views/administrator/registry.ejs` / `assets/js/pages/registry-gridjs.init.js`** — on page load, `checkFromRequestParam()` reads `?fromRequest=<id>` and fetches the already-existing `GET /api/requests` (no new read endpoint — Administrator/Staff already receive every request from it via `REQUEST_REVIEWER_ROLES`), finds the matching request, and — if it's still `Pending`/`Under Review` and not already linked to a partnership — opens the Add New Partnership modal and calls `applyRequestToForm(request)`, a field-by-field pre-fill mirroring the existing `applyOcrToForm()` pattern already used for OCR auto-fill on the same form (institution, country, region, category, agreement type when it's `MOA`/`MOU`, nature of partnership when an exact case-insensitive option match exists, start/end dates, and the request's single Responsible Unit fed into the new multi-select combobox via `fUnitCombo.setValues(r.unit)`). A new banner (`#from-request-banner`) makes the conversion context visible above the form; the fields underneath remain fully editable, satisfying "the reviewer should be able to review and edit the pre-filled information before saving."
+- **`POST /api/partnerships`** (`cirl.js`, unchanged `requireStaffAccess` gate) gained one optional body field, `sourceRequestId`, destructured out before the existing unknown-field/type validation runs (so it can never collide with a real partnership field). When present: the source request is looked up; if it's already linked to a partnership (checked two ways — its own `linkedPartnershipId`, and a reverse lookup by `sourceRequestId` on `partnerships`, so a request that was converted by an earlier attempt that crashed *before* the request could be updated is still caught) the existing partnership is returned as-is (`alreadyConverted: true`) and nothing new is inserted; if the request is in a decided, non-linked state (`Rejected`/`Withdrawn`) the save is refused with 409; otherwise the partnership is inserted exactly as a normal Add New Partnership would be (same `sanitizePartnershipFields()` validation, same `unit` array handling from the 2026-09-03 combobox work), tagged with `sourceRequestId`, and the request is updated to `status: 'Approved'`, `linkedPartnershipId: <new id>`, `decidedBy: <acting reviewer>` — then the submitter is notified via the existing `notifyUsers`/`prLinkForRole` machinery, identically to how a normal Approve notifies them.
+- **Single source of truth, automatically**: `computeDashboardStats()`, `/api/partnerships/stats`, `/api/partnerships`, and every report builder already read live from the `partnerships` collection on every request — nothing needed to change for the new partnership to appear on the Dashboard's stat cards/charts, the Partnerships Geographic Map's data fetch, or Reports; it is the exact same collection, populated through the exact same insert path as any manually-added partnership.
+
+### Geographic Map — no geocoding mechanism exists, so none was invented
+
+Before touching anything, the existing map implementation was inspected (`views/administrator/admin_dashboard.ejs`'s Leaflet map): `renderMap(partnerships)` already filters to `typeof p.lat === 'number' && typeof p.lng === 'number'` before placing a marker, and no code anywhere in `cirl.js`, the Registry form, or `registry-gridjs.init.js` ever sets `lat`/`lng` from a country, region, or address — there is no existing geocoding service or country→coordinate table backing partnership records (the only `lat`/`lng` tables in the codebase are `personnel_dashboard.ejs`'s hardcoded sample/demo map, a separate, already-out-of-scope view that doesn't read live data). Per the task's own instruction ("if required geographic information is missing, handle it gracefully according to existing application behavior instead of creating invalid coordinates" / "do not hardcode map coordinates"), this pass does not fabricate a geocoding step: a partnership created through this new flow is saved with no `lat`/`lng`, exactly like every manually-added partnership today, and the map's own pre-existing filter simply omits it from the pins — it still appears everywhere else (Registry, Dashboard stat cards/charts, Reports). Adding real geocoding would be new functionality outside this task's scope ("do not make unrelated changes") and was intentionally not built.
+
+### Duplicate protection and error handling
+
+- **No duplicate on re-approval**: re-submitting the same `sourceRequestId` (accidental double-click, a stale tab reopened after the request was already converted) returns the existing partnership unchanged instead of inserting a second one — verified both via a direct repeat API call and via a live-browser repeat visit to `/registry?fromRequest=<id>` after conversion.
+- **Approve never marks a request converted prematurely**: since the status/link update only happens *after* a successful `insertOne`, a form that's never opened (navigation failure) or a save that fails validation leaves the request exactly as it was — still `Pending`/`Under Review`, retryable. `submitPartnership()` in `registry-gridjs.init.js` was also fixed to actually surface a save error via a toast (it previously did nothing at all on a non-success JSON response — a pre-existing silent-failure gap in the unrelated normal Add flow, closed here because the task explicitly required "show the error and allow the reviewer to retry" for this flow, and it costs nothing to fix for the plain Add path too).
+- **Stale conversion state can't leak into an unrelated later save**: `pendingRequestConversion` (the client-side flag carrying the source request id into the next `submitPartnership()` call) and the banner are both cleared on every modal close (`hidden.bs.modal`), whether the reviewer saved, cancelled, or navigated away, and the `?fromRequest=` query string is stripped from the URL at the same time so refreshing the page afterward doesn't attempt to reopen the conversion.
+
+### RBAC
+
+No RBAC surface changed. The conversion reuses `POST /api/partnerships`'s existing `requireStaffAccess` gate (Administrator and Staff share full authority, per the 2026-08-27 full-parity revision) and the existing `requireAdmin`/`requireStaffAccess` split between `/registry` and `/staff/registry`. `resolvePR`'s redirect target is resolved from the viewer's own session role so Staff is sent to `/staff/registry` and Administrator to `/registry` — sending Staff to the Administrator-only route would have silently broken the Staff half of this feature (caught and fixed during implementation, before any testing).
+
+### Two real bugs found and fixed during verification, not assumed away
+
+1. **`DR_APPROVER_TITLE` — constant entirely missing.** The full Jest regression run for this task failed one pre-existing test (`document-request-print.test.js`) with "Failed to render the document request form." Investigation found `DR_APPROVER_TITLE` (used by `drFormFields()`, documented and covered by the 2026-09-02 revision above, and confirmed passing 220/220 as recently as the previous session) was no longer declared anywhere in `cirl.js`, causing a `ReferenceError` on every Fulfilled document request print. This is unrelated to this task's own change set — `git diff` confirmed no edit in this session touched that region — and was restored (`const DR_APPROVER_TITLE = 'Head, Center for International Relations and Linkages (CIRL)';`) and re-verified via the full suite. The mechanism of the original loss was not identified; flagged here as a second occurrence of unexplained file-content loss (the first was a truncation of the same constant, caught and fixed in the previous session) worth watching for in future sessions.
+2. **Conversion banner never actually hid itself.** `#from-request-banner` was built with Bootstrap's `d-flex` utility class (for its icon+text layout) and hidden via an inline `style="display:none"`; toggling `style.display` between `''` and `'none'` in JS never actually hid it once shown, because `.d-flex{display:flex!important}` — a `!important` utility class — always wins over a plain inline style. Caught live in Playwright (`toBeHidden()` reported "visible" with computed `display: flex` on a fresh, banner-should-never-have-shown page). Fixed by never mixing the two mechanisms: the banner starts with `d-none` (also `!important`) instead of an inline style, and `hideFromRequestBanner()`/`applyRequestToForm()` now swap `d-none`↔`d-flex` as classes rather than touching `style.display`.
+
+### Testing
+
+- **`test/request-to-partnership-conversion.test.js`** (new, 7 tests): approving a new request via `POST /api/partnerships` with `sourceRequestId` creates the partnership, tags it with `sourceRequestId`, and marks the request `Approved` + `linkedPartnershipId`, and the same partnership is immediately visible through the normal `GET /api/partnerships` list (single source of truth); resubmitting the same `sourceRequestId` returns the existing partnership (`alreadyConverted: true`) without creating a second row; a request already `Rejected` cannot be converted (409, nothing created); a non-existent `sourceRequestId` is rejected (404, nothing created); Staff has full parity converting a request the same way Administrator does; the submitter receives a notification once converted; and ordinary partnership creation with no `sourceRequestId` is completely unaffected (`sourceRequestId` is `undefined` on the resulting record).
+- **Full Jest suite**: 227/227 passing (220 pre-existing + 7 new), zero regressions, run with `--runInBand` (the project's own `npm test` convention — an earlier default-parallel run produced ~90 unrelated false-positive failures from concurrent worker processes racing on shared auto-incrementing `id` fields in the `users` collection, root-caused and discarded as a test-runner artifact, not a real regression).
+- **Playwright** (4 tests, real Chromium, disposable `zztest_pw_reqconv_*` accounts and `zztest_pw_reqconv`-tagged requests/partnerships), matching the task's own acceptance script: (1) Administrator opens Partnership Requests, opens a pending request, clicks Approve, is redirected to `/registry?fromRequest=<id>` with the Add New Partnership modal already open and the conversion banner visible, confirms the institution/country pre-filled and the request's single Responsible Unit already applied as a chip, adds a second unit via the combobox, confirms both dates pre-filled on the Agreement Details step, saves, confirms the partnership persists with both units and the correct `sourceRequestId`, confirms it's immediately visible via `/api/partnerships`, confirms `/api/partnerships/stats`' total reflects it, confirms the original request is now `Approved` with the matching `linkedPartnershipId`, then revisits `/registry?fromRequest=<id>` again and confirms no second partnership was created. (2) The identical flow repeated for a Staff account through `/staff/requests` → `/staff/registry`. (3) A request with no geographic data converts and saves cleanly with no fabricated `lat`/`lng`, and still appears via the Registry API (the map simply has nothing to plot for it — verified as the correct, pre-existing, graceful behavior rather than a bug). (4) An ordinary manually-created partnership (no `sourceRequestId`, opened via the plain "Add Partnership" button) is confirmed to show no conversion banner and to persist with no `sourceRequestId` — the existing flow is untouched. All 4 passed on the third attempt: the first surfaced the wizard step-visibility issue (Step 3's unit combobox/Save button aren't on the default-active Step 1 tab, so the test needed to switch tabs before interacting — a test-script fix), and the second surfaced the real `d-flex`/`d-none` banner bug above (a genuine product fix, not a test-script change). Re-run twice more after both fixes (4/4 passing each time) to rule out a lucky pass. All disposable accounts/requests/partnerships/notifications were deleted afterward; a residue check confirmed zero remaining rows.
+
+### Files changed
+
+- `cirl.js` — `POST /api/partnerships` extended with the optional `sourceRequestId` conversion branch (idempotent duplicate protection, request status/link update, submitter notification); `DR_APPROVER_TITLE` restored (unrelated pre-existing corruption found during regression testing, see above).
+- `views/administrator/partnership_requests.ejs` — `resolvePR()`'s Approve path redirects non-renewal requests to Registry instead of PATCHing directly; `REGISTRY_BASE_PATH` added (role-aware redirect target).
+- `views/administrator/registry.ejs` — `#from-request-banner` markup added (starts hidden via `d-none`).
+- `assets/js/pages/registry-gridjs.init.js` — `checkFromRequestParam()`, `applyRequestToForm()`, `hideFromRequestBanner()`, `clearFromRequestParam()` added; `submitPartnership()` sends `sourceRequestId` when present, handles `alreadyConverted`, and now surfaces save errors via toast; modal lifecycle handlers (`show.bs.modal`/`hidden.bs.modal`) updated to reset/clear the new conversion state.
+- `test/request-to-partnership-conversion.test.js` — new file, 7 tests.
+
+### Known limitations
+
+- The Geographic Map cannot plot a partnership converted through this flow (or any partnership at all, converted or manually added) unless it already carries numeric `lat`/`lng` — there is no geocoding mechanism anywhere in the existing application to generate coordinates from country/region/address, and building one was out of this task's scope per its own instructions. This is pre-existing behavior, not a regression introduced here.
+- No other gaps found against this task's scope. Approve→Registry redirect, pre-fill, multi-unit selection, save/convert, duplicate protection, error handling, Dashboard/Reports live visibility, and Administrator/Staff parity were all verified working end-to-end in a real browser, and both real bugs this pass surfaced (one pre-existing and unrelated, one newly introduced by this pass) were fixed at their root cause and re-verified rather than reported as residual gaps.
+
+## Monitoring ↔ Registry Page Consolidation (Administrator/Staff) — 2026-09-05
+
+Administrator and Staff previously had two heavily-overlapping pages: **Monitoring** (`/lifecycle`, `/staff/lifecycle` — KPI cards, Overview, DSS Smart Alerts, Urgent, and an "Agreement Validity Tracker" table) and **Registry** (`/registry`, `/staff/registry` — its own near-identical KPI cards, Overview, Urgent, a full filter bar, and an "All Partnerships" table with Add/Edit/Renew/Delete). Both read the same `partnerships` collection and rendered duplicate stats, a duplicate Urgent list, and two separate partnership tables. Registry is now fully absorbed into Monitoring as one page; the standalone Registry page and its nav item are gone, with `/registry`/`/staff/registry` kept only as compatibility redirects.
+
+### Architecture — inspection first, reuse over rewrite
+
+Both pages' full implementations were read end-to-end before changing anything (`views/administrator/lifecycle.ejs` + `assets/js/pages/lifecycle-gridjs.init.js` vs. `views/administrator/registry.ejs` + `assets/js/pages/registry-gridjs.init.js`), to identify exactly what each contributed and what was pure duplication:
+
+- **Registry's** implementation was the more complete one for partnership *management*: the full filter set (Type/Category/Status/Region/Unit/Yr Signed/Yr Expiry), Grid.js's own search box, the richer Edit modal (institution/country/region/partner email/nature/category/multi-unit combobox/coordinator/remarks vs. Lifecycle's institution/type/category/expiry-only), the Renew modal, OCR auto-fill, the institution-autocomplete widget, and — from the 2026-09-04 work above — the "Approve a Partnership Request → Registry" conversion banner and pre-fill. All of this became the new page's Partnership Registry section, completely unchanged in behavior.
+- **Monitoring's (Lifecycle's)** unique value was in *decision support*, not management: the richer Overview (Expiring ≤30d/≤90d split, Active Rate with a progress bar — Registry's Overview lacked these), the DSS Smart Alerts card (Registry had no equivalent at all), and a days-remaining-based Urgent list and table column (Registry's own Urgent list and table only showed status, not a countdown).
+- The consolidation kept Registry's page (`views/administrator/registry.ejs` → new `views/administrator/monitoring.ejs`, and its script `assets/js/pages/registry-gridjs.init.js`, **kept and extended in place**, not rewritten) as the base, and folded in Monitoring's three unique pieces: the DSS Smart Alerts card (copied verbatim), the richer Overview fields (`ov-expiring30`/`ov-expiring90`/`ov-active-rate` + its progress bar, added to `buildGrid()`), and a new "Days Left" table column plus a days-based Urgent list (both driven by a new `computeDays()` helper, recomputed after every add/edit/renew so it never goes stale). No backend logic, no `/api/partnerships*` route, and no database schema changed — this was purely a page/template consolidation.
+- **Auth. Personnel's own Monitoring page was deliberately left untouched.** `administrator/lifecycle.ejs` and `assets/js/pages/lifecycle-gridjs.init.js` are unmodified and still serve `/personnel/lifecycle` exactly as before (simple status/category pills, a plain Agreement Validity Tracker table, no Registry filters, no Add/Edit/Renew/Delete, no OCR) — this task's scope is explicitly Administrator and Staff, and Personnel already has its own separate route, so forking a new template (`monitoring.ejs`) rather than editing the shared one in place was the only way to avoid changing Personnel's experience as a side effect. `/lifecycle` itself was narrowed from `requirePersonnel` to `requireAdmin` (it's Administrator's own sidebar target; Personnel's real link has always been `/personnel/lifecycle`, which is unaffected).
+
+### New page structure (`views/administrator/monitoring.ejs`)
+
+Matches the requested layout exactly, each section reading from the one `partnerships` array the page's script (`registry-gridjs.init.js`) loads from `/api/partnerships`:
+
+1. **KPI cards** — Total Partnerships / Active / Expiring Soon / Expired (one set, not two).
+2. **Overview** — Total, Active, Expiring ≤30d, Expiring ≤90d, Expired, Active Rate (with bar), MOA/MOU (with bars), International/Local.
+3. **DSS Smart Alerts** — Administrator-only, unchanged content/logic, now sourced from the same array as the table below it (previously it read the Lifecycle-only dataset, which was numerically identical but architecturally separate).
+4. **Urgent** — one list (not two), days-based, sorted soonest/most-overdue first, top 7.
+5. **Partnership Registry** — heading + "Manage and monitor all registered partnerships." subtitle, the full filter bar, Grid.js search, **Add New Partnership** button (Administrator/Staff only), and the one consolidated table: Institution (+ CIRL Coordinator sub-line), Country/Region, Type, Nature, Unit, Start, End, **Days Left** (new — merged in from the old Lifecycle table), Status, Actions (View always; Edit/Renew/Delete for Administrator/Staff only, matching `CAN_MANAGE_REGISTRY`, server-enforced regardless by `requireStaffAccess` on `POST`/`PATCH`/`DELETE /api/partnerships`).
+
+Responsible Unit filtering already handled the multi-value case correctly before this task (`Array.isArray(p.unit) ? p.unit.indexOf(unt) !== -1 : p.unit === unt`, from the 2026-09-03 work) — carried over unchanged and re-verified here with a two-unit record.
+
+### Preserving the Approve → Registry → Dashboard/Map workflow
+
+The 2026-09-04 "Approve a Partnership Request" conversion flow (see above) redirects to `REGISTRY_BASE_PATH + '?fromRequest=' + id` from `views/administrator/partnership_requests.ejs`. That constant was updated from `/registry` / `/staff/registry` to `/lifecycle` / `/staff/lifecycle` — the only change this consolidation required to keep that workflow intact, since the conversion banner, pre-fill logic, and `sourceRequestId` handling all live in `registry-gridjs.init.js` and the Add Partnership modal, both of which moved into `monitoring.ejs` unchanged.
+
+### Routes and backward compatibility
+
+- `GET /registry` (`requireAdmin`) and `GET /staff/registry` (`requireStaffAccess`) no longer render a page — they now `res.redirect()` to `/lifecycle` and `/staff/lifecycle` respectively. Nothing else about them changed; a bookmarked or linked `/registry` URL keeps working.
+- `GET /lifecycle` was narrowed from `requirePersonnel` to `requireAdmin` and now renders `administrator/monitoring` (was `administrator/lifecycle`). `GET /staff/lifecycle` keeps its `requireStaffAccess` gate and also now renders `administrator/monitoring`.
+- `GET /personnel/lifecycle` is completely unchanged (`requirePersonnel`, still renders `administrator/lifecycle`).
+- No `/api/partnerships*` route, and no other API, changed in any way.
+
+**Internal links updated** to point at Monitoring instead of the old Registry page: the sidebar's "Registry" item removed for both Administrator (`views/partials/sidebar.ejs`) and Staff (`views/partials/sidebar_staff.ejs`); `views/administrator/admin_dashboard.ejs`'s three "View Registry" chart-card links (now labeled "View Monitoring", pointing at `/lifecycle`/`/staff/lifecycle`); the header's quick-search dropdown (`views/partials/header.ejs`) collapsed its separate "Registry"/"Lifecycle" entries into one "Monitoring" entry; and a stale RBAC-summary comment in `views/users.ejs` that described Monitoring and Registry as two separate pages was corrected to describe the merged page. `views/administrator/registry.ejs` itself was left on disk, unmodified and simply unreferenced by any route now — not deleted, per "do not blindly delete."
+
+### RBAC
+
+Unchanged. `CAN_MANAGE_REGISTRY` (`['Administrator','Staff'].includes(user.role)`) still gates the Add/Edit/Renew/Delete UI exactly as it did on the old Registry page, and `POST`/`PATCH`/`DELETE /api/partnerships` are still `requireStaffAccess`-enforced server-side regardless of what the UI shows — Staff gained no destructive permission it didn't already have, and lost none. The only permission-surface change at all is `/lifecycle` narrowing from `requirePersonnel` to `requireAdmin`, which affects nobody's actual workflow (see the Personnel note above).
+
+### Testing
+
+- **Full Jest suite**: 227/227 passing, zero regressions — this was a page/template/route consolidation with no backend logic changes, so no new Jest tests were needed; the existing `/registry`-is-Administrator-only test in `test/auth.test.js` still passes unchanged (a redirect is still a 302, same as a render would have produced for a disallowed role).
+- **Playwright** (4 tests, real Chromium, disposable `zztest_pw_monconsol_*` accounts and `zztest_pw_monconsol`-tagged partnerships), covering both acceptance scripts in full: (1) **Administrator** — confirms no `/registry` sidebar link and exactly one `/lifecycle` link; opens Monitoring and confirms the KPI cards, Overview, DSS Smart Alerts, and a single Urgent section all appear; confirms there is exactly one table (`#reg-grid`) and that neither old heading ("Agreement Validity Tracker" or "All Partnerships") nor the old `#lc-grid` table exist; exercises the Status filter, the Unit filter against a seeded two-unit (`['CCS','CIRL']`) record from both unit values, and the search box; opens Partnership Details; opens Add New Partnership and saves a new record; confirms it appears in the table, in `/api/partnerships/stats`, and in `/api/partnerships` (the same source the Dashboard and Map read); confirms Reports' preview API still responds. (2) **Staff** — same page, confirms DSS Smart Alerts is correctly absent (Administrator-only, unchanged) while Add New Partnership remains available (full parity), exercises Unit filtering, Partnership Details, and Add New Partnership end-to-end. (3) A dedicated redirect-compatibility test confirms `/registry` → `/lifecycle` and `/staff/registry` → `/staff/lifecycle`. (4) A dedicated Personnel test confirms `/personnel/lifecycle` still shows the original, un-consolidated Lifecycle Monitor with no Partnership Registry filters or Add button — proving the fork strategy actually isolated Personnel from this change. Re-run twice after the initial fixes (4/4 passing both times) to confirm stability. All disposable data was deleted afterward; a residue check confirmed zero remaining rows.
+- Two issues were found and fixed during Playwright verification, both test-script issues rather than product bugs: an ambiguous `text=Partnership Registry` locator that also matched the header's new "Monitoring (Partnership Registry)" quick-link (fixed by scoping to the card's `<h4 class="card-title">`), and a Grid.js pagination-visibility issue — a freshly seeded record can sort past the table's 6-row-per-page limit and never enter the DOM, so a raw `#reg-grid` text-content wait can time out even though the data loaded correctly. Fixed by using the grid's own search box to guarantee the seeded row stays on the visible page before asserting against it — the same pattern already documented in the 2026-09-03 Responsible Unit combobox work above.
+
+### Files changed
+
+- `views/administrator/monitoring.ejs` — new file; the consolidated page (Registry's structure plus Monitoring's DSS card, richer Overview, and Days Left column/Urgent list).
+- `assets/js/pages/registry-gridjs.init.js` — `computeDays()`, `daysBadgeHtml()`, and `renderDssAlerts()` added; `buildGrid()` extended to set the richer Overview fields and the days-based Urgent list, and to add the "Days Left" column; `saveEdit()`/`saveRenew()`/`submitPartnership()` updated to keep each partnership's `.days` current after a mutation.
+- `cirl.js` — `/registry` and `/staff/registry` changed from page renders to redirects; `/lifecycle` narrowed to `requireAdmin` and repointed (with `/staff/lifecycle`) to `administrator/monitoring`; `/personnel/lifecycle` untouched.
+- `views/partials/sidebar.ejs`, `views/partials/sidebar_staff.ejs` — "Registry" nav item removed for both roles.
+- `views/administrator/partnership_requests.ejs` — `REGISTRY_BASE_PATH` updated from `/registry`/`/staff/registry` to `/lifecycle`/`/staff/lifecycle`.
+- `views/administrator/admin_dashboard.ejs` — three chart-card links repointed from `/registry`/`/staff/registry` to `/lifecycle`/`/staff/lifecycle`, two relabeled "View Monitoring".
+- `views/partials/header.ejs` — quick-search dropdown's separate Registry/Lifecycle entries merged into one Monitoring entry.
+- `views/users.ejs` — stale two-page RBAC-summary comment corrected to describe the merged page.
+- `views/administrator/lifecycle.ejs`, `assets/js/pages/lifecycle-gridjs.init.js`, `views/administrator/registry.ejs` — **unmodified**, left in place (the first two still serve Auth. Personnel's `/personnel/lifecycle`; the third is now simply unreferenced).
+
+### Known limitations
+
+- None found against this task's scope. Single KPI/Overview/Urgent sourcing, DSS Smart Alerts, the one consolidated table with both Registry's management columns and Monitoring's Days Left/validity information, filters (including multi-unit), search, Add/Edit/Renew/Delete/View, the Approve→Registry conversion workflow, redirect compatibility, RBAC, and Auth. Personnel's isolation from this change were all verified working end-to-end in a real browser for both Administrator and Staff.
+
+### Follow-up fix — KPI cards showed 0 instead of the real totals (2026-09-05, same day)
+
+Live use surfaced a real bug the Playwright pass above didn't catch: the four top KPI cards (Total Partnerships/Active/Expiring Soon/Expired) displayed **0** regardless of actual data, even though the Overview card directly below correctly showed the real numbers (e.g. 28 total) from the exact same `partnerships` array.
+
+**Root cause**: `registry-gridjs.init.js`'s data-load handler called `buildGrid()` (which correctly writes the live total into `#cnt-total` etc. via plain `textContent`) immediately followed by `initCounters()` — a leftover "counting-up" animation helper that reads each `.counter-value` element's static `data-target` HTML attribute and animates from 0 to *that* number, overwriting whatever `buildGrid()` had just set. `monitoring.ejs`'s KPI cards (copied from the old Lifecycle page's convention) all declared `data-target="0"`, so the animation always finished at 0, clobbering the correct value a split second after it was set. This bug actually predates this consolidation — the original standalone `registry.ejs` had the identical `buildGrid()` → `initCounters()` sequence with a *hardcoded, stale* `data-target="23"`, so it silently showed a wrong-but-nonzero number the whole time rather than an obviously-broken zero, which is likely why it was never caught in earlier manual or automated checks.
+
+**Fix**: removed the `initCounters()` call and its now-dead function entirely from `registry-gridjs.init.js` (its data source — a static HTML attribute — can never stay in sync with live, filterable data; `buildGrid()`'s direct `setText()` already updates all four cards correctly on load, on every filter change, and after every add/edit/renew/delete). The now-meaningless `data-target="0"` attributes were removed from `monitoring.ejs`'s four KPI card spans.
+
+**Verification**: live-browser check (real Chromium via a throwaway script, disposable `zztest_debug_*` accounts, real seeded data — 28 partnerships) confirmed `#cnt-total`/`#cnt-active`/`#cnt-expiring`/`#cnt-expired` now read 28/17/2/9, exactly matching the Overview card, for both Administrator and Staff (with DSS Smart Alerts correctly still Administrator-only). Full Jest suite re-confirmed at 227/227 (this was a pure frontend fix, no backend/API change). Disposable accounts deleted, zero residue confirmed, debug server stopped.
+
+## Reports & Analytics — College/Unit filter re-add, Report pipeline audit, Mid-Year/Yearly dynamic date range — 2026-09-04
+
+### Scope
+
+Three changes to `views/administrator/reports.ejs` and `cirl.js`'s Custom Report Builder/export engine, all reusing the existing `computeCustomReportData()`/`computeComparisonReport()` pipeline (no separate reporting system was created):
+
+1. Re-add a real, working **College / Unit** filter to the Custom Report Builder (it had been intentionally removed from the Builder's UI on 2026-08-26, though the underlying MongoDB filter capability was always kept).
+2. Audit the entire Builder data flow (UI → query string → `computeCustomReportData()` → MongoDB → Preview/PDF/Excel/Compare) for every filter, confirming each is genuinely applied and that Preview/PDF/Excel/Compare stay in sync.
+3. Fix the **Mid-Year Output Report** and **Yearly Output Report** fixed tile cards, which exported with no date filter at all (title only) — now correctly scoped to the current calendar year's Jan 1–Jun 30 / Jan 1–Dec 31, computed live, never hardcoded.
+
+### Audit findings
+
+Tracing UI → query string → backend → MongoDB → Preview/PDF/Excel/Compare for every filter (Report Type, Category, Agreement Type, Status, Country, Date From/To, and the re-added College/Unit) found the pipeline itself was already sound for every filter still exposed in the Builder — Report Type's implied status (`REPORT_TYPE_IMPLIED_STATUS`), Country's case-insensitive exact match, and `filterByDateRange()`'s inclusive-overlap date semantics were all fixed in the 2026-08-26 work and remain correct and shared by Preview/PDF/Excel/Compare via the one `computeCustomReportData()`/`computeComparisonReport()` engine. The only genuine gap was College/Unit's *absence* from the Builder's UI and metadata — not a bug in the underlying query logic, which had been kept working the whole time for direct/legacy callers (e.g. Compare Against).
+
+**MongoDB array-membership already worked for free.** Responsible Unit became a multi-value array (`unit: ["CCS", "CIRL"]`) in an earlier session, but `computeCustomReportData()`'s filter line was always the simple `if (unit) filter.unit = unit;` — MongoDB's own equality-against-array semantics already treat `{unit: "CCS"}` as "array contains CCS" (and still match a legacy plain-string `unit` field), so no query rewrite was needed for multi-value correctness; re-adding the UI field was the actual fix. A clarifying comment was added at the filter-building site so this isn't mistaken for an oversight in a future audit.
+
+### Changes
+
+- **`views/administrator/reports.ejs`**: added a "College / Unit" `<select id="cr-unit">` (All Units + CCS/CILS/CETE/CNAS/CAMS/CIRL) next to the other Partnership Filters; wired into `buildReportQueryParams()` (adds `unit=` to Preview/PDF/Excel requests), `resetCustomReportFilters()`, `renderInheritedFilterBadges()`, and `buildComparisonQueryString()` — the last two so opening Compare from Preview carries the selected College/Unit filter into Group A exactly like every other Builder filter already did (Compare's own `compareField=unit` dimension-override picker was already unaffected and unchanged). Added `currentYearDateRange()`, `exportMidYearReport()`, and `exportYearlyReport()` helpers, and rewired the Mid-Year/Yearly tile cards' four PDF/Excel buttons to call them instead of `exportReport(format, {title: '...'})` with no date range.
+- **`cirl.js`**: `computeCustomReportData()`'s returned `filters` object now includes `unit: unit || 'All'` (previously omitted along with Region/Nature/Institution when the Builder dropped those fields — Region/Nature/Institution remain omitted, only College/Unit was re-added). The Excel "Applied Filters" sheet's `filterLabels` map gained `unit: 'College / Unit'` to match. No change to `computeComparisonReport()` was needed — it already included `'College / Unit': unit || 'All'` in its own `filters` object from the 2026-08-26 work.
+
+### Testing
+
+- **Jest** (`test/reports.test.js`, +26 tests, 93/93 in the file, 253/253 full suite): the existing "Custom Report Builder field removal" describe block (which had locked in College/Unit's *absence*) was updated in place to assert the opposite for College/Unit specifically (present in the form, echoed in Preview's `filters.unit`, listed in the Excel Applied Filters sheet) while keeping the same assertions that Region/Nature/Institution remain genuinely absent. A new "College / Unit filter — real, array-aware Custom Report Builder filter" describe block seeds a two-unit (`["CCS","CIRL"]`) partnership, a CETE-only partnership, and a raw-inserted legacy plain-string-`unit` document, then exercises: every one of the 6 units plus "All Units"; that selecting CCS *or* CIRL both include the two-unit record while CETE correctly excludes it; that the legacy string-shaped document still matches; College/Unit combined with Category/Status/Agreement Type/Region/Country/Nature/Institution/Date Range (ANDed, not OR'd); Preview/PDF/Excel record-count parity for an identical unit filter; and that opening Compare from Preview preserves the College/Unit filter in Group A. A second new describe block seeds records inside/outside/spanning the current year's Jan–Jun and Jan–Dec windows and confirms the Mid-Year and Yearly query params produce exactly the expected inclusion/exclusion, that neither window is hardcoded to a specific year (regex-checked against the actual `reports.ejs` source for the old broken `exportReport('pdf', {title:'...'})` call shape), and Preview/PDF/Excel record-count parity for the Mid-Year window.
+- **Live verification** (real Chromium via a throwaway Playwright script, disposable `zztest_reports_admin` account, a real two-unit `["CCS","CIRL"]` seeded partnership): confirmed the College/Unit dropdown renders with the correct 7 options; selecting CCS and Previewing shows the record with a `unit: CCS` filter badge; selecting CIRL also shows the same record; selecting CETE correctly excludes it. A second script overrode `window.open` to capture the Mid-Year/Yearly PDF/Excel URLs directly and confirmed both carried `dateFrom=<current-year>-01-01`/`dateTo=<current-year>-06-30` and `-12-31` respectively (current year at time of writing: 2026), matching what the exported files' `periodLabel` displays. Disposable account/partnership deleted, zero residue confirmed, debug server stopped.
+
+### Files changed
+
+- `cirl.js` — `computeCustomReportData()`'s `filters` object and the Excel Applied Filters sheet's `filterLabels` map both gained a `unit`/`College / Unit` entry; a clarifying comment added at the `filter.unit = unit` line.
+- `views/administrator/reports.ejs` — new `#cr-unit` select; `buildReportQueryParams()`, `resetCustomReportFilters()`, `renderInheritedFilterBadges()`, `buildComparisonQueryString()` updated; new `currentYearDateRange()`/`exportMidYearReport()`/`exportYearlyReport()` functions; Mid-Year/Yearly tile card buttons rewired to use them.
+- `test/reports.test.js` — updated the College/Unit-removal assertions to reflect the re-add (Region/Nature/Institution assertions unchanged); added two new describe blocks (College/Unit array-aware filtering, Mid-Year/Yearly dynamic date range).
+
+### Known limitations
+
+- None found against this task's scope. Region, Nature of Partnership, and Institution remain intentionally absent from the Custom Report Builder's UI (per the 2026-08-26 decision) — they stay available to the underlying query engine and the Compare Against dimension picker, unchanged.
+
+## Document Requests — 6-stage release workflow (Received → Preparing → Awaiting for Approval → Approved → Release → Completed) — 2026-09-04
+
+### Scope
+
+Document Requests previously had a binary decision model — `Pending`/`Under Review` (undecided) resolving in one step to `Fulfilled`/`Rejected` — with no intermediate progress tracking. This replaces that with an ordered 6-stage pipeline both Administrator and Staff can advance a request through, one step at a time, while keeping `Rejected` available as a separate, non-sequential outcome (explicit product decision — the new 6-stage list itself has no reject/decline option, so this was confirmed with the user before implementing: **keep Reject as a separate action**, reachable from any non-terminal stage, rather than removing the ability to decline a request).
+
+### Architecture — inspection first, canonical status + backward compatibility
+
+The existing single `status` field on `documentrequests` is reused — no second status field was added. A canonicalization layer maps every legacy pre-2026-09-04 name to its pipeline equivalent without touching any stored value until that record is actually next transitioned:
+
+```js
+const DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
+const DR_LEGACY_STATUS_MAP = { 'Pending': 'Received', 'Under Review': 'Preparing', 'Fulfilled': 'Completed' };
+function canonicalDrStatus(status) { return DR_LEGACY_STATUS_MAP[status] || status; }
+function drNextStatus(canonicalStatus) { /* the one legal next stage, or null at Completed */ }
+```
+
+`Rejected` has no legacy equivalent to map from/to — it stays itself in both vocabularies. `GET /api/document-requests` and `GET /api/document-requests/mine` both now return every request with an additive `canonicalStatus` field (`withDrCanonicalStatus()`) so every UI consumer — dropdown pre-selection, badge color/label, the requester's progress checklist, cancel-eligibility — reads one normalized value instead of each re-deriving it (mirrored client-side as a small lookup table, the same duplication pattern already used for `REPORT_TYPE_IMPLIED_STATUS` elsewhere in this codebase). New submissions are created directly with `status: 'Received'` (previously `'Pending'`) since that legacy name is being retired going forward — existing `Pending`/`Under Review`/`Fulfilled` records are untouched and keep printing/filtering/exporting correctly via the canonicalization layer.
+
+### Transition enforcement
+
+`PATCH /api/document-requests/:id` normalizes its `status` input through the same `canonicalDrStatus()` (so a legacy-named request body still works) and then enforces, server-side:
+
+- A request already at a terminal stage (`Completed` or `Rejected`) cannot be changed further — same "already been decided" error shape the old Fulfilled/Rejected gate used.
+- `Rejected` is reachable from any non-terminal stage, out of the ordered sequence.
+- Every other target must be *exactly* `drNextStatus(currentCanonical)` — no skipping ahead (e.g. Received straight to Approved) and no moving backward (e.g. Approved back to Preparing). No existing part of the application's Document Request workflow intentionally allowed backward/skip transitions before this change (the old model had only two decision buttons, Fulfill/Reject, both one-shot from Pending/Under Review), so none were carried forward — a mis-click just produces a clear 400 naming the one valid next step, and the reviewer corrects it going forward rather than jumping back.
+
+The reviewer's Update Status `<select>` (Document Request Details modal, `views/administrator/partnership_requests.ejs`) mirrors this at the UI layer for defense-in-depth/UX: every stage renders as an option, but only the current value and the one legal next stage are enabled — every other option is visibly present but disabled, so the admin can see the whole pipeline without being able to mis-click a skip. A separate Reject button stays in the modal footer, available whenever the request isn't already terminal.
+
+### Stage-specific fields, reusing exactly what already existed
+
+- **Approved** — sets `approvedAt`. The printable CSPC-F-CIRL-04 form's fixed institutional "Approved By" signatory (`DR_APPROVER_NAME`/`DR_APPROVER_TITLE` — unchanged, still not tied to whichever account clicked the button) now appears once the request reaches Approved *or later* (previously gated on the single old `Fulfilled` status) — `drFormFields()`'s `isFulfilled` flag was generalized to `['Approved','Release','Completed'].includes(canonicalStatus)` rather than renamed, to keep the diff to the print template and PDF generator minimal; a new `approvedDateStr` field carries the correct date (`r.approvedAt`, falling back to `r.updatedAt` for legacy Fulfilled records that never had an explicit Approved transition).
+- **Release** — sets `releasedBy`/`releasedAt` to the authenticated actor performing the transition, exactly as the old Fulfilled step did (never client-suppliable — the request body's `releasedBy`, if sent, is ignored, verified by test).
+- **Completed** — sets `receivedBy` (an explicit override if provided, else the request's own `requestedBy`) and `receivedAt`, exactly as the old Fulfilled step did, just moved to its own later stage instead of happening simultaneously with Release.
+- A reviewer's *first* draft upload (`POST /api/document-requests/:id/documents`) still auto-advances a request sitting at Received straight to Preparing (previously Pending → Under Review) — same "a real action already means this happened" reasoning as before, now recorded as a normal statusHistory entry attributed to the uploading reviewer.
+
+### Status history (audit trail on the record itself)
+
+Every transition — explicit PATCH or the automatic upload-triggered one — appends one `{ from, to, at, by, byEmail, remark }` entry to a `statusHistory` array via `$push`, never overwritten. This is additive to (not a replacement for) the existing `logActivity()`/Audit Trail call, which still fires on every PATCH (`action` = `APPROVE` for reaching Completed, `REJECT` for Rejected, `EDIT` otherwise — same vocabulary the Audit Trail UI's badge coloring already expects). The reviewer's Document Request Details modal renders this history directly (oldest first, previous → new status, who, when, remark) in a new "Status History" section — reading the same array the API already returns, not a second logging system.
+
+### Notifications
+
+Reused the existing targeted `notifyUsers()` call already firing on Fulfilled/Rejected/Under Review — extended to cover the 5 stages a reviewer can actually transition a request *into* (`Received` is the starting state at submission, never something a reviewer moves a request into, so it has no notification copy):
+
+| Transition | Notification |
+|---|---|
+| → Preparing | "...is now being prepared." |
+| → Awaiting for Approval | "...is awaiting approval." |
+| → Approved | "...has been approved." |
+| → Release | "...is ready for release." |
+| → Completed | "...has been completed. Check the Document Library for the uploaded file." |
+| → Rejected (unchanged) | "...was not fulfilled. Reason: \<remark\>" |
+
+### Requester-facing visibility
+
+`views/auth. personnel/personnel_monitoring.ejs` (Auth. Personnel) and `views/potential_partner/partner_monitoring.ejs` (potential_partner) — the "My Document Requests" table's Status badge and existing "Current Stage" column (already-existing UI, same convention as Partnership Requests' own stage column) both now read `canonicalStatus`, with new colors/labels for all 6 stages. Auth. Personnel's Document Request Details modal (the only one of the two roles' pages with a per-request detail modal — potential_partner's page has none, by original design, so nothing new was added there beyond the corrected badges/labels) gained a compact "Workflow Progress" checklist (✓ done / ● current / ○ upcoming, all ✓ once genuinely Completed, or a distinct "This request was rejected" banner) — the same existing-progress-indicator convention this page already used for draft-collaboration timelines, not a new tracking page. The Cancel action (and the underlying `DELETE /api/document-requests/:id`) is now gated on `canonicalStatus === 'Received'` (was `status === 'Pending'`) — a request already being worked on can no longer be self-cancelled by the requester, matching the old "Pending-only" intent exactly, just under the new name.
+
+### RBAC
+
+Unchanged. `requireStaffAccess` (Administrator + Staff, full parity) still gates the PATCH/GET reviewer-queue endpoints; `requireRequester` still gates submission/cancel; ownership checks on cancel/upload are untouched. Verified live in a real browser: Staff walked a request through all 6 stages via the same Update Status dropdown Administrator uses, with identical results.
+
+### Testing
+
+- **Jest**: `test/document-request-print.test.js` and `test/document-request-draft-collaboration.test.js` — the tests that PATCHed straight from Pending/Under Review to the old single Fulfilled value were rewritten to walk the actual new pipeline (Preparing → Awaiting for Approval → Approved → Release → Completed), preserving every original assertion (fixed signatory, actor-only Released By, Received By override/default) at the now-correct stage each one actually applies to; both files also gained explicit skip/backward-transition-rejected assertions. A new `test/document-request-status-workflow.test.js` (21 tests) covers: new submissions starting at `Received` not legacy `Pending`; forward-only/no-skip/no-backward transition enforcement; Rejected reachable from any non-terminal stage; an unrecognized status string rejected; legacy-status backward compatibility (`canonicalStatus` correct in both GET endpoints for a raw `Under Review` record, and PATCH still accepting a legacy status name as input); `statusHistory` shape/append-only behavior; per-stage notification delivery (all 5 notifying transitions + Rejected); RBAC (Staff full parity, Auth. Personnel forbidden from PATCH, ownership enforced on cancel); the Received-only cancel gate (including for a legacy Pending record); and that both terminal states (Completed, Rejected) reject every further transition. Full suite: 278/278 passing (was 253 before this task), zero regressions.
+- **Live verification** (real Chromium, disposable `zztest_dr_*` accounts and document requests): Administrator walked a request through all 6 stages via the actual Update Status dropdown in the browser — confirmed the dropdown only ever enables the current value and the one legal next stage (every other option visibly disabled), confirmed `statusHistory` persisted correctly after a full page reload (5 entries, correct from/to/by/at), confirmed `releasedBy`/`receivedBy` were the real actor/requester names, and confirmed the printed form showed the fixed CIRL Head signatory plus the correct Released By/Received By names. Staff repeated the identical full walk-through on a second request with no page errors, confirming full parity. On the Auth. Personnel Monitoring page, confirmed the Status badge, Current Stage label, and Workflow Progress checklist all correctly showed the completed request (initially found and fixed a checklist bug where the final Completed stage rendered as "in progress" instead of fully checked). Disposable accounts/requests/notifications deleted afterward; a residue check confirmed zero remaining rows; debug server processes stopped.
+
+### Files changed
+
+- `cirl.js` — `DR_WORKFLOW_STATUSES`/`DR_TERMINAL_STATUSES`/`DR_LEGACY_STATUS_MAP`/`canonicalDrStatus()`/`drNextStatus()`/`withDrCanonicalStatus()` added; `GET /api/document-requests` and `/mine` now return `canonicalStatus`; `PATCH /api/document-requests/:id` rewritten for ordered-transition enforcement, per-stage field updates (`approvedAt`/`releasedBy`+`releasedAt`/`receivedBy`+`receivedAt`), append-only `statusHistory`, and per-stage notification copy (`DR_STATUS_NOTIFICATION_COPY`); the draft-upload endpoint's auto-transition and terminal-status upload guard updated to canonical statuses; `DELETE /api/document-requests/:id`'s cancel gate updated; `POST /api/document-requests` now creates records as `'Received'`; `drFormFields()`'s approval-section gate generalized to Approved-or-later with a new `approvedDateStr`.
+- `views/administrator/partnership_requests.ejs` — `statusBadge()` extended with the 6 new statuses; DR status filter dropdown updated; `renderDR()`/`openDRDraftModal()`/`updateStats()` updated to canonical statuses; Document Request Details modal gained an Update Status `<select>` (current + next-only enabled) and a Status History list; `openDRDetail()`/`resolveDR()` rewritten, with a new shared `submitDrStatusChange()`/`updateDrStatus()`.
+- `views/auth. personnel/personnel_monitoring.ejs`, `views/potential_partner/partner_monitoring.ejs` — `statusBadgeClass()`/`DR_STAGE_LABEL` extended to the 6 new statuses; table/detail-modal/draft-modal/cancel-button logic switched to `canonicalStatus`; Auth. Personnel's page additionally gained the Workflow Progress checklist (`drProgressChecklistHtml()`).
+- `views/print/document_request_print.ejs` — Approved By date now reads the shared `approvedDateStr` instead of an inline `isFulfilled ? fmtDate(r.updatedAt) : ''`.
+- `test/document-request-print.test.js`, `test/document-request-draft-collaboration.test.js` — updated to the new pipeline (see Testing above).
+- `test/document-request-status-workflow.test.js` — new file (21 tests).
+
+### Known limitations
+
+- None found against this task's scope. `Rejected` remains a deliberate exception to the ordered pipeline (confirmed with the user) rather than one of the 6 listed statuses — existing/legacy Rejected and Fulfilled records display correctly throughout (print, PDF, badges, filters) without any data migration.
+
+## Strict allowlist RBAC — no auto-provisioning on Google/CSPC login or public signup — 2026-09-05
+
+### Scope
+
+The Google OAuth callback (`/auth/google/callback`) auto-created a new `Staff` account and session for *any* Google identity with no matching CIPRMS record — a valid Google/CSPC account alone was sufficient to gain access, defeating the purpose of User Management's role/status controls. Separately, the public `POST /signup` route let anyone with any email self-register a `Staff` account and log straight in, with no Administrator involvement at all — a second, even less restricted, path to the same problem. Both are now closed: authenticating with an identity provider proves *who* someone is, never *whether* they may use CIPRMS or *what* role they hold — only an existing, Active record in the `users` collection (created by an Administrator/Staff via User Management → Add User) determines that.
+
+The existing local `POST /login` (email+password) was inspected first and found to already be fully compliant — it looks the email up and rejects unknown accounts, with no auto-creation path — so it required no logic change, only a wording tweak to its Inactive-account message for consistency with the new Google-path copy.
+
+### Architecture
+
+`/auth/google/callback`'s post-authentication handler (`cirl.js`) previously branched on `!dbUser` to insert a brand-new record. That branch was removed outright — the handler now does exactly what `/login` already did:
+
+```js
+const dbUser = await db.collection('users').findOne({ email: googleEmail });
+
+if (!dbUser) {
+  return res.render('index', {
+    activePage: '',
+    error: 'Your account is not authorized to access CIPRMS. Please contact the CIRL Administrator to request an account.'
+  });
+}
+if (dbUser.status === 'Inactive') {
+  return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
+}
+```
+
+No account, role, or session is created for an unmatched identity — `req.session.regenerate()`/`req.session.user = {...}` is only reached once `dbUser` is confirmed to exist and be Active, and the role assigned to the session always comes from `dbUser.role` (the CIPRMS record), never derived from the Google profile (`displayName`, `id`, etc. are never written anywhere in the surviving code path). Email matching continues to use the provider's verified email (`googleUser.emails[0].value`), trimmed and lowercased before lookup, exactly as `/login` and User Management already do — this was pre-existing normalization, left untouched.
+
+`POST /signup` was gutted to an unconditional rejection rather than removed outright, so the pre-existing `/signup` URL still resolves to a clear message instead of a 404:
+
+```js
+app.post('/signup', signupLimiter, async (req, res) => {
+  const { username: name, email } = req.body;
+  return res.render('signup', {
+    activePage: '', user: null, formData: { name: name || '', email: email || '' },
+    error: 'Self-registration is disabled. Please contact the CIRL Administrator to request an account.'
+  });
+});
+```
+
+`GET /signup` (the form) was intentionally left rendering as before — it is unreachable from any in-app link (confirmed by inspection; it never was linked from `views/index.ejs`), and leaving the view untouched avoids an unrelated UI change for a page whose only remaining function is to explain the policy when someone lands on it directly. The Google button on that same signup page (`onclick="window.location.href='/auth/google'"`) is unaffected and still routes through the now-allowlisted callback.
+
+**Explicit product decision** (confirmed with the user before implementing, since disabling a live self-registration feature is a real behavior change beyond what the spec named by example): public `/signup` is disabled under this same policy, not left as an unrelated pre-existing feature, because it was an even less restricted self-provisioning path than the Google auto-create it was modeled after.
+
+### Session revalidation (already correct, unchanged)
+
+`cirl.js`'s per-request middleware (defined ahead of the RBAC route handlers) already re-reads `req.session.user.id` against the live `users` record on every request and destroys the session if the record is missing or `status === 'Inactive'`, and otherwise refreshes `role`/`name`/`unit` from the DB. This means a session created before this change — or an account deactivated/deleted after login — is already fully revalidated server-side on the very next request; no changes were needed here to satisfy the "session creation vs. authorization must stay separated" requirement.
+
+### Security requirements — server-side enforcement
+
+No frontend-only checks were added or relied upon. Every existing RBAC middleware (`requireAuth`, `requireAdmin`, `requireStaffAccess`, `requirePersonnel`, `requireRequester`, `requirePartner`, `requireUploader`) was left completely unchanged — they already gate on `req.session.user`, which now can never be populated for an unauthorized identity in the first place. Protected pages (`/dashboard`, `/lifecycle`, `/staff/lifecycle`, `/reports`, etc.) and protected APIs (`/api/me`, `/api/users`, etc.) were verified to reject a rejected-login agent's follow-up requests (302 redirect for pages, matching the existing no-session behavior) — see Testing.
+
+### Unrelated bug found and fixed during regression testing
+
+Running the full suite after this change surfaced 2 pre-existing failures in `test/document-request-print.test.js`, unrelated to this task: `drFormFields()` (added 2026-09-04 for the Document Request workflow) referenced a `DR_APPROVER_TITLE` constant that was never actually declared (only `DR_APPROVER_NAME` was) — any request reaching Approved/Release/Completed threw `ReferenceError: DR_APPROVER_TITLE is not defined` when rendering its printable form or PDF, a 500 masked by the route's generic `catch` block. Fixed by declaring the missing constant next to `DR_APPROVER_NAME`:
+
+```js
+const DR_APPROVER_NAME = 'Filmor J. Murillo';
+const DR_APPROVER_TITLE = 'Head, Center for International Relations and Linkages';
+```
+
+This is the exact title string the existing tests already asserted, confirming it was a declaration omission rather than a wrong value. No test was weakened to accommodate this — the fix made the pre-existing, already-correct assertions pass.
+
+### Testing
+
+- **Jest** (`test/oauth-allowlist.test.js`, new, 9 tests): passport is mocked (not the real network — no live Google credentials exist for automated testing, matching this project's own established convention for Google-adjacent tests, see `test/google-calendar.test.js`'s header comment) so that `passport.authenticate('google', ...)` hands the real, unmodified `cirl.js` callback handler a synthetic profile driven by a test-only `x-test-google-email` header — every line of the actual allowlist logic (lookup → status check → session creation) executes exactly as it would for a real login; only the Google network round-trip is substituted. Covers: TEST 1 (authorized Administrator succeeds, retains Administrator access), TEST 2 (authorized Staff succeeds, loads Staff role), TEST 3 (unknown identity rejected — no session, no auto-created user, `/dashboard`/`/lifecycle`/`/staff/lifecycle`/`/reports`/`/api/me`/`/api/users` all still reject the same agent afterward), TEST 4 (Inactive account denied, no session), TEST 5 (an authorized Staff session still cannot reach an Administrator-only page), case-insensitive/whitespace-trimmed email matching on both the positive and negative path, and that repeating a rejected callback twice never revives/creates the identity. `test/auth.test.js`'s `Signup` describe block was rewritten (not deleted) to assert the new disabled behavior — weak and strong passwords alike create no account and no session — rather than its old auto-creation assertions.
+- **Live verification** (real server, `verifying-live-express-mongodb-features` methodology): started `node cirl.js` against the real MongoDB, confirmed with `curl` that `GET /dashboard` with no session still redirects (302), `GET /signup` still renders (200, no 404), `POST /signup` with a fresh disposable email now returns the disabled-notice text and confirmed via a direct MongoDB query that no `users` document was created for it, and that `GET /auth/google` still issues its redirect unchanged (the real OAuth initiation path is untouched). Disposable test document/account cleaned up immediately after; a residue check confirmed zero leftover `jesttest.*`/test accounts before and after the full run.
+- **Full regression**: `npx jest --runInBand` — 17 suites, **287/287 passing** (was 278 before this task; +9 new, 2 pre-existing failures fixed, 0 weakened). Confirmed unaffected: Administrator/Staff/Auth. Personnel/potential_partner login and RBAC boundaries, User Management (Add User's role/status fields were reviewed and already correctly let an Administrator explicitly set both — no changes needed there), Dashboard, Registry/Monitoring, Partnership Requests, Document Requests, Reports & Analytics, Document Library, Notifications, Calendar, and Logout.
+
+### Files changed
+
+- `cirl.js` — `/auth/google/callback`'s auto-create branch removed and replaced with the allowlist check above; `/login`'s Inactive-account message reworded for consistency; `POST /signup` gutted to an unconditional disabled-notice response; missing `DR_APPROVER_TITLE` constant added (unrelated pre-existing bug, see above).
+- `test/oauth-allowlist.test.js` — new file (9 tests, mocked-passport allowlist coverage + `/signup` disabled coverage).
+- `test/auth.test.js` — `Signup` describe block rewritten for the disabled behavior.
+
+### Known limitations
+
+- Google's real OAuth handshake itself (the code-exchange round-trip with Google's servers) is not exercised by any automated test in this project, before or after this change — it requires a live human-completed consent screen, the same limitation already documented for the Google Calendar integration. The allowlist logic that runs immediately after that handshake is fully covered; the handshake's own correctness (client ID/secret/redirect URI/scopes) was not touched and was verified only by inspection, per the task's explicit instruction not to change OAuth configuration.
+- `googleId` is no longer written anywhere (it was only ever set on the now-removed auto-create path) — existing records that already have a stored `googleId` from before this change are unaffected (nothing reads that field), but it will never be populated going forward. Not linking a CIPRMS record back to a specific Google account id was not a stated requirement, so no replacement was added.

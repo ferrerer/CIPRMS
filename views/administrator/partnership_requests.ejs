@@ -506,12 +506,15 @@
                         <div class="filter-row">
                           <input class="form-control form-control-sm" id="dr-search" style="width:210px;"
                             placeholder="Search institution, requestor…" oninput="renderDR()">
-                          <select class="form-select form-select-sm" id="dr-status" style="width:145px;"
+                          <select class="form-select form-select-sm" id="dr-status" style="width:170px;"
                             onchange="renderDR()">
                             <option value="">All Status</option>
-                            <option>Pending</option>
-                            <option>Under Review</option>
-                            <option>Fulfilled</option>
+                            <option>Received</option>
+                            <option>Preparing</option>
+                            <option>Awaiting for Approval</option>
+                            <option>Approved</option>
+                            <option>Release</option>
+                            <option>Completed</option>
                             <option>Rejected</option>
                           </select>
                           <select class="form-select form-select-sm" id="dr-type" style="width:130px;"
@@ -649,6 +652,12 @@
               <p class="detail-label">Status</p>
               <div id="dr-v-status">—</div>
             </div>
+            <div class="col-12" id="dr-status-update-wrap">
+              <label class="form-label detail-label" for="dr-status-update">Update Status</label>
+              <select class="form-select form-select-sm" id="dr-status-update" style="max-width:280px;" onchange="updateDrStatus(currentDRId, this.value)">
+              </select>
+              <small class="text-muted d-block mt-1">Only the next step in the workflow can be selected here — use Reject below to decline the request outright instead.</small>
+            </div>
             <div class="col-12">
               <p class="detail-label">Notes</p>
               <div class="detail-box">
@@ -669,19 +678,24 @@
             <div class="col-12" id="dr-remark-wrap">
               <div class="row g-2">
                 <div class="col-6">
-                  <label class="form-label detail-label">Released By (Optional)</label>
-                  <input type="text" class="form-control form-control-sm" id="dr-released-by" placeholder="Name — filled when Fulfilling">
+                  <label class="form-label detail-label">Released By</label>
+                  <div class="form-control form-control-sm bg-light text-muted" id="dr-released-by-display">Recorded automatically as you when the status moves to Release</div>
                 </div>
                 <div class="col-6">
-                  <label class="form-label detail-label">Received By (Optional)</label>
-                  <input type="text" class="form-control form-control-sm" id="dr-received-by" placeholder="Name — filled when Fulfilling">
+                  <label class="form-label detail-label">Received By</label>
+                  <input type="text" class="form-control form-control-sm" id="dr-received-by" placeholder="Requester's name">
                 </div>
               </div>
-              <small class="text-muted d-block mt-1">Released By / Received By print on the official form's signature lines and are only saved when the decision is "Fulfilled".</small>
             </div>
             <div class="col-12" id="dr-signoff-wrap" style="display:none">
               <p class="detail-label mb-1">Sign-off on Record</p>
               <p class="mb-0 fs-13" id="dr-signoff-summary">—</p>
+            </div>
+            <div class="col-12">
+              <p class="detail-label mb-1">Status History</p>
+              <div class="detail-box" id="dr-history-list">
+                <p class="mb-0 fs-13 text-muted">No status changes recorded yet.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -767,6 +781,26 @@
     // both roles; every other role gets the read-only "View" mode.
     var IS_ADMIN = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;
 
+    // Document Request workflow (2026-09-04) — mirrors the server-side
+    // DR_WORKFLOW_STATUSES/DR_TERMINAL_STATUSES/drNextStatus in cirl.js so the
+    // dropdown/UI never disagrees with what the PATCH endpoint will actually
+    // accept. Every request from the API already carries a normalized
+    // `canonicalStatus` field, so this file never needs its own legacy-name
+    // mapping.
+    var DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
+    var DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
+    function drNextStatus(canonicalStatus) {
+      var idx = DR_WORKFLOW_STATUSES.indexOf(canonicalStatus);
+      return (idx === -1 || idx === DR_WORKFLOW_STATUSES.length - 1) ? null : DR_WORKFLOW_STATUSES[idx + 1];
+    }
+    // Staff and Administrator render this same partnership_requests.ejs
+    // template from two different routes (/partnership-requests vs.
+    // /staff/requests) that carry two different sidebars — Monitoring (the
+    // consolidated Registry + Overview + DSS page, 2026-09-05) mirrors that
+    // split (/lifecycle vs. /staff/lifecycle, both role-gated). "Approve"
+    // must redirect into whichever one the current reviewer can actually open.
+    var REGISTRY_BASE_PATH = <%- JSON.stringify(typeof user !== 'undefined' && user && user.role === 'Staff' ? '/staff/lifecycle' : '/lifecycle') %>;
+
     function escapeHtml(str) {
       return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
@@ -779,6 +813,10 @@
     var activeSection = 'pr';
 
     /* ─── HELPERS ─── */
+    // Document Request workflow statuses (Received/Preparing/Awaiting for
+    // Approval/Release/Completed, 2026-09-04) share this map with Partnership
+    // Request statuses — safe since each table only ever renders its own
+    // vocabulary, so there's no collision in practice.
     function statusBadge(s) {
       const m = {
         'Pending': 'bg-warning-subtle text-warning',
@@ -787,9 +825,35 @@
         'Accepted': 'bg-success-subtle text-success',
         'Fulfilled': 'bg-success-subtle text-success',
         'Rejected': 'bg-danger-subtle text-danger',
-        'Withdrawn': 'bg-secondary-subtle text-secondary'
+        'Withdrawn': 'bg-secondary-subtle text-secondary',
+        'Received': 'bg-warning-subtle text-warning',
+        'Preparing': 'bg-info-subtle text-info',
+        'Awaiting for Approval': 'bg-primary-subtle text-primary',
+        'Release': 'bg-dark-subtle text-dark',
+        'Completed': 'bg-success-subtle text-success'
       };
       return `<span class="badge ${m[s] || 'bg-secondary-subtle text-secondary'}">${s}</span>`;
+    }
+
+    // Document Request "Document(s) Requested" is a free-form multi-item
+    // list (documentTypes array on new records; documentType joined string
+    // as a fallback for records created before 2026-09-02's combobox).
+    function drDocTypeItems(r) {
+      if (Array.isArray(r.documentTypes) && r.documentTypes.length) return r.documentTypes;
+      return r.documentType ? [r.documentType] : [];
+    }
+    function drDocTypeBadges(r) {
+      const items = drDocTypeItems(r);
+      if (!items.length) return '<span class="badge badge-type bg-secondary-subtle text-secondary border border-secondary-subtle">—</span>';
+      const first = `<span class="badge badge-type bg-secondary-subtle text-secondary border border-secondary-subtle" title="${escapeHtml(items.join(', '))}">${escapeHtml(items[0])}</span>`;
+      const more = items.length > 1 ? ` <span class="badge bg-light text-muted border">+${items.length - 1} more</span>` : '';
+      return first + more;
+    }
+    function drDocTypeList(r) {
+      const items = drDocTypeItems(r);
+      if (!items.length) return '—';
+      if (items.length === 1) return escapeHtml(items[0]);
+      return '<ol class="ps-3 mb-0">' + items.map(i => `<li>${escapeHtml(i)}</li>`).join('') + '</ol>';
     }
 
     function showToast(msg, bg) {
@@ -818,11 +882,22 @@
       document.getElementById('tab-cnt-dr').textContent = drData.length;
 
       let pending = 0, approved = 0, rejected = 0;
-      [...prData, ...drData].forEach(r => {
+      prData.forEach(r => {
         const s = (r.status || '').toLowerCase();
         if (s === 'pending' || s === 'under review') pending++;
-        else if (s === 'approved' || s === 'accepted' || s === 'fulfilled') approved++;
+        else if (s === 'approved' || s === 'accepted') approved++;
         else if (s === 'rejected') rejected++;
+      });
+      // Document Requests use the 6-stage workflow (canonicalStatus) —
+      // 'Completed' is the only genuinely-resolved-positive terminal state;
+      // every other non-Rejected stage (Received/Preparing/Awaiting for
+      // Approval/Approved/Release) is still "in progress" for this combined
+      // pending/approved/rejected KPI.
+      drData.forEach(r => {
+        const cs = r.canonicalStatus || r.status;
+        if (cs === 'Rejected') rejected++;
+        else if (cs === 'Completed') approved++;
+        else pending++;
       });
       document.getElementById('cnt-pending-all').textContent = pending;
       document.getElementById('cnt-approved-all').textContent = approved;
@@ -1250,7 +1325,7 @@
       document.getElementById('dr-draft-modal-title').innerHTML =
         `<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — ${escapeHtml(r.documentType || 'Document Request')} #${r.id}`;
       renderDRDraftTimeline(r);
-      const closed = ['Fulfilled', 'Rejected'].includes(r.status);
+      const closed = DR_TERMINAL_STATUSES.includes(r.canonicalStatus || r.status);
       document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
       document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('dr-draft-file').value = '';
@@ -1340,6 +1415,18 @@
     async function resolvePR(uid, decision) {
       const r = prData.find(x => String(x.id) === uid);
       if (!r) return;
+      // Approving a NEW partnership request (not a renewal) no longer flips
+      // the status directly — it hands off to Registry → Add New Partnership,
+      // pre-filled from this request, so the reviewer can review/edit before
+      // anything is saved. The request is only marked Approved once that
+      // partnership is actually saved (see POST /api/partnerships,
+      // sourceRequestId). Renewal requests are unaffected — approving one
+      // still directly extends the already-linked partnership as before.
+      if (decision === 'Approved' && !r.isRenewal) {
+        bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
+        window.location.href = REGISTRY_BASE_PATH + '?fromRequest=' + r.id;
+        return;
+      }
       try {
         await fetch('/api/requests/' + r.id, {
           method: 'PATCH',
@@ -1388,8 +1475,11 @@
 
       drFiltered = drData.filter(r =>
         (!s || [(r.institution || ''), (r.requestedBy || '')].join(' ').toLowerCase().includes(s))
-        && (!st || r.status === st)
-        && (!ty || r.documentType === ty)
+        && (!st || (r.canonicalStatus || r.status) === st)
+        // documentType is now a free-form, possibly multi-item joined string
+        // (e.g. "Universitas Airlangga - MOA, MOUs"), so the fixed-option
+        // type filter matches as a substring rather than requiring equality.
+        && (!ty || (r.documentType || '').toLowerCase().includes(ty.toLowerCase()))
       );
 
       const tbody = document.getElementById('dr-tbody');
@@ -1403,14 +1493,15 @@
       }
 
       tbody.innerHTML = drFiltered.map((r, i) => {
-        const canAct = IS_ADMIN && (r.status === 'Pending' || r.status === 'Under Review');
+        const cs = r.canonicalStatus || r.status;
+        const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
         return `<tr>
           <td class="text-muted fw-semibold fs-13">${i + 1}</td>
           <td><span class="fw-semibold fs-13">${r.institution || '—'}</span></td>
-          <td><span class="badge badge-type bg-secondary-subtle text-secondary border border-secondary-subtle">${r.documentType || '—'}</span></td>
+          <td>${drDocTypeBadges(r)}</td>
           <td class="fw-medium fs-13">${r.requestedBy || '—'}</td>
           <td class="text-muted fs-13">${r.date || '—'}</td>
-          <td>${statusBadge(r.status || 'Pending')}</td>
+          <td>${statusBadge(cs || 'Received')}</td>
           <td>
             <div class="hstack gap-1">
               <button class="btn btn-sm btn-soft-secondary" onclick="openDRDetail(${r.id})">
@@ -1422,29 +1513,71 @@
       }).join('');
     }
 
+    function fmtHistoryWhen(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return isNaN(d) ? '—' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+
+    // Renders every recorded transition (never overwritten server-side) —
+    // previous status, new status, who changed it, and when — oldest first.
+    function drHistoryListHtml(r) {
+      const hist = Array.isArray(r.statusHistory) ? r.statusHistory : [];
+      if (!hist.length) return '<p class="mb-0 fs-13 text-muted">No status changes recorded yet.</p>';
+      return '<ol class="mb-0 ps-3">' + hist.map(h =>
+        `<li class="fs-13 mb-1"><strong>${escapeHtml(h.from || '—')}</strong> &rarr; <strong>${escapeHtml(h.to || '—')}</strong>` +
+        ` <span class="text-muted">by ${escapeHtml(h.by || '—')} on ${fmtHistoryWhen(h.at)}</span>` +
+        (h.remark ? `<div class="text-muted fs-12">Remark: ${escapeHtml(h.remark)}</div>` : '') +
+        '</li>'
+      ).join('') + '</ol>';
+    }
+
+    // Populates the Update Status dropdown so ONLY the current stage and the
+    // one legitimate next stage are selectable — every other option is
+    // rendered (for context) but disabled, which is what actually prevents
+    // an invalid skip/backward pick in the UI (the PATCH endpoint enforces
+    // the same rule server-side regardless).
+    function populateDrStatusSelect(cs) {
+      const sel = document.getElementById('dr-status-update');
+      const next = drNextStatus(cs);
+      const terminal = DR_TERMINAL_STATUSES.includes(cs);
+      sel.innerHTML = DR_WORKFLOW_STATUSES.map(s => {
+        const isCurrent = s === cs;
+        const disabled = !isCurrent && s !== next;
+        return `<option value="${s}" ${isCurrent ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${s}${isCurrent ? ' (current)' : ''}</option>`;
+      }).join('');
+      sel.disabled = terminal || !next;
+    }
+
     function openDRDetail(id) {
       const r = drData.find(x => x.id === id);
       if (!r) return;
       currentDRId = id;
+      const cs = r.canonicalStatus || r.status || 'Received';
 
       document.getElementById('dr-v-inst').textContent = r.institution || '—';
-      document.getElementById('dr-v-type').textContent = r.documentType || '—';
+      document.getElementById('dr-v-type').innerHTML = drDocTypeList(r);
       document.getElementById('dr-v-by').textContent = r.requestedBy || '—';
       document.getElementById('dr-v-date').textContent = r.date || '—';
-      document.getElementById('dr-v-status').innerHTML = statusBadge(r.status || 'Pending');
+      document.getElementById('dr-v-status').innerHTML = statusBadge(cs);
       document.getElementById('dr-v-notes').textContent = r.notes || '—';
-      document.getElementById('dr-released-by').value = '';
-      document.getElementById('dr-received-by').value = '';
+      document.getElementById('dr-received-by').value = r.receivedBy || r.requestedBy || '';
       document.getElementById('dr-draft-count').textContent = (r.supportingDocuments || []).length + ' version(s) on file';
+      document.getElementById('dr-history-list').innerHTML = drHistoryListHtml(r);
 
-      const canAct = IS_ADMIN && (r.status === 'Pending' || r.status === 'Under Review');
+      const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
       document.getElementById('dr-remark-wrap').style.display = canAct ? '' : 'none';
+      document.getElementById('dr-status-update-wrap').style.display = IS_ADMIN ? '' : 'none';
+      if (IS_ADMIN) populateDrStatusSelect(cs);
 
       const signoffWrap = document.getElementById('dr-signoff-wrap');
       if (r.decidedBy) {
         signoffWrap.style.display = '';
+        // Internal note only — the printed CSPC-F-CIRL-04 form's "Approved
+        // By" line always shows the fixed CIRL Head signatory, never this
+        // record's decidedBy (who merely clicked a status transition in-app).
         document.getElementById('dr-signoff-summary').innerHTML =
-          `Approved By: <strong>${escapeHtml(r.decidedBy)}</strong>` +
+          `Last Updated By: <strong>${escapeHtml(r.decidedBy)}</strong>` +
           (r.releasedBy ? ` &nbsp;·&nbsp; Released By: <strong>${escapeHtml(r.releasedBy)}</strong>` : '') +
           (r.receivedBy ? ` &nbsp;·&nbsp; Received By: <strong>${escapeHtml(r.receivedBy)}</strong>` : '');
       } else {
@@ -1459,47 +1592,59 @@
         ${canAct ? `
           <button class="btn btn-danger" onclick="resolveDR(${id},'Rejected')">
             <i class="ri-close-line me-1"></i>Reject</button>
-          <button class="btn btn-success" onclick="resolveDR(${id},'Fulfilled')">
-            <i class="ri-check-line me-1"></i>Fulfill</button>
         ` : ''}`;
 
       new bootstrap.Modal(document.getElementById('dr-modal')).show();
     }
 
-    async function resolveDR(id, decision) {
+    // Shared by both the Update Status dropdown (any workflow stage) and the
+    // Reject button — a single PATCH call, the same server-side
+    // transition/RBAC validation either way.
+    async function submitDrStatusChange(id, newStatus) {
       const r = drData.find(x => x.id === id);
       if (!r) return;
-      const remarkEl = document.getElementById('dr-remark-input');
-      const remark = remarkEl ? remarkEl.value.trim() : '';
-      const body = { status: decision, remark };
-      if (decision === 'Fulfilled') {
-        const releasedByEl = document.getElementById('dr-released-by');
+      const body = { status: newStatus };
+      if (newStatus === 'Completed') {
         const receivedByEl = document.getElementById('dr-received-by');
-        if (releasedByEl && releasedByEl.value.trim()) body.releasedBy = releasedByEl.value.trim();
         if (receivedByEl && receivedByEl.value.trim()) body.receivedBy = receivedByEl.value.trim();
       }
       try {
-        await fetch('/api/document-requests/' + id, {
+        const res = await fetch('/api/document-requests/' + id, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-        bootstrap.Modal.getInstance(document.getElementById('dr-modal'))?.hide();
-        r.status = decision;
-        r.decidedBy = <%- JSON.stringify(user.name) %>;
-        if (body.releasedBy) r.releasedBy = body.releasedBy;
-        if (body.receivedBy) r.receivedBy = body.receivedBy;
+        const data = await res.json();
+        if (!res.ok) {
+          showToast('<i class="ri-error-warning-line me-1"></i>' + (data.error || 'Action failed. Please try again.'), '#f06548');
+          if (r.canonicalStatus) populateDrStatusSelect(r.canonicalStatus); // reset the dropdown to the real current value
+          return;
+        }
+        // Refresh the in-memory row from the server's own response — the
+        // PATCH handler computes canonicalStatus/releasedBy/receivedBy/
+        // statusHistory server-side, so trust that over reconstructing it.
+        Object.assign(r, data.request, { canonicalStatus: newStatus === 'Rejected' ? 'Rejected' : newStatus });
         renderDR();
         updateStats();
-        const verbLabel = decision === 'Fulfilled' ? 'fulfilled' : decision === 'Rejected' ? 'rejected' : 'sent back for more info';
+        if (document.getElementById('dr-modal').classList.contains('show')) openDRDetail(id);
+        const verbLabel = newStatus === 'Rejected' ? 'rejected' : `moved to "${newStatus}"`;
         showToast(
-          `<i class="ri-${decision === 'Fulfilled' ? 'checkbox-circle' : decision === 'Rejected' ? 'close-circle' : 'file-add'}-line me-1"></i>
+          `<i class="ri-${newStatus === 'Rejected' ? 'close-circle' : 'checkbox-circle'}-line me-1"></i>
            Document request ${verbLabel} for ${r.institution}.`,
-          decision === 'Fulfilled' ? '#0ab39c' : decision === 'Rejected' ? '#f06548' : '#f7b84b'
+          newStatus === 'Rejected' ? '#f06548' : '#0ab39c'
         );
       } catch (e) {
         showToast('<i class="ri-error-warning-line me-1"></i>Action failed. Please try again.', '#f06548');
       }
+    }
+
+    function updateDrStatus(id, newStatus) {
+      if (!newStatus) return;
+      submitDrStatusChange(id, newStatus);
+    }
+
+    function resolveDR(id, decision) {
+      submitDrStatusChange(id, decision);
     }
 
     /* ─── INIT ─── */

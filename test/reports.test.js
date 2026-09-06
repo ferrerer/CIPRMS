@@ -589,9 +589,12 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
     );
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(true);
+    // unit is now stored as an array (2026-09-03 multi-unit combobox) even
+    // when a plain string was sent, so membership rather than equality.
     expect(res.body.records.every(p =>
       p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
-      p.cat === 'International' && p.unit === 'CIRL' && p.type === 'MOU' && p.nature === 'Training'
+      p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CIRL') : p.unit === 'CIRL') &&
+      p.type === 'MOU' && p.nature === 'Training'
     )).toBe(true);
 
     // Changing just one dimension to something that doesn't exist must zero
@@ -650,7 +653,8 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
       expect(res.body.groupARecords.some(p => p.id === createdId)).toBe(true);
       expect(res.body.groupARecords.every(p =>
         p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
-        p.cat === 'International' && p.unit === 'CIRL' && p.type === 'MOU' && p.nature === 'Training'
+        p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CIRL') : p.unit === 'CIRL') &&
+        p.type === 'MOU' && p.nature === 'Training'
       )).toBe(true);
       // Group B must have ONLY the unit dimension overridden — every other
       // original filter (status, country, region, cat, agreement type,
@@ -658,7 +662,8 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
       expect(res.body.groupBRecords.some(p => p.id === secondId)).toBe(true);
       expect(res.body.groupBRecords.every(p =>
         p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
-        p.cat === 'International' && p.unit === 'CETE' && p.type === 'MOU' && p.nature === 'Training'
+        p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CETE') : p.unit === 'CETE') &&
+        p.type === 'MOU' && p.nature === 'Training'
       )).toBe(true);
     } finally {
       const db = await connectDB();
@@ -721,14 +726,19 @@ describe('Reports tab card/export consistency (stats endpoint status staleness)'
 // were removed from the Custom Report Builder's UI (they remain fully
 // available to the database, Partnership Registry, Tile Cards, and the
 // Compare Against workflow — only the Builder's own filter panel/state/
-// requests/metadata were trimmed). These tests lock in that the removal is
-// real (not just a visual hide) and that nothing regressed.
-describe('Custom Report Builder field removal (College/Unit, Region, Nature, Institution)', () => {
-  test('reports.ejs no longer contains the removed fields\' form controls', () => {
+// requests/metadata were trimmed).
+//
+// 2026-09-04: College/Unit was RE-ADDED as a real, working Builder filter
+// (Responsible Unit can now be multi-valued, so Reports needed to filter on
+// array membership) — Region, Nature of Partnership and Institution remain
+// removed. These tests now lock in the College/Unit re-add and confirm the
+// other three fields are still genuinely absent, not just visually hidden.
+describe('Custom Report Builder field removal (Region, Nature, Institution) / re-add (College Unit)', () => {
+  test('reports.ejs has a working College/Unit control but still no Region/Nature/Institution controls', () => {
     const fs = require('fs');
     const path = require('path');
     const html = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'reports.ejs'), 'utf8');
-    expect(html).not.toMatch(/id="cr-unit"/);
+    expect(html).toMatch(/id="cr-unit"/);
     expect(html).not.toMatch(/id="cr-region"/);
     expect(html).not.toMatch(/id="cr-nature"/);
     expect(html).not.toMatch(/id="cr-inst"/);
@@ -737,29 +747,36 @@ describe('Custom Report Builder field removal (College/Unit, Region, Nature, Ins
     expect(html).toMatch(/id="cmp-field"/);
   });
 
-  test('Custom Report preview metadata no longer echoes Unit/Region/Nature/Institution, even if a legacy request still sends them', async () => {
+  test('Custom Report preview metadata echoes Unit but still omits Region/Nature/Institution, even if a legacy request sends them', async () => {
     const res = await agent.get(
       '/api/reports/custom/preview?title=Legacy%20Link&unit=CIRL&region=Asia&nature=Training&inst=Ateneo'
     );
     expect(res.status).toBe(200);
-    expect(res.body.filters).not.toHaveProperty('unit');
+    expect(res.body.filters.unit).toBe('CIRL');
     expect(res.body.filters).not.toHaveProperty('region');
     expect(res.body.filters).not.toHaveProperty('nature');
     expect(res.body.filters).not.toHaveProperty('institution');
-    // The 7 fields still exposed by the Builder must all be present.
+    // The 8 fields now exposed by the Builder must all be present.
     expect(res.body.filters).toEqual(expect.objectContaining({
       reportType: expect.any(String),
       category: expect.any(String),
       dateFrom: expect.any(String),
       dateTo: expect.any(String),
+      unit: expect.any(String),
       agreementType: expect.any(String),
       country: expect.any(String),
       status: expect.any(String)
     }));
   });
 
-  test('Excel "Applied Filters" sheet lists Country but no longer lists College/Unit, Region, or Nature of Partnership', async () => {
-    const res = await agent.get('/api/reports/partnerships/excel?country=Testland&status=Active')
+  test('Custom Report preview metadata defaults Unit to "All" when no unit filter is given', async () => {
+    const res = await agent.get('/api/reports/custom/preview?country=Testland');
+    expect(res.status).toBe(200);
+    expect(res.body.filters.unit).toBe('All');
+  });
+
+  test('Excel "Applied Filters" sheet lists Country and College/Unit but not Region or Nature of Partnership', async () => {
+    const res = await agent.get('/api/reports/partnerships/excel?country=Testland&status=Active&unit=CIRL')
       .buffer(true).parse((res, cb) => {
         const chunks = [];
         res.on('data', c => chunks.push(c));
@@ -770,23 +787,29 @@ describe('Custom Report Builder field removal (College/Unit, Region, Nature, Ins
     await workbook.xlsx.load(res.body);
     const sheet = workbook.worksheets[1]; // 'Applied Filters'
     expect(sheet.name).toBe('Applied Filters');
-    const labels = [];
-    sheet.eachRow(row => { const v = row.getCell(1).value; if (v) labels.push(String(v)); });
-    expect(labels).toContain('Country');
-    expect(labels).not.toContain('College / Unit');
-    expect(labels).not.toContain('Region');
-    expect(labels).not.toContain('Nature of Partnership');
+    const rows = {};
+    sheet.eachRow(row => {
+      const label = row.getCell(1).value;
+      const value = row.getCell(2).value;
+      if (label) rows[String(label)] = value;
+    });
+    expect(rows['Country']).toBe('Testland');
+    expect(rows['College / Unit']).toBe('CIRL');
+    expect(Object.keys(rows)).not.toContain('Region');
+    expect(Object.keys(rows)).not.toContain('Nature of Partnership');
   });
 
-  test('Removed-field query params cannot silently narrow a Custom Report the way an explicit remaining filter does', async () => {
+  test('Removed-field (region/nature/inst) query params cannot silently narrow a Custom Report the way an explicit remaining filter does', async () => {
     // A request shaped exactly like what the Builder's own JS now sends
-    // (only the 7 remaining fields) must return the same result whether or
-    // not stale unit/region/nature/inst params are also present — proving
-    // those params carry no special weight in the Builder's own output.
+    // (only the 8 remaining fields) must return the same result whether or
+    // not stale region/nature/inst params are also present — proving those
+    // params carry no special weight in the Builder's own output. `unit` is
+    // deliberately excluded from this "stale" set now that it's a real,
+    // intentional Builder field (see the College/Unit describe block below).
     const withoutStale = await agent.get('/api/reports/custom/preview?country=Testland&status=Active');
-    const withStaleButContradictory = await agent.get('/api/reports/custom/preview?country=Testland&status=Active&unit=CETE&region=Europe&nature=Research&inst=NoSuchInstitution');
-    // unit/region/nature/inst are STILL real, functioning filter capability
-    // in the shared engine (kept for other future/legacy callers per the
+    const withStaleButContradictory = await agent.get('/api/reports/custom/preview?country=Testland&status=Active&region=Europe&nature=Research&inst=NoSuchInstitution');
+    // region/nature/inst are STILL real, functioning filter capability in
+    // the shared engine (kept for other future/legacy callers per the
     // removal spec) — so a contradictory combination legitimately narrows
     // the MongoDB result here. What must NOT happen is the Builder's own
     // request ever constructing such a query, which the previous test
@@ -822,6 +845,341 @@ describe('Custom Report Builder field removal (College/Unit, Region, Nature, Ins
     expect(expiringRes.body.totalRecords).toBe(statsRes.body.expiring);
     expect(activeRes.body.totalRecords + expiredRes.body.totalRecords + expiringRes.body.totalRecords)
       .toBe(statsRes.body.total);
+  });
+});
+
+// 2026-09-04: College/Unit re-add — Responsible Unit can now hold MULTIPLE
+// values (e.g. unit: ["CCS", "CIRL"]), so the Custom Report Builder's new
+// College/Unit filter must match by array membership, not exact equality,
+// while staying backward-compatible with legacy documents where `unit` is
+// still a plain string. These tests exercise every unit in
+// VALID_PARTNERSHIP_UNITS, "All Units", combined filters, and Preview/PDF/
+// Excel consistency — not just that the dropdown exists.
+describe('College / Unit filter — real, array-aware Custom Report Builder filter', () => {
+  let multiUnitId, ceteOnlyId, legacyStringUnitId;
+
+  beforeAll(async () => {
+    // A partnership responsible to BOTH CCS and CIRL — the exact scenario
+    // the spec calls out: selecting either unit alone must include it.
+    const multiRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest Multi-Unit University', country: 'UnitTestland', region: 'Asia', type: 'MOA',
+      nature: 'Research', cat: 'Local', unit: ['CCS', 'CIRL'],
+      start: 'Jun 1, 2026', end: 'Jun 1, 2028', status: 'Active', remarks: 'jesttest'
+    });
+    multiUnitId = multiRes.body.partnership.id;
+
+    // A single-unit (CETE-only) partnership — proves selecting CCS/CIRL does
+    // NOT accidentally pull in a record that has neither.
+    const ceteRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest CETE-Only University', country: 'UnitTestland', region: 'Asia', type: 'MOA',
+      nature: 'Research', cat: 'Local', unit: 'CETE',
+      start: 'Jun 1, 2026', end: 'Jun 1, 2028', status: 'Active', remarks: 'jesttest'
+    });
+    ceteOnlyId = ceteRes.body.partnership.id;
+
+    // A legacy-shape document inserted directly (bypassing sanitization,
+    // which now always normalizes `unit` to an array) to prove the College/
+    // Unit filter still matches a real pre-migration record whose `unit`
+    // field is a bare string, not an array.
+    const db = await connectDB();
+    const last = await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray();
+    legacyStringUnitId = (last.length ? last[0].id : 0) + 1;
+    await db.collection('partnerships').insertOne({
+      id: legacyStringUnitId, inst: 'Jest Legacy String-Unit University', country: 'UnitTestland',
+      region: 'Asia', type: 'MOA', nature: 'Research', cat: 'Local', unit: 'CILS',
+      start: 'Jun 1, 2026', end: 'Jun 1, 2028', status: 'Active', remarks: 'jesttest'
+    });
+  });
+
+  afterAll(async () => {
+    const db = await connectDB();
+    await db.collection('partnerships').deleteMany({ id: { $in: [multiUnitId, ceteOnlyId, legacyStringUnitId] } });
+  });
+
+  test.each(['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'])(
+    'unit=%s only ever returns records genuinely responsible to that unit',
+    async (unitValue) => {
+      const res = await agent.get(`/api/reports/custom/preview?unit=${unitValue}&country=UnitTestland`);
+      expect(res.status).toBe(200);
+      expect(res.body.filters.unit).toBe(unitValue);
+      expect(res.body.records.every(p =>
+        Array.isArray(p.unit) ? p.unit.includes(unitValue) : p.unit === unitValue
+      )).toBe(true);
+    }
+  );
+
+  test('unit=CCS includes the multi-unit (CCS+CIRL) partnership', async () => {
+    const res = await agent.get('/api/reports/custom/preview?unit=CCS&country=UnitTestland');
+    expect(res.status).toBe(200);
+    expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+    expect(res.body.records.some(p => p.id === ceteOnlyId)).toBe(false);
+  });
+
+  test('unit=CIRL ALSO includes the same multi-unit (CCS+CIRL) partnership', async () => {
+    const res = await agent.get('/api/reports/custom/preview?unit=CIRL&country=UnitTestland');
+    expect(res.status).toBe(200);
+    expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+    expect(res.body.records.some(p => p.id === ceteOnlyId)).toBe(false);
+  });
+
+  test('unit=CETE excludes the multi-unit (CCS+CIRL) partnership but includes the CETE-only one', async () => {
+    const res = await agent.get('/api/reports/custom/preview?unit=CETE&country=UnitTestland');
+    expect(res.status).toBe(200);
+    expect(res.body.records.some(p => p.id === ceteOnlyId)).toBe(true);
+    expect(res.body.records.some(p => p.id === multiUnitId)).toBe(false);
+  });
+
+  test('unit=CILS matches a legacy record whose `unit` is still a bare string, not an array', async () => {
+    const res = await agent.get('/api/reports/custom/preview?unit=CILS&country=UnitTestland');
+    expect(res.status).toBe(200);
+    expect(res.body.records.some(p => p.id === legacyStringUnitId)).toBe(true);
+  });
+
+  test('"All Units" (no unit param) returns every unit-tagged record together', async () => {
+    const res = await agent.get('/api/reports/custom/preview?country=UnitTestland');
+    expect(res.status).toBe(200);
+    expect(res.body.filters.unit).toBe('All');
+    const ids = res.body.records.map(p => p.id);
+    expect(ids).toEqual(expect.arrayContaining([multiUnitId, ceteOnlyId, legacyStringUnitId]));
+  });
+
+  describe('College/Unit combined with other filters (AND, not OR)', () => {
+    test('unit + Category (cat)', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&cat=Local&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongCat = await agent.get('/api/reports/custom/preview?unit=CCS&cat=International&country=UnitTestland');
+      expect(wrongCat.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Status', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&status=Active&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongStatus = await agent.get('/api/reports/custom/preview?unit=CCS&status=Expired&country=UnitTestland');
+      expect(wrongStatus.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Agreement Type', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&agtype=MOA&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongType = await agent.get('/api/reports/custom/preview?unit=CCS&agtype=MOU&country=UnitTestland');
+      expect(wrongType.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Region', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&region=Asia&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongRegion = await agent.get('/api/reports/custom/preview?unit=CCS&region=Europe&country=UnitTestland');
+      expect(wrongRegion.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Country', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongCountry = await agent.get('/api/reports/custom/preview?unit=CCS&country=NoSuchCountry');
+      expect(wrongCountry.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Nature of Partnership (still a real filter capability, just not a Builder UI field)', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&nature=Research&country=UnitTestland');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongNature = await agent.get('/api/reports/custom/preview?unit=CCS&nature=Training&country=UnitTestland');
+      expect(wrongNature.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Institution (still a real filter capability, just not a Builder UI field)', async () => {
+      const res = await agent.get('/api/reports/custom/preview?unit=CCS&inst=Jest%20Multi-Unit');
+      expect(res.status).toBe(200);
+      expect(res.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const wrongInst = await agent.get('/api/reports/custom/preview?unit=CCS&inst=NoSuchInstitutionAtAll');
+      expect(wrongInst.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+
+    test('unit + Date From/Date To', async () => {
+      const withinWindow = await agent.get('/api/reports/custom/preview?unit=CCS&dateFrom=2026-01-01&dateTo=2028-12-31&country=UnitTestland');
+      expect(withinWindow.status).toBe(200);
+      expect(withinWindow.body.records.some(p => p.id === multiUnitId)).toBe(true);
+      const outsideWindow = await agent.get('/api/reports/custom/preview?unit=CCS&dateFrom=2000-01-01&dateTo=2001-01-01&country=UnitTestland');
+      expect(outsideWindow.body.records.some(p => p.id === multiUnitId)).toBe(false);
+    });
+  });
+
+  test('Preview, PDF, and Excel agree on the exact same record count for an identical College/Unit filter', async () => {
+    const qs = 'unit=CCS&country=UnitTestland';
+    const previewRes = await agent.get(`/api/reports/custom/preview?${qs}`);
+    expect(previewRes.body.records.some(p => p.id === multiUnitId)).toBe(true);
+    const previewCount = previewRes.body.totalRecords;
+
+    const excelRes = await agent.get(`/api/reports/partnerships/excel?${qs}`)
+      .buffer(true).parse((res, cb) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    const sheet = workbook.worksheets[0];
+    let excelCount = 0, foundOurRecord = false;
+    sheet.eachRow(row => {
+      const no = row.getCell(1).value;
+      const name = row.getCell(2).value;
+      if (typeof no !== 'number' || !name) return;
+      excelCount++;
+      if (name === 'Jest Multi-Unit University') foundOurRecord = true;
+    });
+    expect(excelCount).toBe(previewCount);
+    expect(foundOurRecord).toBe(true);
+
+    const pdfRes = await agent.get(`/api/reports/partnerships/pdf?${qs}`);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.body.slice(0, 4).toString()).toBe('%PDF');
+  });
+
+  test('Opening Compare from Preview preserves the College/Unit filter in Group A (the original report)', async () => {
+    const res = await agent.get(
+      '/api/reports/comparison/preview?compType=Compare%20Against&unit=CCS&country=UnitTestland&compareField=status&compareValue=Active'
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.filters['College / Unit']).toBe('CCS');
+    expect(res.body.groupARecords.every(p =>
+      Array.isArray(p.unit) ? p.unit.includes('CCS') : p.unit === 'CCS'
+    )).toBe(true);
+    expect(res.body.groupARecords.some(p => p.id === multiUnitId)).toBe(true);
+  });
+});
+
+// Mid-Year and Yearly Output Report fixed tile cards must always cover the
+// CURRENT calendar year (Jan 1 – Jun 30 / Jan 1 – Dec 31), computed
+// dynamically, never a hardcoded year — this is exactly what
+// exportMidYearReport()/exportYearlyReport() in reports.ejs send as
+// dateFrom/dateTo, and the shared filterByDateRange()/computeCustomReportData
+// engine is what actually enforces it, so testing the underlying query params
+// proves the fixed tile cards' real behavior end-to-end.
+describe('Mid-Year and Yearly Output Report tile cards — dynamic current-year date range', () => {
+  const year = new Date().getFullYear();
+  let midYearId, beforeMidYearId, afterMidYearId, yearlyId, nextYearId;
+
+  beforeAll(async () => {
+    // Starts and ends entirely inside this year's Jan-Jun window.
+    const midYearRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest Mid-Year Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Feb 1, ${year}`, end: `May 1, ${year}`, status: 'Active', remarks: 'jesttest'
+    });
+    midYearId = midYearRes.body.partnership.id;
+
+    // Fully in the past (previous year) — must NOT appear in either window.
+    const beforeRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest Before-Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Jan 1, ${year - 2}`, end: `Dec 1, ${year - 1}`, status: 'Active', remarks: 'jesttest'
+    });
+    beforeMidYearId = beforeRes.body.partnership.id;
+
+    // Starts after this year's Mid-Year window (Jul) but still within the
+    // full Yearly window — must appear in Yearly only, not Mid-Year.
+    const afterRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest After-MidYear-Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Aug 1, ${year}`, end: `Nov 1, ${year}`, status: 'Active', remarks: 'jesttest'
+    });
+    afterMidYearId = afterRes.body.partnership.id;
+
+    // Entirely within the full current year — must appear in Yearly.
+    const yearlyRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest Yearly Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Mar 1, ${year}`, end: `Oct 1, ${year}`, status: 'Active', remarks: 'jesttest'
+    });
+    yearlyId = yearlyRes.body.partnership.id;
+
+    // Entirely in NEXT year — must NOT appear in either window.
+    const nextYearRes = await agent.post('/api/partnerships').send({
+      inst: 'Jest Next-Year University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Feb 1, ${year + 1}`, end: `May 1, ${year + 1}`, status: 'Active', remarks: 'jesttest'
+    });
+    nextYearId = nextYearRes.body.partnership.id;
+  });
+
+  afterAll(async () => {
+    const db = await connectDB();
+    await db.collection('partnerships').deleteMany({
+      id: { $in: [midYearId, beforeMidYearId, afterMidYearId, yearlyId, nextYearId] }
+    });
+  });
+
+  test('Mid-Year window (current year Jan 1 - Jun 30) includes only records overlapping that window', async () => {
+    const res = await agent.get(
+      `/api/reports/custom/preview?title=Mid-Year%20Output%20Report&dateFrom=${year}-01-01&dateTo=${year}-06-30&country=DateTestland`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.filters.dateFrom).toBe(`${year}-01-01`);
+    expect(res.body.filters.dateTo).toBe(`${year}-06-30`);
+    const ids = res.body.records.map(p => p.id);
+    expect(ids).toContain(midYearId);
+    expect(ids).not.toContain(beforeMidYearId);
+    expect(ids).not.toContain(afterMidYearId);
+    expect(ids).not.toContain(nextYearId);
+  });
+
+  test('Yearly window (current year Jan 1 - Dec 31) includes every record active during the current year', async () => {
+    const res = await agent.get(
+      `/api/reports/custom/preview?title=Yearly%20Output%20Report&dateFrom=${year}-01-01&dateTo=${year}-12-31&country=DateTestland`
+    );
+    expect(res.status).toBe(200);
+    const ids = res.body.records.map(p => p.id);
+    expect(ids).toContain(midYearId);
+    expect(ids).toContain(afterMidYearId);
+    expect(ids).toContain(yearlyId);
+    expect(ids).not.toContain(beforeMidYearId);
+    expect(ids).not.toContain(nextYearId);
+  });
+
+  test('Mid-Year and Yearly date ranges are never hardcoded to a specific year — the window always tracks new Date().getFullYear()', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'reports.ejs'), 'utf8');
+    // The tile cards must call the dynamic helper functions, not the old
+    // exportReport(format, {title:'...'}) call with no date range at all.
+    expect(html).toMatch(/onclick="exportMidYearReport\('pdf'\)"/);
+    expect(html).toMatch(/onclick="exportMidYearReport\('excel'\)"/);
+    expect(html).toMatch(/onclick="exportYearlyReport\('pdf'\)"/);
+    expect(html).toMatch(/onclick="exportYearlyReport\('excel'\)"/);
+    expect(html).not.toMatch(/exportReport\('pdf', \{title:'Mid-Year Output Report'\}\)/);
+    expect(html).not.toMatch(/exportReport\('pdf', \{title:'Yearly Output Report'\}\)/);
+    // The helper that computes the window must derive the year live, never
+    // hardcode a specific one (e.g. "2026").
+    expect(html).toMatch(/function currentYearDateRange/);
+    expect(html).toMatch(/new Date\(\)\.getFullYear\(\)/);
+    expect(html).not.toMatch(/dateFrom:\s*['"]\d{4}-01-01['"]/);
+  });
+
+  test('PDF and Excel exports for the Mid-Year window produce the same record set as Preview', async () => {
+    const qs = `dateFrom=${year}-01-01&dateTo=${year}-06-30&country=DateTestland&title=Mid-Year%20Output%20Report`;
+    const previewRes = await agent.get(`/api/reports/custom/preview?${qs}`);
+    const previewCount = previewRes.body.totalRecords;
+
+    const pdfRes = await agent.get(`/api/reports/partnerships/pdf?${qs}`);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.body.slice(0, 4).toString()).toBe('%PDF');
+
+    const excelRes = await agent.get(`/api/reports/partnerships/excel?${qs}`)
+      .buffer(true).parse((res, cb) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    let excelCount = 0;
+    workbook.worksheets[0].eachRow(row => { if (typeof row.getCell(1).value === 'number') excelCount++; });
+    expect(excelCount).toBe(previewCount);
   });
 });
 

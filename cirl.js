@@ -360,37 +360,32 @@ app.get('/auth/google/callback', (req, res, next) => {
         return res.render('index', { activePage: '', error: 'Google account has no email. Please use a different login method.' });
       }
 
-      // Look up user in our users collection
-      let dbUser = await db.collection('users').findOne({ email: googleEmail });
+      // Strict allowlist (2026-09-05): Google/CSPC authentication only proves
+      // WHO the person is. It never determines WHETHER they may access
+      // CIPRMS or WHAT role they hold — that authorization lives solely in
+      // the CIPRMS `users` collection, created explicitly by an
+      // Administrator/Staff via User Management. An authenticated identity
+      // with no matching record here must be rejected outright: no account
+      // is auto-created, no default role is assigned, and no session is
+      // established.
+      const dbUser = await db.collection('users').findOne({ email: googleEmail });
 
       if (!dbUser) {
-        // New Google user — auto-create as Staff
-        const lastUser = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
-        const nextId = lastUser.length ? lastUser[0].id + 1 : 1;
-        const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        dbUser = {
-          id: nextId,
-          name: googleUser.displayName || googleEmail.split('@')[0],
-          email: googleEmail,
-          role: 'Staff',
-          unit: '',
-          login: today,
-          status: 'Active',
-          password: null,  // Google-only account — no password
-          googleId: googleUser.id,
-          createdAt: today
-        };
-        await db.collection('users').insertOne(dbUser);
-        console.log(`✓ New Google user auto-created as Staff: ${googleEmail}`);
-      } else {
-        if (dbUser.status === 'Inactive') {
-          return res.render('index', { activePage: '', error: 'Your account is inactive. Please contact the Administrator.' });
-        }
-        // Update last login
-        const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        await db.collection('users').updateOne({ email: googleEmail }, { $set: { login: today } });
-        console.log(`✓ Google login: ${dbUser.name} (${dbUser.role})`);
+        console.warn(`⚠️  Google login rejected — no authorized CIPRMS account for: ${googleEmail}`);
+        return res.render('index', {
+          activePage: '',
+          error: 'Your account is not authorized to access CIPRMS. Please contact the CIRL Administrator to request an account.'
+        });
       }
+
+      if (dbUser.status === 'Inactive') {
+        return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
+      }
+
+      // Update last login
+      const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      await db.collection('users').updateOne({ email: googleEmail }, { $set: { login: today } });
+      console.log(`✓ Google login: ${dbUser.name} (${dbUser.role})`);
 
       // Regenerate session to prevent fixation, then store user data
       req.session.regenerate((regenErr) => {
@@ -435,7 +430,7 @@ app.post('/login', loginLimiter, async (req, res) => {
     }
 
     if (user.status === 'Inactive') {
-      return res.render('index', { activePage: '', error: 'Your account is inactive. Please contact the Administrator.' });
+      return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
     }
 
     if (!user.password) {
@@ -488,71 +483,20 @@ app.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
+// Public self-registration is disabled (2026-09-05 strict allowlist policy):
+// authenticating as *someone* (even with a real email/password of their own
+// choosing) must never be enough to grant a CIPRMS account or session. The
+// only path to an authorized account is an Administrator/Staff explicitly
+// creating one via User Management → Add User (POST /api/users). This route
+// is kept (rather than removed) only so the existing /signup URL still
+// resolves to a clear, non-crashing rejection instead of a 404.
 app.post('/signup', signupLimiter, async (req, res) => {
-  const { username: name, email, password, confirmPassword } = req.body;
-  // Re-render with whatever the user already typed on any error — never the password.
+  const { username: name, email } = req.body;
   const formData = { name: name || '', email: email || '' };
-
-  if (!name || !email || !password) {
-    return res.render('signup', { activePage: '', user: null, formData, error: 'All fields are required.' });
-  }
-  if (password !== confirmPassword) {
-    return res.render('signup', { activePage: '', user: null, formData, error: 'Passwords do not match.' });
-  }
-  if (!isStrongPassword(password)) {
-    return res.render('signup', { activePage: '', user: null, formData, error: PASSWORD_POLICY_MESSAGE });
-  }
-
-  try {
-    const db = getDb();
-    const normalizedEmail = email.trim().toLowerCase();
-
-    // Check if email already exists
-    const existing = await db.collection('users').findOne({ email: normalizedEmail });
-    if (existing) {
-      return res.render('signup', { activePage: '', user: null, formData, error: 'An account with this email already exists. Please sign in.' });
-    }
-
-    // Auto-assign next ID
-    const lastUser = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = lastUser.length ? lastUser[0].id + 1 : 1;
-    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-    const newUser = {
-      id: nextId,
-      name: name.trim(),
-      email: normalizedEmail,
-      role: 'Staff',     // All new signups start as Staff
-      unit: '',
-      login: 'Never',
-      status: 'Active',
-      password: await hashPassword(password),
-      createdAt: today
-    };
-
-    await db.collection('users').insertOne(newUser);
-    console.log(`✓ New user registered as Staff: ${normalizedEmail}`);
-
-    // Regenerate session to prevent fixation, then store user data
-    req.session.regenerate((regenErr) => {
-      if (regenErr) return res.render('signup', { activePage: '', user: null, formData, error: 'Session error. Please try again.' });
-      req.session.user = {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        unit: newUser.unit || ''
-      };
-      req.session.save((saveErr) => {
-        if (saveErr) return res.render('signup', { activePage: '', user: null, formData, error: 'Session error. Please try again.' });
-        res.redirect(homeForRole(newUser.role));  // → /staff/dashboard
-      });
-    });
-
-  } catch (err) {
-    console.error('❌ Signup error:', err);
-    res.render('signup', { activePage: '', user: null, formData, error: 'A server error occurred. Please try again.' });
-  }
+  return res.render('signup', {
+    activePage: '', user: null, formData,
+    error: 'Self-registration is disabled. Please contact the CIRL Administrator to request an account.'
+  });
 });
 
 // ── LOGOUT —————————————————————————————————————————————————
@@ -1190,18 +1134,76 @@ app.post('/api/requests/:id/withdraw', requireRequester, async (req, res) => {
 });
 
 // ── Document Requests (Auth. Personnel + potential_partner) ─────────────
-// Replaces Personnel's old "new partnership" submission. Personnel/partner
-// may only request MOA, MOU, or Accreditation documents — never a new
-// partnership (that's the separate Partnership Request workflow).
-const DOCUMENT_REQUEST_TYPES = ['MOA', 'MOU', 'Accreditation'];
+// Replaces Personnel's old "new partnership" submission — a separate
+// workflow from Partnership Requests. "Document(s) Requested" is a
+// free-form multi-select (2026-09-02): requesters can pick any number of
+// these suggestions and/or type entirely custom document names — this list
+// is shown in the combobox but never enforced server-side (see the
+// validation below, which only requires a non-empty array of strings).
+const DOCUMENT_TYPE_SUGGESTIONS = [
+  'Compliance requirements for international linkages and consortia (MAN)',
+  'Universitas Airlangga - MOA',
+  'MOUs',
+  'Photos/Docs - IMC Japan',
+  'Terminal Reports (International Activity); Year end report of activities',
+  'QS Star Rating result',
+  'Handbook or manual regarding student participation on internationalization',
+  'International Linkages; International students/faculty'
+];
+// Fixed institutional signatory shown on every Fulfilled Document Request's
+// "Approved By" line — this is a real, unchanging office designation (CIRL
+// Head), not tied to whichever Staff/Administrator account processed the
+// request, so it is intentionally a constant rather than session data.
+const DR_APPROVER_NAME = 'Filmor J. Murillo';
+const DR_APPROVER_TITLE = 'Head, Center for International Relations and Linkages';
+
+// Document Request workflow (2026-09-04): the granular, ordered pipeline a
+// document request moves through after being submitted/received, replacing
+// the old binary Pending/Under Review decision model. Rejected remains a
+// separate, non-sequential outcome reachable from any non-terminal stage —
+// it is not part of the ordered pipeline itself (see docs/SYSTEM_AUDIT).
+const DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
+const DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
+// Pre-2026-09-04 status names, mapped to their canonical successor in the
+// new pipeline. Existing records keep their stored `status` value untouched
+// until the next time it's actually changed — this map lets every other
+// part of the system (transition validation, UI display, the printable
+// form) treat a legacy record identically to its canonical equivalent, with
+// no bulk data migration required.
+const DR_LEGACY_STATUS_MAP = { 'Pending': 'Received', 'Under Review': 'Preparing', 'Fulfilled': 'Completed' };
+function canonicalDrStatus(status) {
+  return DR_LEGACY_STATUS_MAP[status] || status;
+}
+// The one legitimate forward move from a given canonical status — skipping
+// ahead or moving backward is rejected by the PATCH handler below. Returns
+// null once the pipeline's final stage (Completed) is reached.
+function drNextStatus(canonicalStatus) {
+  const idx = DR_WORKFLOW_STATUSES.indexOf(canonicalStatus);
+  return (idx === -1 || idx === DR_WORKFLOW_STATUSES.length - 1) ? null : DR_WORKFLOW_STATUSES[idx + 1];
+}
+// Additive: exposes each request's normalized pipeline position as
+// `canonicalStatus` without touching the stored `status` field, so every
+// list-returning endpoint (reviewer queue + the requester's own "mine" view)
+// can consistently drive dropdown pre-selection, badge color/label, and the
+// requester-facing progress checklist off one normalized value.
+function withDrCanonicalStatus(requests) {
+  return requests.map(r => ({ ...r, canonicalStatus: canonicalDrStatus(r.status) }));
+}
 
 app.post('/api/document-requests', requireRequester, async (req, res) => {
-  const { institution, documentType, notes, contactNumber, documentForm } = req.body;
-  if (!institution || !documentType) {
-    return res.status(400).json({ error: 'Missing required fields: institution, documentType.' });
-  }
-  if (!DOCUMENT_REQUEST_TYPES.includes(documentType)) {
-    return res.status(400).json({ error: 'documentType must be one of: ' + DOCUMENT_REQUEST_TYPES.join(', ') + '.' });
+  const { institution, notes, contactNumber, documentForm } = req.body;
+  // Accept the new documentTypes array; fall back to the legacy singular
+  // documentType string so older API callers/tests keep working unchanged.
+  let documentTypes = Array.isArray(req.body.documentTypes)
+    ? req.body.documentTypes
+    : (req.body.documentType ? [req.body.documentType] : []);
+  documentTypes = documentTypes
+    .filter(t => typeof t === 'string')
+    .map(t => t.trim().slice(0, 300))
+    .filter(Boolean)
+    .slice(0, 20);
+  if (!institution || documentTypes.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields: institution, documentTypes.' });
   }
   try {
     const db = getDb();
@@ -1211,7 +1213,11 @@ app.post('/api/document-requests', requireRequester, async (req, res) => {
     const entry = {
       id: nextId,
       institution: institution.trim(),
-      documentType,
+      documentTypes,
+      // Joined display string kept for every place that already reads
+      // documentType as free text (notifications, logs, table badges,
+      // Document Library metadata) — avoids touching those call sites.
+      documentType: documentTypes.join(', '),
       notes: notes || '',
       // Contact Number and Document Form (Printed/Digital Copy) exist solely to
       // populate the official CSPC-F-CIRL-04 printable form — no other part of
@@ -1220,7 +1226,7 @@ app.post('/api/document-requests', requireRequester, async (req, res) => {
       documentForm: documentForm || '',
       requestedBy: req.session.user ? req.session.user.name : 'Unknown',
       requestedByEmail: req.session.user ? req.session.user.email : '',
-      status: 'Pending',
+      status: 'Received', // pipeline's starting stage (see DR_WORKFLOW_STATUSES)
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       submittedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -1267,13 +1273,15 @@ app.get('/api/document-requests/mine', requireRequester, async (req, res) => {
       .find({ requestedByEmail: email })
       .sort({ id: -1 })
       .toArray();
-    res.json(requests);
+    res.json(withDrCanonicalStatus(requests));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Cancel own document request — self-service, ownership-checked, Pending-only.
+// Cancel own document request — self-service, ownership-checked, allowed
+// only at the pipeline's starting stage (Received, or its legacy equivalent
+// Pending) before any reviewer has begun acting on it.
 app.delete('/api/document-requests/:id', requireRequester, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
@@ -1285,8 +1293,8 @@ app.delete('/api/document-requests/:id', requireRequester, async (req, res) => {
     if (target.requestedByEmail !== email) {
       return res.status(403).json({ error: 'You can only cancel your own document request.' });
     }
-    if (target.status !== 'Pending') {
-      return res.status(400).json({ error: 'Only pending document requests can be cancelled.' });
+    if (canonicalDrStatus(target.status) !== 'Received') {
+      return res.status(400).json({ error: 'Only newly-received document requests can be cancelled.' });
     }
     await db.collection('documentrequests').deleteOne({ id });
     res.json({ success: true });
@@ -1308,71 +1316,118 @@ app.get('/api/document-requests', requireStaffAccess, async (req, res) => {
     const email = req.session.user ? req.session.user.email : '';
     const filter = req.session.user && REQUEST_REVIEWER_ROLES.includes(req.session.user.role) ? {} : { requestedByEmail: email };
     const requests = await db.collection('documentrequests').find(filter).sort({ id: -1 }).toArray();
-    res.json(requests);
+    res.json(withDrCanonicalStatus(requests));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Fulfill / reject a document request — Administrator or Staff (full parity).
+// Notification copy per workflow stage — 'Received' is deliberately absent
+// (it is the request's starting state at submission time, never something a
+// reviewer transitions it INTO, so there is nothing new to tell the
+// requester). Rejected keeps its own distinct branch below since it isn't
+// part of the ordered pipeline these describe.
+const DR_STATUS_NOTIFICATION_COPY = {
+  'Preparing': { icon: 'ri-tools-line', color: 'info', verb: 'is now being prepared' },
+  'Awaiting for Approval': { icon: 'ri-time-line', color: 'warning', verb: 'is awaiting approval' },
+  'Approved': { icon: 'ri-checkbox-circle-line', color: 'success', verb: 'has been approved' },
+  'Release': { icon: 'ri-file-transfer-line', color: 'primary', verb: 'is ready for release' },
+  'Completed': { icon: 'ri-checkbox-circle-fill', color: 'success', verb: 'has been completed. Check the Document Library for the uploaded file' }
+};
+
+// Advance (or reject) a document request through the workflow — Administrator
+// or Staff (full parity). `status` accepts both the current canonical stage
+// names and any pre-2026-09-04 legacy name (Pending/Under Review/Fulfilled),
+// which is normalized to its canonical equivalent before validation/storage
+// so every write from here on uses only the canonical vocabulary.
 app.patch('/api/document-requests/:id', requireStaffAccess, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { status, remark, releasedBy, receivedBy } = req.body;
-  const validStatuses = ['Pending', 'Under Review', 'Fulfilled', 'Rejected'];
-  if (!validStatuses.includes(status)) {
+  const { remark, receivedBy } = req.body;
+  const status = canonicalDrStatus(req.body.status);
+  const validTargets = [...DR_WORKFLOW_STATUSES, 'Rejected'];
+  if (!validTargets.includes(status)) {
     return res.status(400).json({ error: 'Invalid status.' });
   }
   try {
     const db = getDb();
-    if (['Fulfilled', 'Rejected'].includes(status)) {
-      const current = await db.collection('documentrequests').findOne({ id });
-      if (!current) return res.status(404).json({ error: 'Document request not found.' });
-      if (!UNDECIDED_REQUEST_STATUSES.includes(current.status)) {
-        return res.status(400).json({ error: `This request has already been decided (current status: ${current.status}) and cannot be changed.` });
+    const current = await db.collection('documentrequests').findOne({ id });
+    if (!current) return res.status(404).json({ error: 'Document request not found.' });
+    const currentCanonical = canonicalDrStatus(current.status);
+
+    if (DR_TERMINAL_STATUSES.includes(currentCanonical)) {
+      return res.status(400).json({ error: `This request has already been decided (current status: ${current.status}) and cannot be changed.` });
+    }
+    if (status !== 'Rejected') {
+      // Reject is reachable from any non-terminal stage (handled above);
+      // every other target must be exactly the next stage in the pipeline —
+      // no skipping ahead, no moving backward.
+      const expectedNext = drNextStatus(currentCanonical);
+      if (status !== expectedNext) {
+        return res.status(400).json({
+          error: expectedNext
+            ? `Invalid status transition: "${currentCanonical}" can only move to "${expectedNext}" next, not "${status}".`
+            : `"${currentCanonical}" cannot be advanced further.`
+        });
       }
     }
+
     const now = new Date().toISOString();
-    // decidedBy/updatedAt double as "Approved By"/"Approval Date" on the
-    // printable form. Released By / Received By are optional, admin-typed
-    // signature-line values for the same paper form — only meaningful (and
-    // only ever sent by the UI) alongside a Fulfilled decision.
+    // decidedBy/updatedAt track who last touched the status, for audit
+    // purposes. The printable form's "Approved By" line is a fixed
+    // institutional signatory (DR_APPROVER_NAME/DR_APPROVER_TITLE, rendered
+    // in drFormFields below) and is never taken from this field.
     const setFields = { status, remark: remark || '', updatedAt: now, decidedBy: req.session.user.name };
-    if (status === 'Fulfilled') {
-      if (releasedBy) { setFields.releasedBy = releasedBy; setFields.releasedAt = now; }
-      if (receivedBy) { setFields.receivedBy = receivedBy; setFields.receivedAt = now; }
+    if (status === 'Approved') {
+      setFields.approvedAt = now;
     }
-    await db.collection('documentrequests').updateOne({ id }, { $set: setFields });
+    if (status === 'Release') {
+      // Released By must reflect real data, never a hand-typed/hardcoded
+      // name: it is always whoever is actually performing the release (the
+      // authenticated actor), regardless of what the client sends.
+      setFields.releasedBy = req.session.user.name;
+      setFields.releasedAt = now;
+    }
+    if (status === 'Completed') {
+      // Received By defaults to the request's own requester (the person the
+      // documents were requested for) but a reviewer may override it — e.g.
+      // when a different, named representative physically collects the
+      // documents on the requester's behalf.
+      setFields.receivedBy = (receivedBy && receivedBy.trim()) || current.requestedBy || '';
+      setFields.receivedAt = now;
+    }
+    // Every transition — including automatic ones elsewhere in this file —
+    // is appended to statusHistory, never overwritten, so the full audit
+    // trail of who moved the request through which stages and when is
+    // always reconstructable straight from the request document itself.
+    const historyEntry = { from: current.status, to: status, at: now, by: req.session.user.name, byEmail: req.session.user.email, remark: remark || '' };
+
+    await db.collection('documentrequests').updateOne(
+      { id },
+      { $set: setFields, $push: { statusHistory: historyEntry } }
+    );
     const updated = await db.collection('documentrequests').findOne({ id });
     if (!updated) return res.status(404).json({ error: 'Document request not found.' });
 
-    const action = status === 'Fulfilled' ? 'APPROVE' : status === 'Rejected' ? 'REJECT' : 'EDIT';
+    const action = status === 'Completed' ? 'APPROVE' : status === 'Rejected' ? 'REJECT' : 'EDIT';
     await logActivity(db, req.session.user, action,
-      `Document request ${status.toLowerCase()}: ${updated.documentType} for ${updated.institution} (requested by ${updated.requestedBy})`);
+      `Document request status changed to "${status}": ${updated.documentType} for ${updated.institution} (requested by ${updated.requestedBy})`);
 
     // Targeted notification to the requester only (Auth. Personnel or, since
-    // 2026-07-22, potential_partner). The 'Under Review' transition
-    // (previously silent) doubles as "additional documents requested" — same
-    // reasoning as the Partnership Request PATCH above: reuse the existing
-    // status value rather than add a new field.
-    if (['Fulfilled', 'Rejected', 'Under Review'].includes(status) && updated.requestedByEmail) {
+    // 2026-07-22, potential_partner) — every stage except the starting
+    // 'Received' state notifies, plus the separate Rejected outcome.
+    if (updated.requestedByEmail && (status === 'Rejected' || DR_STATUS_NOTIFICATION_COPY[status])) {
       const requester = await db.collection('users').findOne({ email: updated.requestedByEmail });
       const link = drLinkForRole(requester && requester.role, id);
       let title, desc, icon, color;
-      if (status === 'Under Review') {
-        title = `Additional documents requested: ${updated.documentType} for ${updated.institution}`;
-        desc = `The Administrator has requested additional documents or information for your ${updated.documentType} document request (${updated.institution}).${remark ? ' Note: ' + remark : ''}`;
-        icon = 'ri-file-add-line'; color = 'warning';
+      if (status === 'Rejected') {
+        title = `Document Request Rejected: ${updated.documentType} for ${updated.institution}`;
+        icon = 'ri-close-circle-line'; color = 'danger';
+        desc = `Your request for a ${updated.documentType} document (${updated.institution}) was not fulfilled.${remark ? ' Reason: ' + remark : ''}`;
       } else {
+        const copy = DR_STATUS_NOTIFICATION_COPY[status];
         title = `Document Request ${status}: ${updated.documentType} for ${updated.institution}`;
-        icon = status === 'Fulfilled' ? 'ri-checkbox-circle-line' : 'ri-close-circle-line';
-        color = status === 'Fulfilled' ? 'success' : 'danger';
-        // Fulfilling a request is a status flip only — it does not itself add
-        // anything to the Document Library, which requires a separate manual
-        // upload through that module. The text below previously overpromised
-        // this (B7, Roadmap v2 Phase C5, docs/SYSTEM_AUDIT_2026-07-16.md).
-        desc = status === 'Fulfilled'
-          ? `Your request for a ${updated.documentType} document (${updated.institution}) has been marked fulfilled. Check the Document Library for the uploaded file.`
-          : `Your request for a ${updated.documentType} document (${updated.institution}) was not fulfilled.${remark ? ' Reason: ' + remark : ''}`;
+        icon = copy.icon; color = copy.color;
+        desc = `Your request for a ${updated.documentType} document (${updated.institution}) ${copy.verb}.${remark ? ' Note: ' + remark : ''}`;
       }
       await notifyUsers(db, [updated.requestedByEmail], { module: 'request', tag: 'Document Request', icon, color, title, desc, link });
     }
@@ -1421,7 +1476,7 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
         fs.unlink(req.file.path, () => { });
         return res.status(403).json({ error: 'You are not authorized to upload documents to this request.' });
       }
-      if (['Fulfilled', 'Rejected'].includes(target.status)) {
+      if (DR_TERMINAL_STATUSES.includes(canonicalDrStatus(target.status))) {
         fs.unlink(req.file.path, () => { });
         return res.status(400).json({ error: `This document request has already been ${target.status.toLowerCase()} — no further documents can be added.` });
       }
@@ -1447,10 +1502,16 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
         note, fileType: req.file.mimetype, fileSize: req.file.size
       };
       const setFields = { updatedAt: new Date().toISOString() };
-      // A new version puts the request back "in collaboration" — reuses the
-      // existing Under Review status rather than inventing a new one.
-      if (target.status === 'Pending') setFields.status = 'Under Review';
-      await db.collection('documentrequests').updateOne({ id }, { $push: { supportingDocuments: docRecord }, $set: setFields });
+      // A reviewer's first draft upload signals work has actually begun —
+      // auto-advance Received → Preparing (recorded in statusHistory like
+      // every other transition) rather than requiring a separate manual
+      // status click for what just happened anyway.
+      const pushOps = { supportingDocuments: docRecord };
+      if (canonicalDrStatus(target.status) === 'Received') {
+        setFields.status = 'Preparing';
+        pushOps.statusHistory = { from: target.status, to: 'Preparing', at: setFields.updatedAt, by: actor.name, byEmail: actor.email, remark: 'Auto-advanced on first draft upload' };
+      }
+      await db.collection('documentrequests').updateOne({ id }, { $push: pushOps, $set: setFields });
       const updated = await db.collection('documentrequests').findOne({ id });
 
       await logActivity(db, actor, 'EDIT',
@@ -1507,13 +1568,34 @@ function drFormFields(r) {
   const dateTimeStr = dt && !isNaN(dt)
     ? dt.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
     : (r.date || '—');
-  const docTypeLabel = r.documentType ? `${expandDocTypeLabel(r.documentType)} (${r.documentType})` : '—';
+  // New records store documentTypes as a free-form array (rendered as-is,
+  // one line per item). Records created before 2026-09-02 only have the
+  // legacy single documentType short code (MOA/MOU/Accreditation) — expand
+  // that to its full label exactly as the form always displayed it, so
+  // historical requests keep printing unchanged.
+  const documentItems = (Array.isArray(r.documentTypes) && r.documentTypes.length)
+    ? r.documentTypes
+    : (r.documentType ? [`${expandDocTypeLabel(r.documentType)} (${r.documentType})`] : []);
   const fmtDate = (iso) => {
     if (!iso) return '';
     const d = new Date(iso);
     return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
-  return { dateTimeStr, docTypeLabel, fmtDate };
+  // The official approval section only appears once the request has actually
+  // reached the Approved stage (or beyond — Release/Completed) in the
+  // pipeline, or its legacy Fulfilled equivalent: a Received/Preparing/
+  // Awaiting for Approval/Rejected request must not display a signature for
+  // a decision that hasn't (or won't) happen. Released By / Received By
+  // below print unconditionally from whatever is actually on the record
+  // (blank until their own stage is reached) — no gating needed there.
+  const canonical = canonicalDrStatus(r.status);
+  const isFulfilled = ['Approved', 'Release', 'Completed'].includes(canonical);
+  return {
+    dateTimeStr, documentItems, fmtDate, isFulfilled,
+    approverName: isFulfilled ? DR_APPROVER_NAME : '',
+    approverTitle: isFulfilled ? DR_APPROVER_TITLE : '',
+    approvedDateStr: isFulfilled ? fmtDate(r.approvedAt || r.updatedAt) : ''
+  };
 }
 
 app.get('/document-requests/:id/print', requireAuth, async (req, res) => {
@@ -1773,7 +1855,7 @@ app.patch('/api/documents/:id/organize', requireUploader, async (req, res) => {
 // than silently written to a schemaless document.
 const PARTNERSHIP_FIELDS = {
   inst: 'string', country: 'string', region: 'string', type: 'string', nature: 'string',
-  cat: 'string', unit: 'string', coordinator: 'string', partnerEmail: 'string', docLink: 'string',
+  cat: 'string', unit: 'stringArray', coordinator: 'string', partnerEmail: 'string', docLink: 'string',
   start: 'string', end: 'string', status: 'string', remarks: 'string',
   startYear: 'number', endYear: 'number'
 };
@@ -1781,6 +1863,10 @@ const REQUIRED_PARTNERSHIP_FIELDS = ['inst', 'type', 'unit', 'start', 'end'];
 const VALID_PARTNERSHIP_TYPES = ['MOA', 'MOU'];
 const VALID_PARTNERSHIP_CATEGORIES = ['International', 'Local'];
 const VALID_PARTNERSHIP_STATUSES = ['Active', 'Expiring Soon', 'Expired'];
+// Responsible Unit (Registry → Add/Edit Partnership → CSPC-CIRL Details) is a
+// closed, predefined set — unlike Document Request's free-text combobox, no
+// custom values are accepted here.
+const VALID_PARTNERSHIP_UNITS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
 
 /**
  * Builds a MongoDB-safe field set from a request body: unknown keys must
@@ -1804,6 +1890,33 @@ function sanitizePartnershipFields(body, { requireCore }) {
     } else if (type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) { errors.push(`${field} must be a number.`); continue; }
       fields[field] = value;
+    } else if (type === 'stringArray') {
+      // Accepts a real array (the combobox's normal shape) or, for backward
+      // compatibility with any caller still sending the pre-2026-09-03
+      // single-value shape, a plain string wrapped into a one-item array.
+      // Always stored as an array going forward.
+      const raw = Array.isArray(value) ? value : (typeof value === 'string' ? [value] : null);
+      if (raw === null) { errors.push(`${field} must be a string or an array of strings.`); continue; }
+      const seen = new Set();
+      const cleaned = [];
+      let invalid = false;
+      for (const v of raw) {
+        if (typeof v !== 'string') { invalid = true; break; }
+        const trimmed = v.trim();
+        if (!trimmed) continue;
+        if (field === 'unit' && !VALID_PARTNERSHIP_UNITS.includes(trimmed)) { invalid = true; break; }
+        const key = trimmed.toLowerCase();
+        if (seen.has(key)) continue; // de-dupe silently — the UI already prevents this, this is just defense-in-depth
+        seen.add(key);
+        cleaned.push(trimmed);
+      }
+      if (invalid) {
+        errors.push(field === 'unit'
+          ? 'unit must only contain: ' + VALID_PARTNERSHIP_UNITS.join(', ')
+          : `${field} must be an array of strings.`);
+        continue;
+      }
+      fields[field] = cleaned;
     }
   }
   if (fields.type !== undefined && !VALID_PARTNERSHIP_TYPES.includes(fields.type)) {
@@ -1817,7 +1930,9 @@ function sanitizePartnershipFields(body, { requireCore }) {
   }
   if (requireCore) {
     for (const field of REQUIRED_PARTNERSHIP_FIELDS) {
-      if (!fields[field]) errors.push(`${field} is required.`);
+      const v = fields[field];
+      const missing = Array.isArray(v) ? v.length === 0 : !v;
+      if (missing) errors.push(`${field} is required.`);
     }
   }
   return { fields, errors };
@@ -1825,23 +1940,94 @@ function sanitizePartnershipFields(body, { requireCore }) {
 
 // Registry CRUD — Administrator and Staff share full authority (2026-08-27
 // full-parity revision); every other role stays read-only or unauthenticated.
+//
+// `sourceRequestId` (optional, 2026-09-04): set when this save is the
+// completion of the "Approve a Partnership Request" flow — Approve no
+// longer flips the request straight to Approved (see PATCH /api/requests/:id
+// history above); instead it opens this same Add New Partnership form,
+// pre-filled, and the request is only marked Approved/linked once the
+// reviewer actually saves a partnership here. This keeps ONE creation path
+// (this endpoint) for both a manually-added partnership and a
+// request-approval conversion — no second Registry-writing code path.
 app.post('/api/partnerships', requireStaffAccess, async (req, res) => {
   try {
-    const unknown = Object.keys(req.body).filter(k => !(k in PARTNERSHIP_FIELDS));
+    const { sourceRequestId, ...partnershipBody } = req.body;
+    const unknown = Object.keys(partnershipBody).filter(k => !(k in PARTNERSHIP_FIELDS));
     if (unknown.length) {
       return res.status(400).json({ error: 'Unknown field(s): ' + unknown.join(', ') });
     }
-    const { fields, errors } = sanitizePartnershipFields(req.body, { requireCore: true });
+    const { fields, errors } = sanitizePartnershipFields(partnershipBody, { requireCore: true });
     if (errors.length) {
       return res.status(400).json({ error: errors.join(' ') });
     }
 
     const db = getDb();
+
+    // ── Approved-Request → Registry conversion ──────────────────────────────
+    // Resolved before the insert so a request that was already converted
+    // (a duplicate Approve click, a re-opened tab, a retry after the
+    // request-side update below failed) never creates a second partnership —
+    // the existing one is simply returned instead. Checked by BOTH the
+    // request's own linkedPartnershipId AND a reverse lookup by
+    // sourceRequestId on `partnerships`, so this stays idempotent even if a
+    // previous attempt inserted the partnership but crashed before the
+    // request could be updated.
+    let sourceRequest = null;
+    if (sourceRequestId !== undefined && sourceRequestId !== null && sourceRequestId !== '') {
+      const reqId = parseInt(sourceRequestId, 10);
+      sourceRequest = await db.collection('requests').findOne({ id: reqId });
+      if (!sourceRequest) {
+        return res.status(404).json({ error: 'Source partnership request not found.' });
+      }
+      let existingPartnership = null;
+      if (sourceRequest.linkedPartnershipId) {
+        existingPartnership = await db.collection('partnerships').findOne({ id: sourceRequest.linkedPartnershipId });
+      }
+      if (!existingPartnership) {
+        existingPartnership = await db.collection('partnerships').findOne({ sourceRequestId: reqId });
+      }
+      if (existingPartnership) {
+        if (sourceRequest.status !== 'Approved' || sourceRequest.linkedPartnershipId !== existingPartnership.id) {
+          await db.collection('requests').updateOne(
+            { id: reqId },
+            { $set: { status: 'Approved', linkedPartnershipId: existingPartnership.id, decidedBy: req.session.user.name, updatedAt: new Date().toISOString() } }
+          );
+        }
+        return res.json({ success: true, partnership: existingPartnership, alreadyConverted: true });
+      }
+      if (!UNDECIDED_REQUEST_STATUSES.includes(sourceRequest.status)) {
+        return res.status(409).json({ error: `This request is no longer available for conversion (current status: ${sourceRequest.status}).` });
+      }
+    }
+
     const last = await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
     const entry = { id: nextId, ...fields };
+    if (sourceRequest) entry.sourceRequestId = sourceRequest.id;
     await db.collection('partnerships').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `Partnership added: ${entry.inst || 'Record #' + nextId} (${entry.type || ''})`);
+
+    if (sourceRequest) {
+      await db.collection('requests').updateOne(
+        { id: sourceRequest.id },
+        { $set: { status: 'Approved', linkedPartnershipId: nextId, decidedBy: req.session.user.name, updatedAt: new Date().toISOString() } }
+      );
+      await logActivity(db, req.session.user, 'APPROVE',
+        `Partnership request approved and converted to Registry: ${sourceRequest.institution} (Record #${nextId})`);
+      if (sourceRequest.submittedByEmail) {
+        const submitter = await db.collection('users').findOne({ email: sourceRequest.submittedByEmail });
+        await notifyUsers(db, [sourceRequest.submittedByEmail], {
+          module: 'request',
+          tag: sourceRequest.isRenewal ? 'Renewal Request' : 'Partnership Request',
+          icon: 'ri-checkbox-circle-line',
+          color: 'success',
+          title: `Partnership Request Approved: ${sourceRequest.institution}`,
+          desc: `Your partnership request for ${sourceRequest.institution} has been approved and added to the Partnership Registry.`,
+          link: prLinkForRole(submitter && submitter.role, sourceRequest.id)
+        });
+      }
+    }
+
     res.json({ success: true, partnership: entry });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1915,7 +2101,11 @@ app.get('/api/partnerships/stats', requireAuth, async (req, res) => {
     all.forEach(p => {
       byType[p.type] = (byType[p.type] || 0) + 1;
       byRegion[p.region] = (byRegion[p.region] || 0) + 1;
-      byUnit[p.unit] = (byUnit[p.unit] || 0) + 1;
+      // unit is an array on records created since the 2026-09-03 multi-unit
+      // combobox (legacy records still hold a single string) — a partnership
+      // with multiple responsible units counts toward each unit's tally.
+      const units = Array.isArray(p.unit) ? p.unit : (p.unit ? [p.unit] : []);
+      units.forEach(u => { byUnit[u] = (byUnit[u] || 0) + 1; });
       if (p.inst) byInstitutionCounts[p.inst] = (byInstitutionCounts[p.inst] || 0) + 1;
     });
     // Top 8 institutions by count — an institution-by-institution breakdown can
@@ -2135,7 +2325,7 @@ function renderDocumentRequestPdf(res, r) {
   res.on('error', (err) => console.error('❌ Document Request PDF response stream error:', err));
   doc.pipe(res);
 
-  const { dateTimeStr, docTypeLabel, fmtDate } = drFormFields(r);
+  const { dateTimeStr, documentItems, fmtDate, isFulfilled, approverName, approverTitle, approvedDateStr } = drFormFields(r);
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
   const contentWidth = right - left;
@@ -2197,7 +2387,26 @@ function renderDocumentRequestPdf(res, r) {
   row('Office / College / Institution', text(r.institution), 26);
   row('Date / Time Submitted', text(dateTimeStr), 26);
   row('Contact No.', text(r.contactNumber), 26);
-  row('Document/s to be Requested', text(docTypeLabel), 40);
+
+  // Document list can hold any number of free-form entries, some quite long,
+  // so its row height (and each line's vertical position) is measured with
+  // doc.heightOfString rather than assumed — a fixed-height row would let
+  // wrapped/long items overlap the next row.
+  doc.font('Helvetica').fontSize(9.5);
+  const docItemLabels = documentItems.length > 1
+    ? documentItems.map((item, i) => `${i + 1}. ${item}`)
+    : [documentItems[0] || '—'];
+  let docItemsHeight = 12;
+  docItemLabels.forEach(label => { docItemsHeight += doc.heightOfString(label, { width: valueW - 16 }) + 3; });
+  docItemsHeight = Math.max(40, docItemsHeight);
+  row('Document/s to be Requested', (x, top, w) => {
+    let cy = top;
+    docItemLabels.forEach(label => {
+      doc.text(label, x, cy, { width: w });
+      cy += doc.heightOfString(label, { width: w }) + 3;
+    });
+  }, docItemsHeight);
+
   row('Purpose', text(r.notes), 48);
   row('Document Form', (x, top) => {
     const printedChecked = r.documentForm === 'Printed Copy';
@@ -2214,10 +2423,13 @@ function renderDocumentRequestPdf(res, r) {
 
   doc.y = y + 30;
 
-  // ── Signature block ──
+  // ── Signature block ── Approved By is the fixed CIRL Head signatory
+  // (never the processing Staff/Administrator); Released By/Received By are
+  // populated dynamically from the actual fulfillment (see the PATCH
+  // handler above) and only appear once the request is truly Fulfilled.
   const colW = contentWidth / 3;
   const sigCols = [
-    { label: 'Approved By:', name: r.decidedBy, date: fmtDate(r.updatedAt) },
+    { label: 'Approved By:', name: approverName, sub: approverTitle, date: approvedDateStr },
     { label: 'Released By:', name: r.releasedBy, date: fmtDate(r.releasedAt) },
     { label: 'Received By:', name: r.receivedBy, date: fmtDate(r.receivedAt) }
   ];
@@ -2226,6 +2438,7 @@ function renderDocumentRequestPdf(res, r) {
     const x = left + i * colW;
     doc.font('Helvetica').fontSize(9).text(col.label, x, sigTop, { width: colW - 20 });
     doc.font('Helvetica-Bold').fontSize(10).text(col.name || ' ', x, sigTop + 34, { width: colW - 20, align: 'center' });
+    if (col.sub) doc.font('Helvetica').fontSize(7.5).text(col.sub, x, sigTop + 47, { width: colW - 20, align: 'center' });
     doc.moveTo(x, sigTop + 50).lineTo(x + colW - 20, sigTop + 50).stroke();
     doc.font('Helvetica').fontSize(8).text('DATE: ' + (col.date || ''), x, sigTop + 54, { width: colW - 20, align: 'center' });
   });
@@ -2531,6 +2744,11 @@ async function computeCustomReportData(db, query, user) {
   // Build DB filter
   const filter = {};
   if (cat) filter.cat = cat;
+  // `unit` can be stored as either a plain string (legacy records) or an
+  // array of strings (multi-select Responsible Unit) — a plain equality
+  // match here is intentional: MongoDB already treats `{unit: "CCS"}`
+  // against an array field as "array contains CCS", so this one line is
+  // backward-compatible with both shapes with no extra code.
   if (unit) filter.unit = unit;
   if (agtype && ['MOA', 'MOU'].includes(agtype)) filter.type = agtype;
   if (region) filter.region = region;
@@ -2594,10 +2812,16 @@ async function computeCustomReportData(db, query, user) {
     else metricGroups = ['Active', 'Inactive', 'Expired'];
   }
 
+  // College / Unit is the one dimension that can be an array (a partnership
+  // may have multiple responsible units) — every other dimension is always a
+  // plain string, so this returns an array only for that one key.
   function getGroupVal(p, key) {
     if (key === 'Country') return p.country || 'Unspecified';
     if (key === 'Institution') return p.inst || 'Unspecified';
-    if (key === 'College / Unit') return p.unit || 'Unspecified';
+    if (key === 'College / Unit') {
+      if (Array.isArray(p.unit)) return p.unit.length ? p.unit : 'Unspecified';
+      return p.unit || 'Unspecified';
+    }
     if (key === 'Region') return p.region || 'Unspecified';
     if (key === 'Agreement Type') return p.type || 'Unspecified';
     if (key === 'Nature of Partnership') return p.nature || 'Unspecified';
@@ -2609,22 +2833,28 @@ async function computeCustomReportData(db, query, user) {
   const groupsMap = {};
   docs.forEach(p => {
     const gVal = getGroupVal(p, compareBy);
-    if (!groupsMap[gVal]) {
-      groupsMap[gVal] = { group: gVal, Total: 0 };
-      metricGroups.forEach(m => groupsMap[gVal][m] = 0);
-    }
-    groupsMap[gVal].Total += 1;
+    // A multi-unit partnership counts once toward EACH of its units' groups
+    // (same semantics as the /stats byUnit breakdown above) rather than
+    // forming one combined group keyed by the whole array.
+    const gVals = Array.isArray(gVal) ? gVal : [gVal];
+    gVals.forEach(v => {
+      if (!groupsMap[v]) {
+        groupsMap[v] = { group: v, Total: 0 };
+        metricGroups.forEach(m => groupsMap[v][m] = 0);
+      }
+      groupsMap[v].Total += 1;
 
-    metricGroups.forEach(m => {
-      let match = false;
-      if (m === 'Active') match = (p.status === 'Active');
-      else if (m === 'Inactive') match = (p.status === 'Expired' || p.status === 'Inactive');
-      else if (m === 'Expired') match = (p.status === 'Expired');
-      else if (m === 'Expiring Soon') match = (p.status === 'Expiring Soon');
-      else if (m === 'Renewed') match = p.isRenewed;
-      else if (m === 'Non-Renewed') match = !p.isRenewed;
-      else match = (p.status === m);
-      if (match) groupsMap[gVal][m] += 1;
+      metricGroups.forEach(m => {
+        let match = false;
+        if (m === 'Active') match = (p.status === 'Active');
+        else if (m === 'Inactive') match = (p.status === 'Expired' || p.status === 'Inactive');
+        else if (m === 'Expired') match = (p.status === 'Expired');
+        else if (m === 'Expiring Soon') match = (p.status === 'Expiring Soon');
+        else if (m === 'Renewed') match = p.isRenewed;
+        else if (m === 'Non-Renewed') match = !p.isRenewed;
+        else match = (p.status === m);
+        if (match) groupsMap[v][m] += 1;
+      });
     });
   });
 
@@ -2663,19 +2893,22 @@ async function computeCustomReportData(db, query, user) {
       inactiveCount: totalInactive,
       totalCount: docs.length
     },
-    // College/Unit, Region, Nature of Partnership and Institution are
-    // deliberately omitted here — they are no longer fields the Custom
-    // Report Builder exposes, so surfacing them in this report's own
-    // metadata (Preview badges / Excel "Applied Filters" sheet) would only
-    // ever show a permanent, meaningless "All". The underlying MongoDB
-    // filter capability for unit/region/nature/inst above is untouched and
-    // still used when those query params are supplied directly (e.g. by
-    // the Compare workflow's separate engine).
+    // Region, Nature of Partnership and Institution are deliberately omitted
+    // here — they are not fields the Custom Report Builder exposes, so
+    // surfacing them in this report's own metadata (Preview badges / Excel
+    // "Applied Filters" sheet) would only ever show a permanent, meaningless
+    // "All". College/Unit WAS omitted for the same reason but the Builder
+    // re-gained a real College/Unit filter (2026-09-04), so it is echoed
+    // again here. The underlying MongoDB filter capability for
+    // unit/region/nature/inst above is untouched and still used when those
+    // query params are supplied directly (e.g. by the Compare workflow's
+    // separate engine).
     filters: {
       reportType,
       category: cat || 'All',
       dateFrom: dateFrom || 'Earliest',
       dateTo: dateTo || 'Present',
+      unit: unit || 'All',
       agreementType: agtype || 'All',
       country: country || 'All',
       status: effectiveStatusFilter || 'All',
@@ -2908,17 +3141,18 @@ function buildPartnershipExcel({ title, docs, periodLabel, generatedBy, customRe
   });
 
   const filterObj = (customReportData && customReportData.filters) || {};
-  // Mirrors the Custom Report Builder's actual (reduced) filter set exactly —
-  // College/Unit, Region and Nature of Partnership are no longer builder
-  // fields, and Country was previously missing here even though it IS a
-  // real, still-applied builder filter (a genuine metadata gap: the sheet
-  // could show "Country: All" for a report that was actually filtered to a
-  // single country).
+  // Mirrors the Custom Report Builder's actual filter set exactly — Region
+  // and Nature of Partnership are not builder fields, so they're omitted
+  // here. College/Unit was re-added to the Builder (2026-09-04) and Country
+  // was previously missing here even though it IS a real, still-applied
+  // builder filter (a genuine metadata gap: the sheet could show "Country:
+  // All" for a report that was actually filtered to a single country).
   const filterLabels = {
     reportType: 'Report Type',
     category: 'Category',
     dateFrom: 'Date From',
     dateTo: 'Date To',
+    unit: 'College / Unit',
     agreementType: 'Agreement Type',
     status: 'Status',
     country: 'Country'
@@ -3165,7 +3399,10 @@ function renderComparisonReportPdf(res, { title, groupA, groupB, groupADocs, gro
       doc.font('Helvetica').fontSize(7.5).fillColor('#222');
       let rx = left;
       COL_DEFS.forEach(col => {
-        const val = String(p[col.key] == null || p[col.key] === '' ? '—' : p[col.key]);
+        // 'unit' can be an array (multi-unit partnerships) — join for display
+        // rather than let PDFKit stringify the array's default comma-join.
+        const raw = Array.isArray(p[col.key]) ? p[col.key].join(', ') : p[col.key];
+        const val = String(raw == null || raw === '' ? '—' : raw);
         doc.text(val, rx + 3, rowY + 4, { width: col.width - 6, lineBreak: false, ellipsis: true });
         rx += col.width;
       });
@@ -3333,7 +3570,14 @@ function buildComparisonExcel({ title, groupA, groupB, groupADocs, groupBDocs, p
     });
 
     docList.forEach((p, idx) => {
-      const row = sh.addRow(PARTNERSHIP_FULL_EXCEL_COLUMNS.reduce((acc, c) => { acc[c.key] = p[c.key]; return acc; }, {}));
+      // 'unit' can be an array (multi-unit partnerships) — ExcelJS cell
+      // values must be primitives, so join for display rather than pass the
+      // array through.
+      const row = sh.addRow(PARTNERSHIP_FULL_EXCEL_COLUMNS.reduce((acc, c) => {
+        const v = p[c.key];
+        acc[c.key] = Array.isArray(v) ? v.join(', ') : v;
+        return acc;
+      }, {}));
       const fill = idx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
       row.eachCell({ includeEmpty: true }, cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -4860,14 +5104,28 @@ app.get('/dashboard', requireAdmin, async (req, res) => {
   }
 });
 
-// Auth. Personnel access removed 2026-07-23 — Registry (Add/Edit/Delete
-// partnerships) is no longer part of their responsibilities; Administrator-only.
+// Registry — 2026-09-05: consolidated into Monitoring (see /lifecycle below)
+// to remove the heavy overlap between the two pages (duplicate stat cards,
+// duplicate Urgent/Overview panels, two separate partnership tables). This
+// route is now a compatibility redirect only — nothing about the underlying
+// Registry data, schema, or POST/PATCH/DELETE /api/partnerships changed;
+// only the standalone page and its nav entry were removed. Administrator-only,
+// matching the page it forwards to.
 app.get('/registry', requireAdmin, (req, res) => {
-  res.render('administrator/registry', { activePage: 'registry', user: req.session.user });
+  res.redirect('/lifecycle');
 });
 
-app.get('/lifecycle', requirePersonnel, (req, res) => {
-  res.render('administrator/lifecycle', { activePage: 'lifecycle', user: req.session.user });
+// Monitoring (Administrator) — the single consolidated partnership-management
+// page: KPI cards, Overview, DSS Smart Alerts, Urgent, and the full
+// Partnership Registry (filters/search/Add/Edit/Renew/Delete), all reading
+// from the one /api/partnerships source of truth. Narrowed from
+// requirePersonnel to requireAdmin as part of the 2026-09-05 consolidation —
+// Auth. Personnel's own Monitoring experience is intentionally untouched and
+// keeps living at /personnel/lifecycle (still the original, simpler
+// administrator/lifecycle view), so this page's Add/Edit/Renew/Delete
+// controls never became reachable to a role that shouldn't have them.
+app.get('/lifecycle', requireAdmin, (req, res) => {
+  res.render('administrator/monitoring', { activePage: 'lifecycle', user: req.session.user });
 });
 
 // Administrator's own Notifications/Document Library pages. Auth. Personnel,
@@ -5032,10 +5290,11 @@ app.get('/staff/calendar', requireStaffAccess, (req, res) => {
   });
 });
 
-// "Monitoring" — Partnership Lifecycle Monitoring, the same feature and
-// template Administrator's own sidebar labels "Monitoring".
+// "Monitoring" — same consolidated Partnership Registry + Overview + DSS +
+// Urgent page Administrator's own sidebar labels "Monitoring" (2026-09-05
+// consolidation of the former separate Registry page into this one).
 app.get('/staff/lifecycle', requireStaffAccess, (req, res) => {
-  res.render('administrator/lifecycle', {
+  res.render('administrator/monitoring', {
     activePage: 'lifecycle',
     sidebarPartial: 'sidebar_staff',
     user: req.session.user
@@ -5057,15 +5316,10 @@ app.get('/staff/requests', requireStaffAccess, (req, res) => {
   });
 });
 
-// Registry — view-only for Staff (registry.ejs role-gates Add/Edit/Delete to
-// Administrator only); POST/PATCH/DELETE /api/partnerships stay
-// requireAdmin-only regardless of what the UI shows.
+// Registry — 2026-09-05: consolidated into Monitoring, same as the
+// Administrator /registry route above. Compatibility redirect only.
 app.get('/staff/registry', requireStaffAccess, (req, res) => {
-  res.render('administrator/registry', {
-    activePage: 'registry',
-    sidebarPartial: 'sidebar_staff',
-    user: req.session.user
-  });
+  res.redirect('/staff/lifecycle');
 });
 
 app.get('/staff/documents', requireStaffAccess, (req, res) => {

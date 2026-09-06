@@ -9,27 +9,38 @@ const { createTestUser, loginAs, cleanupAll, uniqueEmail } = require('./helpers'
 beforeAll(async () => { await connectDB(); });
 afterAll(async () => { await cleanupAll(); await closeDB(); });
 
-describe('Signup', () => {
-  test('rejects a weak password', async () => {
+// Public self-registration was disabled 2026-09-05 as part of the strict
+// allowlist policy — see test/oauth-allowlist.test.js for the full
+// "no auto-provisioning, ever" coverage (Google OAuth + /signup together).
+// This describe block only re-confirms /signup's disabled state doesn't
+// vary with input (weak vs. strong password both lead nowhere).
+describe('Signup (disabled)', () => {
+  test('a weak password still cannot create an account (self-registration is disabled outright)', async () => {
     const email = uniqueEmail('weak');
     const res = await request(app).post('/signup').type('form').send({
       username: 'Weak Pw', email, password: 'weakpass', confirmPassword: 'weakpass'
     });
-    expect(res.status).toBe(200); // re-renders the signup form with an error, not a redirect
-    expect(res.text).toMatch(/at least 8 characters/i);
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/self-registration is disabled/i);
+
+    const db = await connectDB();
+    expect(await db.collection('users').findOne({ email })).toBeNull();
   });
 
-  test('accepts a strong password and logs the user in', async () => {
+  test('a strong password does not create an account or session either', async () => {
     const email = uniqueEmail('strong');
     const agent = request.agent(app);
     const res = await agent.post('/signup').type('form').send({
       username: 'Strong Pw', email, password: 'StrongPass1', confirmPassword: 'StrongPass1'
     });
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toBe('/staff/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/self-registration is disabled/i);
 
     const db = await connectDB();
-    await db.collection('users').updateOne({ email }, { $set: { createdAt: 'jesttest' } });
+    expect(await db.collection('users').findOne({ email })).toBeNull();
+
+    const meRes = await agent.get('/api/me');
+    expect(meRes.status).toBe(302);
   });
 });
 

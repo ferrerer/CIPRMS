@@ -40,6 +40,9 @@ test('Add Partnership Record: Administrator can create a partnership', async () 
   expect(res.status).toBe(200);
   expect(res.body.success).toBe(true);
   expect(res.body.partnership.inst).toBe('Jest Test University');
+  // Legacy singular string input is normalized to an array on write —
+  // backward-compatible input shape, array-only storage going forward.
+  expect(res.body.partnership.unit).toEqual(['CCS']);
   createdId = res.body.partnership.id;
 });
 
@@ -78,6 +81,100 @@ test('Staff CAN create, edit, and delete a partnership (full parity with Adminis
 
   const deleteRes = await staffAgent.delete(`/api/partnerships/${staffCreatedId}`);
   expect(deleteRes.status).toBe(200);
+});
+
+// Registry → Add New Partnership → CSPC-CIRL Details → Responsible Unit
+// (2026-09-03): the field became a multi-select combobox restricted to a
+// predefined unit list, backed by an array field. Administrator and Staff
+// share identical authority here, same as the rest of Registry CRUD.
+describe('Responsible Unit — multi-select combobox (array field)', () => {
+  test('Multiple Responsible Units are stored as an array and both are returned', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Multi-Unit University', country: 'Testland', region: 'Asia', type: 'MOA',
+      nature: 'Research', cat: 'International', unit: ['CCS', 'CIRL'],
+      start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CCS', 'CIRL']);
+    const id = res.body.partnership.id;
+
+    const listRes = await adminAgent.get('/api/partnerships');
+    const found = listRes.body.find(p => p.id === id);
+    expect(found.unit).toEqual(['CCS', 'CIRL']);
+
+    await adminAgent.delete(`/api/partnerships/${id}`);
+  });
+
+  test('Duplicate values in the same array are silently de-duplicated', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Dup-Unit University', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CCS', 'CCS', 'CIRL', 'CIRL'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CCS', 'CIRL']);
+    await adminAgent.delete(`/api/partnerships/${res.body.partnership.id}`);
+  });
+
+  test('A value outside the predefined list (e.g. a custom/free-text unit) is rejected', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Should Not Be Created', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CCS', 'Not A Real Unit'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unit must only contain/);
+  });
+
+  test('An empty Responsible Unit array is rejected (at least one is required)', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Should Not Be Created', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: [], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unit is required/);
+  });
+
+  test('Edit Partnership Record: Responsible Unit updates from one to multiple values and persists', async () => {
+    const createRes = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Unit Edit University', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: 'CETE', start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    const id = createRes.body.partnership.id;
+    expect(createRes.body.partnership.unit).toEqual(['CETE']);
+
+    const editRes = await adminAgent.patch(`/api/partnerships/${id}`).send({ unit: ['CETE', 'CNAS', 'CAMS'] });
+    expect(editRes.status).toBe(200);
+    expect(editRes.body.partnership.unit).toEqual(['CETE', 'CNAS', 'CAMS']);
+
+    const getRes = await adminAgent.get('/api/partnerships');
+    expect(getRes.body.find(p => p.id === id).unit).toEqual(['CETE', 'CNAS', 'CAMS']);
+
+    await adminAgent.delete(`/api/partnerships/${id}`);
+  });
+
+  test('Staff can create a partnership with multiple Responsible Units (full parity with Administrator)', async () => {
+    const res = await staffAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Multi-Unit (Staff)', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CILS', 'CIRL'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CILS', 'CIRL']);
+    await staffAgent.delete(`/api/partnerships/${res.body.partnership.id}`);
+  });
+
+  test('/api/partnerships/stats byUnit tallies a multi-unit partnership toward EACH of its units', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Stats Multi-Unit', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CNAS', 'CAMS'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active', remarks: 'jesttest'
+    });
+    const id = res.body.partnership.id;
+    try {
+      const statsRes = await adminAgent.get('/api/partnerships/stats');
+      expect(statsRes.body.byUnit.CNAS).toBeGreaterThanOrEqual(1);
+      expect(statsRes.body.byUnit.CAMS).toBeGreaterThanOrEqual(1);
+    } finally {
+      await adminAgent.delete(`/api/partnerships/${id}`);
+    }
+  });
 });
 
 test('Auth. Personnel cannot create, edit, or delete a partnership (Registry access removed 2026-07-23)', async () => {

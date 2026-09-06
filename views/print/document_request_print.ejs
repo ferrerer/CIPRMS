@@ -271,7 +271,15 @@
       <tr>
         <td class="label">Document/s to be Requested</td>
         <td class="tall">
-          <%= docTypeLabel %>
+          <% if (documentItems.length > 1) { %>
+            <ol style="margin:0; padding-left:18px;">
+              <% documentItems.forEach(function(item) { %>
+                <li><%= item %></li>
+              <% }); %>
+            </ol>
+          <% } else { %>
+            <%= documentItems[0] || '—' %>
+          <% } %>
         </td>
       </tr>
       <tr>
@@ -301,9 +309,10 @@
       <div class="sign-col">
         <div class="sign-label">Approved By:</div>
         <div class="sign-name">
-          <%= r.decidedBy || '' %>
+          <%= approverName %>
         </div>
-        <div class="sign-date">DATE: <%= fmtDate(r.updatedAt) %>
+        <% if (approverTitle) { %><div style="font-size:10.5px; font-weight:normal; margin-top:2px;"><%= approverTitle %></div><% } %>
+        <div class="sign-date">DATE: <%= approvedDateStr %>
         </div>
       </div>
       <div class="sign-col">

@@ -210,9 +210,9 @@
                                                 <h6 class="fs-15 fw-semibold">Mid-Year Output Report</h6>
                                                 <p class="text-muted fs-13 mb-3">Summary of first-half partnership activities, including new, renewed, and expired agreements.</p>
                                                 <div class="d-flex gap-2 mt-auto">
-                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Mid-Year Output Report'})"><i
+                                                    <button class="btn btn-sm btn-danger" onclick="exportMidYearReport('pdf')"><i
                                                             class="ri-file-pdf-line me-1"></i>PDF</button>
-                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Mid-Year Output Report'})"><i
+                                                    <button class="btn btn-sm btn-success" onclick="exportMidYearReport('excel')"><i
                                                             class="ri-table-line me-1"></i>Excel</button>
                                                 </div>
                                             </div>
@@ -231,9 +231,9 @@
                                                 <h6 class="fs-15 fw-semibold">Yearly Output Report</h6>
                                                 <p class="text-muted fs-13 mb-3">Annual summary of partnership records for the academic/calendar year, suitable for CHED submission.</p>
                                                 <div class="d-flex gap-2 mt-auto">
-                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Yearly Output Report'})"><i
+                                                    <button class="btn btn-sm btn-danger" onclick="exportYearlyReport('pdf')"><i
                                                             class="ri-file-pdf-line me-1"></i>PDF</button>
-                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Yearly Output Report'})"><i
+                                                    <button class="btn btn-sm btn-success" onclick="exportYearlyReport('excel')"><i
                                                             class="ri-table-line me-1"></i>Excel</button>
                                                 </div>
                                             </div>
@@ -331,6 +331,18 @@
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">Country</label>
                                                         <input type="text" class="form-control" id="cr-country" placeholder="e.g. Japan (blank = all)">
+                                                    </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">College / Unit</label>
+                                                        <select class="form-select" id="cr-unit">
+                                                            <option value="">All Units</option>
+                                                            <option value="CCS">CCS</option>
+                                                            <option value="CILS">CILS</option>
+                                                            <option value="CETE">CETE</option>
+                                                            <option value="CNAS">CNAS</option>
+                                                            <option value="CAMS">CAMS</option>
+                                                            <option value="CIRL">CIRL</option>
+                                                        </select>
                                                     </div>
                                                 </div>
 
@@ -861,6 +873,7 @@
             var agtype = document.getElementById('cr-agtype').value;
             var status = document.getElementById('cr-status').value;
             var country = document.getElementById('cr-country').value.trim();
+            var unit = document.getElementById('cr-unit').value;
 
             var params = new URLSearchParams();
             params.set('reportType', reportType);
@@ -871,12 +884,13 @@
             if (agtype) params.set('agtype', agtype);
             if (status) params.set('status', status);
             if (country) params.set('country', country);
+            if (unit) params.set('unit', unit);
 
             return params;
         }
 
         // Restores every Custom Report Builder field to its default/blank
-        // state (Reset Filters button) — must clear all 8 remaining fields so
+        // state (Reset Filters button) — must clear all 9 remaining fields so
         // no stale value can silently affect the next generated report.
         function resetCustomReportFilters() {
             document.getElementById('cr-title').value = '';
@@ -885,6 +899,7 @@
             document.getElementById('cr-agtype').value = '';
             document.getElementById('cr-status').value = '';
             document.getElementById('cr-country').value = '';
+            document.getElementById('cr-unit').value = '';
             document.getElementById('cr-date-from').value = '';
             document.getElementById('cr-date-to').value = '';
         }
@@ -892,6 +907,23 @@
         function exportReport(format, params) {
             var q = new URLSearchParams(params).toString();
             window.open('/api/reports/partnerships/' + format + '?' + q, '_blank');
+        }
+
+        // Mid-Year/Yearly Output Report tile cards — the reporting window
+        // always tracks the CURRENT calendar year, computed live from the
+        // browser's clock rather than hardcoded, so the same code keeps
+        // working correctly in every future year.
+        function currentYearDateRange(fromMonthDay, toMonthDay) {
+            var year = new Date().getFullYear();
+            return { dateFrom: year + '-' + fromMonthDay, dateTo: year + '-' + toMonthDay };
+        }
+        function exportMidYearReport(format) {
+            var range = currentYearDateRange('01-01', '06-30');
+            exportReport(format, { title: 'Mid-Year Output Report', dateFrom: range.dateFrom, dateTo: range.dateTo });
+        }
+        function exportYearlyReport(format) {
+            var range = currentYearDateRange('01-01', '12-31');
+            exportReport(format, { title: 'Yearly Output Report', dateFrom: range.dateFrom, dateTo: range.dateTo });
         }
 
         function generateCustomReport(format) {
@@ -1064,7 +1096,7 @@
                         + '<td>' + escapeHtml(p.region || '—') + '</td>'
                         + '<td><span class="badge bg-primary-subtle text-primary">' + escapeHtml(p.type || '—') + '</span></td>'
                         + '<td>' + escapeHtml(p.nature || '—') + '</td>'
-                        + '<td><span class="badge bg-secondary-subtle text-secondary">' + escapeHtml(p.unit || '—') + '</span></td>'
+                        + '<td><span class="badge bg-secondary-subtle text-secondary">' + escapeHtml((Array.isArray(p.unit) ? p.unit.join(', ') : p.unit) || '—') + '</span></td>'
                         + '<td>' + escapeHtml(p.start || '—') + '</td>'
                         + '<td>' + escapeHtml(p.end || '—') + '</td>'
                         + '<td><span class="badge ' + stBadge + '">' + escapeHtml(p.status || '—') + '</span></td>'
@@ -1201,12 +1233,14 @@
             var agtype = document.getElementById('cr-agtype').value;
             var status = document.getElementById('cr-status').value;
             var country = document.getElementById('cr-country').value.trim();
+            var unit = document.getElementById('cr-unit').value;
             if (cat) params.append('cat', cat);
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             if (agtype) params.append('agtype', agtype);
             if (status) params.append('status', status);
             if (country) params.append('country', country);
+            if (unit) params.append('unit', unit);
             return params.toString();
         }
 
@@ -1218,7 +1252,8 @@
                 ['Date To', document.getElementById('cr-date-to').value],
                 ['Agreement Type', document.getElementById('cr-agtype').value],
                 ['Status', document.getElementById('cr-status').value],
-                ['Country', document.getElementById('cr-country').value]
+                ['Country', document.getElementById('cr-country').value],
+                ['College / Unit', document.getElementById('cr-unit').value]
             ].filter(function (p) { return p[1]; });
             el.innerHTML = pairs.length
                 ? pairs.map(function (p) {

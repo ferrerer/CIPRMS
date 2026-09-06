@@ -346,6 +346,7 @@
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Last Updated</label><div class="fw-bold fs-13" id="drd-updated">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Current Stage</label><div class="fw-bold fs-13" id="drd-stage">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Administrator</label><div class="fw-bold fs-13" id="drd-admin">—</div></div>
+                            <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-1">Workflow Progress</label><div id="drd-progress" class="d-flex flex-wrap gap-3">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Purpose</label><div class="text-muted fs-13" id="drd-purpose">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Remarks (CIRL)</label><div class="text-muted fs-13" id="drd-remark">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Attached Documents</label><div id="drd-docs">—</div></div>
@@ -419,11 +420,14 @@
     }
 
     function statusBadgeClass(status) {
-        if (status === 'Approved' || status === 'Fulfilled') return 'bg-success-subtle text-success';
+        if (status === 'Approved' || status === 'Fulfilled' || status === 'Completed') return 'bg-success-subtle text-success';
         if (status === 'Rejected') return 'bg-danger-subtle text-danger';
         if (status === 'Withdrawn') return 'bg-secondary-subtle text-secondary';
         if (status === 'Draft') return 'bg-light text-dark';
-        return 'bg-warning-subtle text-warning';
+        if (status === 'Preparing') return 'bg-info-subtle text-info';
+        if (status === 'Awaiting for Approval') return 'bg-primary-subtle text-primary';
+        if (status === 'Release') return 'bg-dark-subtle text-dark';
+        return 'bg-warning-subtle text-warning'; // Pending / Received and any other undecided state
     }
 
     // "Current Stage" is a human-readable phase name derived from the same
@@ -435,10 +439,48 @@
         'Under Review': 'Under Review by CIRL', 'Approved': 'Approved',
         'Rejected': 'Rejected', 'Withdrawn': 'Withdrawn'
     };
+    // Document Request workflow (2026-09-04): a 6-stage pipeline
+    // (Received/Preparing/Awaiting for Approval/Approved/Release/Completed)
+    // plus a separate Rejected outcome. Keyed off each request's
+    // `canonicalStatus` (added server-side by GET /api/document-requests* so
+    // a pre-2026-09-04 record's legacy status name — Pending/Under
+    // Review/Fulfilled — is already normalized before it ever reaches this
+    // page).
+    var DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
+    var DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
     var DR_STAGE_LABEL = {
-        'Pending': 'Awaiting Fulfillment', 'Under Review': 'Additional Info Requested',
-        'Fulfilled': 'Fulfilled', 'Rejected': 'Rejected'
+        'Received': 'Received — Awaiting Processing',
+        'Preparing': 'Preparing Documents',
+        'Awaiting for Approval': 'Awaiting for Approval',
+        'Approved': 'Approved',
+        'Release': 'Ready for Release',
+        'Completed': 'Completed',
+        'Rejected': 'Rejected'
     };
+    // Requester-facing progress checklist (✓ done / ● current / ○ upcoming),
+    // matching the "existing progress/timeline UI" convention this page
+    // already uses for draft collaboration timelines — a compact read-only
+    // view of the same 6-stage pipeline the reviewer's Update Status dropdown
+    // drives, so the requester always sees exactly where their request is.
+    function drProgressChecklistHtml(canonicalStatus) {
+        if (canonicalStatus === 'Rejected') {
+            return '<div class="text-danger fs-13"><i class="ri-close-circle-line me-1"></i>This request was rejected — it will not continue through the workflow.</div>';
+        }
+        var idx = DR_WORKFLOW_STATUSES.indexOf(canonicalStatus);
+        // 'Completed' is the pipeline's final resting state — every stage
+        // including it is fully done, so nothing should render as merely
+        // "current" (in progress) the way an intermediate stage does.
+        var isFinal = canonicalStatus === 'Completed';
+        return DR_WORKFLOW_STATUSES.map(function (s, i) {
+            var done = isFinal ? true : i < idx;
+            var current = !isFinal && i === idx;
+            var icon = done ? '<i class="ri-checkbox-circle-fill text-success me-1"></i>'
+                : current ? '<i class="ri-record-circle-fill text-primary me-1"></i>'
+                : '<i class="ri-checkbox-blank-circle-line text-muted me-1"></i>';
+            var cls = current ? 'fw-semibold text-primary' : (done ? 'text-success' : 'text-muted');
+            return '<div class="fs-13 ' + cls + '">' + icon + escapeHtml(s) + '</div>';
+        }).join('');
+    }
 
     function fmtWhen(iso, fallback) {
         if (!iso) return fallback || '—';
@@ -449,15 +491,33 @@
     // Attached Documents = the submitter's own OCR-attached file (Partnership
     // Requests only) plus any supporting documents CIRL staff uploaded during
     // review — both are already-archived Document Library entries.
+    // Attached Documents (the row's summary column, and the "View Details"
+    // modal's own docs list — a quicker-glance sibling to the full "View
+    // Draft" collaboration timeline). Reuses that same timeline's item
+    // builders (buildDraftTimelineItems for Partnership Requests,
+    // buildDRDraftTimelineItems for Document Requests, defined further down
+    // this file) so every file gets the same real Preview (via the shared
+    // draft-preview-modal) and Download (original filename preserved)
+    // actions, not just a single bare icon-link. Items are cached under a
+    // key unique to this request (not the shared 'pr'/'dr' slot the draft
+    // modal uses) since many rows render their own summary at once.
     function renderAttachedDocs(r) {
-        var docs = [];
-        if (r.attachmentLink) docs.push({ link: r.attachmentLink, label: 'Your upload' });
-        (r.supportingDocuments || []).forEach(function (d) {
-            docs.push({ link: d.fileLink, label: d.originalFilename || 'CIRL document' });
-        });
-        if (!docs.length) return '<span class="text-muted fs-12">—</span>';
-        return docs.map(function (d) {
-            return '<a href="' + d.link + '" target="_blank" rel="noopener" class="btn btn-sm btn-soft-info me-1 mb-1" title="' + escapeHtml(d.label) + '"><i class="ri-download-2-line"></i></a>';
+        var isDR = typeof r.documentType !== 'undefined';
+        var allItems = isDR ? buildDRDraftTimelineItems(r) : buildDraftTimelineItems(r);
+        var items = allItems.filter(function (it) { return it.link; });
+        if (!items.length) return '<span class="text-muted fs-12">—</span>';
+        var key = 'attach-' + (isDR ? 'dr' : 'pr') + '-' + r.id;
+        DRAFT_TIMELINE_ITEMS[key] = items;
+        return items.map(function (it, idx) {
+            var kind = fileKind(it.filename, it.fileType);
+            var previewBtn = (kind === 'pdf' || kind === 'image')
+                ? '<button type="button" class="btn btn-sm btn-soft-primary" title="Preview: ' + escapeHtml(it.filename) + '" onclick="openDraftPreviewModal(\'' + key + '\', ' + idx + ')"><i class="ri-eye-line"></i></button>'
+                : '';
+            return '<div class="d-flex align-items-center gap-1 mb-1">' +
+                '<span class="text-truncate fs-12" style="max-width:100px;" title="' + escapeHtml(it.filename) + '">' + escapeHtml(it.filename) + '</span>' +
+                previewBtn +
+                '<a href="' + escapeHtml(it.link) + '" download="' + escapeHtml(it.filename) + '" class="btn btn-sm btn-soft-success" title="Download: ' + escapeHtml(it.filename) + '"><i class="ri-download-2-line"></i></a>' +
+                '</div>';
         }).join('');
     }
 
@@ -634,7 +694,7 @@
         currentDraftDRId = id;
         document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
         renderDRDraftTimeline(r);
-        var closed = ['Fulfilled', 'Rejected'].indexOf(r.status) !== -1;
+        var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
         document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
         document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('dr-draft-file').value = '';
@@ -754,22 +814,23 @@
             return;
         }
         body.innerHTML = myDocRequests.map(function (r) {
+            var cs = r.canonicalStatus || r.status;
             var actions =
                 '<button class="btn btn-sm btn-soft-secondary me-1" onclick="openDRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line"></i></button>' +
                 '<button class="btn btn-sm btn-soft-info me-1" onclick="openDRDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line"></i></button>' +
                 '<a href="/document-requests/' + r.id + '/print" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary me-1" title="Print"><i class="ri-printer-line"></i></a>' +
                 '<a href="/api/document-requests/' + r.id + '/pdf" class="btn btn-sm btn-soft-info me-1" title="Download PDF"><i class="ri-file-download-line"></i></a>' +
-                (r.status === 'Pending'
+                (cs === 'Received'
                     ? '<button class="btn btn-sm btn-soft-danger" onclick="cancelDocRequest(' + r.id + ')" title="Cancel"><i class="ri-close-circle-line"></i></button>'
                     : '');
             return '<tr data-dr-id="' + r.id + '">' +
                 '<td class="text-muted">#' + r.id + '</td>' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
                 '<td>' + escapeHtml(r.documentType) + '</td>' +
-                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
+                '<td><span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span></td>' +
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
-                '<td>' + (DR_STAGE_LABEL[r.status] || r.status) + '</td>' +
+                '<td>' + (DR_STAGE_LABEL[cs] || cs) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
                 '<td class="fs-12">' + (r.remark ? escapeHtml(r.remark).slice(0, 60) + (r.remark.length > 60 ? '…' : '') : '—') + '</td>' +
                 '<td>' + renderAttachedDocs(r) + '</td>' +
@@ -808,14 +869,16 @@
     function openDRDetail(id) {
         var r = myDocRequests.find(function (x) { return x.id === id; });
         if (!r) return;
+        var cs = r.canonicalStatus || r.status;
         document.getElementById('drd-id').textContent = '#' + r.id;
         document.getElementById('drd-type').textContent = r.documentType || '—';
         document.getElementById('drd-inst').textContent = r.institution || '—';
-        document.getElementById('drd-status').innerHTML = '<span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span>';
+        document.getElementById('drd-status').innerHTML = '<span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span>';
         document.getElementById('drd-date').textContent = r.date || '—';
         document.getElementById('drd-updated').textContent = fmtWhen(r.updatedAt, r.date);
-        document.getElementById('drd-stage').textContent = DR_STAGE_LABEL[r.status] || r.status;
+        document.getElementById('drd-stage').textContent = DR_STAGE_LABEL[cs] || cs;
         document.getElementById('drd-admin').textContent = r.decidedBy || '—';
+        document.getElementById('drd-progress').innerHTML = drProgressChecklistHtml(cs);
         document.getElementById('drd-purpose').textContent = r.notes || '—';
         document.getElementById('drd-remark').textContent = r.remark || '—';
         document.getElementById('drd-docs').innerHTML = renderAttachedDocs(r);
@@ -823,7 +886,7 @@
         var footer = '<button class="btn btn-soft-info" onclick="openDRDraftModal(' + id + ')"><i class="ri-file-list-3-line me-1"></i>View Draft</button>' +
             '<a href="/document-requests/' + id + '/print" target="_blank" rel="noopener" class="btn btn-soft-primary"><i class="ri-printer-line me-1"></i>Print</a>' +
             '<a href="/api/document-requests/' + id + '/pdf" class="btn btn-soft-info"><i class="ri-file-download-line me-1"></i>Download PDF</a>';
-        if (r.status === 'Pending') {
+        if (cs === 'Received') {
             footer += '<button class="btn btn-danger" onclick="cancelDocRequest(' + r.id + ')"><i class="ri-close-circle-line me-1"></i>Cancel</button>';
         }
         footer += '<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>';

@@ -360,11 +360,14 @@
     }
 
     function statusBadgeClass(status) {
-        if (status === 'Approved' || status === 'Fulfilled') return 'bg-success-subtle text-success';
+        if (status === 'Approved' || status === 'Fulfilled' || status === 'Completed') return 'bg-success-subtle text-success';
         if (status === 'Rejected') return 'bg-danger-subtle text-danger';
         if (status === 'Withdrawn') return 'bg-secondary-subtle text-secondary';
         if (status === 'Draft') return 'bg-light text-dark';
-        return 'bg-warning-subtle text-warning';
+        if (status === 'Preparing') return 'bg-info-subtle text-info';
+        if (status === 'Awaiting for Approval') return 'bg-primary-subtle text-primary';
+        if (status === 'Release') return 'bg-dark-subtle text-dark';
+        return 'bg-warning-subtle text-warning'; // Pending / Received and any other undecided state
     }
 
     // "Current Stage" is a human-readable phase name derived from the same
@@ -375,9 +378,22 @@
         'Under Review': 'Under Review by CIRL', 'Approved': 'Approved',
         'Rejected': 'Rejected', 'Withdrawn': 'Withdrawn'
     };
+    // Document Request workflow (2026-09-04): a 6-stage pipeline
+    // (Received/Preparing/Awaiting for Approval/Approved/Release/Completed)
+    // plus a separate Rejected outcome. Keyed off each request's
+    // `canonicalStatus` (added server-side by GET /api/document-requests* so
+    // a pre-2026-09-04 record's legacy status name — Pending/Under
+    // Review/Fulfilled — is already normalized before it ever reaches this
+    // page). Identical to the Auth. Personnel Monitoring page.
+    var DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
     var DR_STAGE_LABEL = {
-        'Pending': 'Awaiting Fulfillment', 'Under Review': 'Additional Info Requested',
-        'Fulfilled': 'Fulfilled', 'Rejected': 'Rejected'
+        'Received': 'Received — Awaiting Processing',
+        'Preparing': 'Preparing Documents',
+        'Awaiting for Approval': 'Awaiting for Approval',
+        'Approved': 'Approved',
+        'Release': 'Ready for Release',
+        'Completed': 'Completed',
+        'Rejected': 'Rejected'
     };
 
     function fmtWhen(iso, fallback) {
@@ -390,15 +406,31 @@
     // Requests only) plus any supporting documents CIRL staff uploaded during
     // review — both are already-archived Document Library entries, never a
     // second copy of the same file.
+    // Attached Documents (the row's summary column — this page has no
+    // separate "View Details" modal). Reuses the same "View Draft" timeline
+    // item builders (buildDraftTimelineItems / buildDRDraftTimelineItems,
+    // defined further down this file) so every file gets a real Preview
+    // (via the shared draft-preview-modal) and Download (original filename
+    // preserved) action, not just a single bare icon-link. Items are cached
+    // under a key unique to this request (not the shared 'pr'/'dr' slot the
+    // draft modal uses) since many rows render their own summary at once.
     function renderAttachedDocs(r) {
-        var docs = [];
-        if (r.attachmentLink) docs.push({ link: r.attachmentLink, label: 'Your upload' });
-        (r.supportingDocuments || []).forEach(function (d) {
-            docs.push({ link: d.fileLink, label: d.originalFilename || 'CIRL document' });
-        });
-        if (!docs.length) return '<span class="text-muted fs-12">—</span>';
-        return docs.map(function (d) {
-            return '<a href="' + d.link + '" target="_blank" rel="noopener" class="btn btn-sm btn-soft-info me-1 mb-1" title="' + escapeHtml(d.label) + '"><i class="ri-download-2-line"></i></a>';
+        var isDR = typeof r.documentType !== 'undefined';
+        var allItems = isDR ? buildDRDraftTimelineItems(r) : buildDraftTimelineItems(r);
+        var items = allItems.filter(function (it) { return it.link; });
+        if (!items.length) return '<span class="text-muted fs-12">—</span>';
+        var key = 'attach-' + (isDR ? 'dr' : 'pr') + '-' + r.id;
+        DRAFT_TIMELINE_ITEMS[key] = items;
+        return items.map(function (it, idx) {
+            var kind = fileKind(it.filename, it.fileType);
+            var previewBtn = (kind === 'pdf' || kind === 'image')
+                ? '<button type="button" class="btn btn-sm btn-soft-primary" title="Preview: ' + escapeHtml(it.filename) + '" onclick="openDraftPreviewModal(\'' + key + '\', ' + idx + ')"><i class="ri-eye-line"></i></button>'
+                : '';
+            return '<div class="d-flex align-items-center gap-1 mb-1">' +
+                '<span class="text-truncate fs-12" style="max-width:100px;" title="' + escapeHtml(it.filename) + '">' + escapeHtml(it.filename) + '</span>' +
+                previewBtn +
+                '<a href="' + escapeHtml(it.link) + '" download="' + escapeHtml(it.filename) + '" class="btn btn-sm btn-soft-success" title="Download: ' + escapeHtml(it.filename) + '"><i class="ri-download-2-line"></i></a>' +
+                '</div>';
         }).join('');
     }
 
@@ -572,7 +604,7 @@
         currentDraftDRId = id;
         document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
         renderDRDraftTimeline(r);
-        var closed = ['Fulfilled', 'Rejected'].indexOf(r.status) !== -1;
+        var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
         document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
         document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('dr-draft-file').value = '';
@@ -693,20 +725,21 @@
             return;
         }
         body.innerHTML = myDocRequests.map(function (r) {
+            var cs = r.canonicalStatus || r.status;
             var actions =
                 '<button class="btn btn-sm btn-soft-info me-1" onclick="openDRDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line"></i></button>' +
                 '<a href="/document-requests/' + r.id + '/print" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary me-1" title="Print"><i class="ri-printer-line"></i></a>' +
                 '<a href="/api/document-requests/' + r.id + '/pdf" class="btn btn-sm btn-soft-info me-1" title="Download PDF"><i class="ri-file-download-line"></i></a>' +
-                (r.status === 'Pending'
+                (cs === 'Received'
                     ? '<button class="btn btn-sm btn-soft-danger" onclick="cancelDocRequest(' + r.id + ')" title="Cancel"><i class="ri-close-circle-line me-1"></i>Cancel</button>'
                     : '');
             return '<tr data-dr-id="' + r.id + '">' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
                 '<td>' + escapeHtml(r.documentType) + '</td>' +
-                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
+                '<td><span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span></td>' +
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
-                '<td>' + (DR_STAGE_LABEL[r.status] || r.status) + '</td>' +
+                '<td>' + (DR_STAGE_LABEL[cs] || cs) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
                 '<td>' + renderAttachedDocs(r) + '</td>' +
                 '<td class="text-end">' + actions + '</td></tr>';
