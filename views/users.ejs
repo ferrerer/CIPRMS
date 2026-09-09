@@ -280,7 +280,7 @@
                         <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
                         <div class="position-relative">
                             <input type="password" class="form-control pe-5" id="u-password" placeholder="Enter password" autocomplete="new-password">
-                            <button type="button" class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted" style="padding:.375rem .75rem;" onclick="togglePwdVis()">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted" style="padding:.375rem .75rem;" onclick="togglePwdVis()" aria-label="Show or hide password">
                                 <i class="ri-eye-fill" id="u-pwd-eye"></i>
                             </button>
                         </div>
@@ -330,6 +330,15 @@
     return fetch('/api/users/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).then(r => r.json());
   }
 
+  // HTML-escape untrusted text (name/email/unit are set by whichever
+  // Administrator/Staff account created the user) before it goes into
+  // innerHTML (2026-09-06 security hardening).
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
   // â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function formatRole(role) {
     if (role === 'potential_partner') return 'Partner';
@@ -361,10 +370,10 @@
 
     document.getElementById('usr-tbody').innerHTML = filtered.map(u => `
       <tr>
-        <td class="fw-medium">${u.name}</td>
-        <td class="text-muted">${u.email}</td>
+        <td class="fw-medium">${escapeHtml(u.name)}</td>
+        <td class="text-muted">${escapeHtml(u.email)}</td>
         <td>${roleBadge(u.role)}</td>
-        <td>${u.unit ? u.unit : '<span class="text-muted">—</span>'}</td>
+        <td>${u.unit ? escapeHtml(u.unit) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted">${u.login || 'Never'}</td>
         <td>${statusBadge(u.status)}</td>
         <td>
@@ -406,7 +415,7 @@
     if (!u) return;
     if (CURRENT_ROLE === 'Staff' && u.role === 'Administrator') return; // protected — server also blocks this
     editingId = id;
-    document.getElementById('usr-modal-title').innerHTML = `<i class="ri-edit-line me-2 text-primary"></i>Edit — ${u.name}`;
+    document.getElementById('usr-modal-title').innerHTML = `<i class="ri-edit-line me-2 text-primary"></i>Edit — ${escapeHtml(u.name)}`;
     document.getElementById('u-name').value  = u.name;
     document.getElementById('u-email').value = u.email;
     document.getElementById('u-role').value  = u.role;

@@ -214,3 +214,72 @@ test('/api/partnerships/stats reflects real aggregate counts (Active + Expiring 
   expect(typeof res.body.byType).toBe('object');
   expect(typeof res.body.byUnit).toBe('object');
 });
+
+// UI/UX + Data Display Consistency fix — Administrator/Staff Monitoring and
+// Partnership Registry are both driven by this one endpoint (registry-gridjs.
+// init.js and lifecycle-gridjs.init.js render rows in the exact order this
+// returns, with no client-side re-sort), so the newest-first default has to
+// be enforced here, server-side, once, for every consumer to agree.
+describe('GET /api/partnerships — newest-first default ordering', () => {
+  let orderIds = [];
+
+  afterAll(async () => {
+    if (orderIds.length) {
+      const db = await connectDB();
+      await db.collection('partnerships').deleteMany({ id: { $in: orderIds } });
+      orderIds = [];
+    }
+  });
+
+  async function create(inst) {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst, country: 'Testland', region: 'Asia', type: 'MOA', nature: 'Research',
+      cat: 'International', unit: 'CIRL', start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    orderIds.push(res.body.partnership.id);
+    return res.body.partnership.id;
+  }
+
+  test('Newest record (highest id, the authoritative registry-creation-order field — this collection has no createdAt) appears before older ones', async () => {
+    const idA = await create('jesttest Ordering University A (oldest)');
+    const idB = await create('jesttest Ordering University B (middle)');
+    const idC = await create('jesttest Ordering University C (newest)');
+
+    const res = await adminAgent.get('/api/partnerships');
+    expect(res.status).toBe(200);
+    const ids = res.body.map(p => p.id);
+    const posA = ids.indexOf(idA), posB = ids.indexOf(idB), posC = ids.indexOf(idC);
+    expect(posC).toBeLessThan(posB);
+    expect(posB).toBeLessThan(posA);
+    // The very first row overall must be the newest of the three, since ids
+    // are strictly increasing and no other record was created after it.
+    expect(res.body[0].id).toBe(idC);
+
+    const idD = await create('jesttest Ordering University D (newest of all)');
+    const res2 = await adminAgent.get('/api/partnerships');
+    expect(res2.body[0].id).toBe(idD);
+    const ids2 = res2.body.map(p => p.id);
+    expect(ids2.indexOf(idD)).toBeLessThan(ids2.indexOf(idC));
+    expect(ids2.indexOf(idC)).toBeLessThan(ids2.indexOf(idB));
+    expect(ids2.indexOf(idB)).toBeLessThan(ids2.indexOf(idA));
+  });
+
+  test('Ordering is strictly descending by id across the entire result set, not just the test records', async () => {
+    const res = await adminAgent.get('/api/partnerships');
+    const ids = res.body.map(p => p.id);
+    for (let i = 1; i < ids.length; i++) {
+      expect(ids[i - 1]).toBeGreaterThan(ids[i]);
+    }
+  });
+
+  test('Staff sees the exact same newest-first order as Administrator (same endpoint, same query)', async () => {
+    const idA = await create('jesttest Ordering Staff-View A (oldest)');
+    const idB = await create('jesttest Ordering Staff-View B (newest)');
+
+    const staffRes = await staffAgent.get('/api/partnerships');
+    expect(staffRes.status).toBe(200);
+    const ids = staffRes.body.map(p => p.id);
+    expect(ids.indexOf(idB)).toBeLessThan(ids.indexOf(idA));
+  });
+});

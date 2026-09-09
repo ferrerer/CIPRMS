@@ -196,7 +196,7 @@
                                                                 <h6 class="card-title mb-0 text-warning">High Renewal
                                                                     Priority</h6>
                                                             </div>
-                                                            <p class="text-muted fs-14 mb-4" id="insight-renewal"><%-
+                                                            <p class="text-muted fs-14 mb-4" id="insight-renewal"><%=
                                                                     insightRenewal %></p>
                                                             <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
                                                                 class="btn btn-link text-warning p-0 fw-medium">Initiate
@@ -220,7 +220,7 @@
                                                                 <h6 class="card-title mb-0 text-info">Expansion
                                                                     Opportunity</h6>
                                                             </div>
-                                                            <p class="text-muted fs-14 mb-4" id="insight-expansion"><%-
+                                                            <p class="text-muted fs-14 mb-4" id="insight-expansion"><%=
                                                                     insightExpansion %></p>
                                                             <a href="<%= isStaffRole ? '/staff/reports' : '/reports' %>"
                                                                 class="btn btn-link text-info p-0 fw-medium">View Region
@@ -245,7 +245,7 @@
                                                                     Optimization</h6>
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-optimization">
-                                                                <%- insightOptimization %></p>
+                                                                <%= insightOptimization %></p>
                                                             <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
                                                                 class="btn btn-link text-success p-0 fw-medium">Review
                                                                 Inactive Partners <i
@@ -319,11 +319,11 @@
                                 <!-- Map -->
                                 <div class="col-xl-8">
                                     <div class="card card-height-100">
-                                        <div class="card-header align-items-center d-flex">
+                                        <div class="card-header align-items-center d-flex flex-wrap gap-2">
                                             <h4 class="card-title mb-0 flex-grow-1"><i
                                                     class="ri-map-2-line me-2 text-primary"></i>Partnerships
                                                 Geographical Map</h4>
-                                            <div class="flex-shrink-0 d-flex gap-1">
+                                            <div class="d-flex flex-wrap gap-1">
                                                 <button
                                                     class="btn btn-soft-secondary btn-sm material-shadow-none continent-tab"
                                                     onclick="flyToContinent(this,34,100,4)">Asia</button>
@@ -355,39 +355,9 @@
                                             <span class="badge bg-primary-subtle text-primary">By Agreements</span>
                                         </div>
                                         <div class="card-body">
-                                            <% var topPartners=[
-                                                {country:'Japan',code:'jp',count:12,pct:100,lat:36,lng:138},
-                                                {country:'United States',code:'us',count:9,pct:75,lat:38,lng:-97},
-                                                {country:'South Korea',code:'kr',count:7,pct:58,lat:37,lng:127},
-                                                {country:'Philippines',code:'ph',count:6,pct:50,lat:13,lng:122},
-                                                {country:'China',code:'cn',count:5,pct:42,lat:35,lng:104},
-                                                {country:'Australia',code:'au',count:4,pct:33,lat:-25,lng:133},
-                                                {country:'Germany',code:'de',count:3,pct:25,lat:51,lng:10} ]; %>
-                                                <% topPartners.forEach(function(p){ %>
-                                                    <div class="d-flex align-items-center mb-3"
-                                                        onclick="flyToContinent(null,<%=p.lat%>,<%=p.lng%>,5)"
-                                                        style="cursor:pointer;">
-                                                        <div class="flex-shrink-0 me-3">
-                                                            <img src="https://flagcdn.com/w40/<%=p.code%>.png"
-                                                                alt="<%=p.country%>" class="rounded"
-                                                                style="width:32px;height:20px;object-fit:cover;">
-                                                        </div>
-                                                        <div class="flex-grow-1">
-                                                            <div class="d-flex justify-content-between mb-1">
-                                                                <span class="fs-13 fw-medium">
-                                                                    <%=p.country%>
-                                                                </span>
-                                                                <span class="fs-12 text-muted">
-                                                                    <%=p.count%>
-                                                                </span>
-                                                            </div>
-                                                            <div class="progress" style="height:4px;">
-                                                                <div class="progress-bar bg-primary"
-                                                                    style="width:<%=p.pct%>%"></div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <% }); %>
+                                            <div id="top-countries-list">
+                                                <p class="text-muted fs-13 mb-0">Loading&hellip;</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -434,13 +404,13 @@
                                                                 d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
                                                                 %>
                                                                 <tr>
-                                                                    <td><span class="fw-medium"><%- p.inst ||
+                                                                    <td><span class="fw-medium"><%= p.inst ||
                                                                                 p.institution || '—' %></span></td>
                                                                     <td><span
-                                                                            class="badge <%= p.type === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary' %>"><%-
+                                                                            class="badge <%= p.type === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary' %>"><%=
                                                                                 p.type || '—' %></span></td>
-                                                                    <td><%- p.country || '—' %></td>
-                                                                    <td><%- fmtDate %></td>
+                                                                    <td><%= p.country || '—' %></td>
+                                                                    <td><%= fmtDate %></td>
                                                                     <td>
                                                                         <% if (p.status==='Expired' ) { %><span
                                                                                 class="badge bg-danger-subtle text-danger">Expired</span>

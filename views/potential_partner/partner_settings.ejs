@@ -114,21 +114,21 @@
                                                 <label class="form-label">Current Password</label>
                                                 <div class="position-relative">
                                                     <input type="password" class="form-control pe-5" id="pw-old">
-                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-old', this)"><i class="ri-eye-line"></i></button>
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-old', this)" aria-label="Show or hide password"><i class="ri-eye-line"></i></button>
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label">New Password</label>
                                                 <div class="position-relative">
                                                     <input type="password" class="form-control pe-5" id="pw-new">
-                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-new', this)"><i class="ri-eye-line"></i></button>
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-new', this)" aria-label="Show or hide password"><i class="ri-eye-line"></i></button>
                                                 </div>
                                             </div>
                                             <div class="col-md-6">
                                                 <label class="form-label">Confirm New Password</label>
                                                 <div class="position-relative">
                                                     <input type="password" class="form-control pe-5" id="pw-confirm">
-                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-confirm', this)"><i class="ri-eye-line"></i></button>
+                                                    <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('pw-confirm', this)" aria-label="Show or hide password"><i class="ri-eye-line"></i></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -191,6 +191,7 @@
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
 <script>
     function showToast(msg, bg) {

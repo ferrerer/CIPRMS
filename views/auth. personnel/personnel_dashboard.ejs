@@ -372,60 +372,9 @@
                                                             <th>Status</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody>
+                                                    <tbody id="expiring-tbody">
                                                         <tr>
-                                                            <td><span class="fw-medium">Bicol University</span></td>
-                                                            <td><span
-                                                                    class="badge bg-primary-subtle text-primary">MOA</span>
-                                                            </td>
-                                                            <td>Philippines</td>
-                                                            <td>Jun 15, 2026</td>
-                                                            <td><span
-                                                                    class="badge bg-warning-subtle text-warning">Expiring
-                                                                    Soon</span></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="fw-medium">Tohoku University</span></td>
-                                                            <td><span
-                                                                    class="badge bg-primary-subtle text-primary">MOA</span>
-                                                            </td>
-                                                            <td>Japan</td>
-                                                            <td>Jul 2, 2026</td>
-                                                            <td><span
-                                                                    class="badge bg-warning-subtle text-warning">Expiring
-                                                                    Soon</span></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="fw-medium">Yonsei University</span></td>
-                                                            <td><span class="badge bg-info-subtle text-info">MOU</span>
-                                                            </td>
-                                                            <td>South Korea</td>
-                                                            <td>Jul 30, 2026</td>
-                                                            <td><span
-                                                                    class="badge bg-warning-subtle text-warning">Expiring
-                                                                    Soon</span></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="fw-medium">University of Melbourne</span>
-                                                            </td>
-                                                            <td><span class="badge bg-info-subtle text-info">MOU</span>
-                                                            </td>
-                                                            <td>Australia</td>
-                                                            <td>Aug 10, 2026</td>
-                                                            <td><span
-                                                                    class="badge bg-warning-subtle text-warning">Expiring
-                                                                    Soon</span></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><span class="fw-medium">Harvard University</span></td>
-                                                            <td><span
-                                                                    class="badge bg-primary-subtle text-primary">MOA</span>
-                                                            </td>
-                                                            <td>USA</td>
-                                                            <td>Jan 5, 2026</td>
-                                                            <td><span
-                                                                    class="badge bg-danger-subtle text-danger">Expired</span>
-                                                            </td>
+                                                            <td colspan="5" class="text-center text-muted py-4">Loading…</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -468,17 +417,25 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // ── Type & Status Bar Chart ─────────────────────────────────
+        // 2026-09-06: name/country/type are real DB fields once fetched below —
+        // escape before interpolating into innerHTML.
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+
+        // ── Type & Status Bar Chart — real data (2026-09-06, was hardcoded) ──
         var typeChart = new ApexCharts(document.getElementById('type-status-chart'), {
             chart: { type: 'bar', height: 300, toolbar: { show: false } },
             plotOptions: { bar: { horizontal: false, columnWidth: '45%', borderRadius: 4 } },
             dataLabels: { enabled: false },
             series: [
-                { name: 'MOA', data: [32] },
-                { name: 'MOU', data: [19] },
-                { name: 'Active', data: [37] },
-                { name: 'Expiring', data: [9] },
-                { name: 'Expired', data: [5] }
+                { name: 'MOA', data: [0] },
+                { name: 'MOU', data: [0] },
+                { name: 'Active', data: [0] },
+                { name: 'Expiring', data: [0] },
+                { name: 'Expired', data: [0] }
             ],
             xaxis: { categories: ['Agreements'] },
             colors: ['#405189', '#0ab39c', '#17c653', '#f7b84b', '#f06548'],
@@ -504,7 +461,41 @@
                 series: [{ name: 'Partnerships', data: entries.map(function (e) { return e[1]; }) }],
                 xaxis: { categories: entries.map(function (e) { return e[0]; }) }
             });
+            typeChart.updateSeries([
+                { name: 'MOA', data: [(stats.byType || {}).MOA || 0] },
+                { name: 'MOU', data: [(stats.byType || {}).MOU || 0] },
+                { name: 'Active', data: [stats.active || 0] },
+                { name: 'Expiring', data: [stats.expiring || 0] },
+                { name: 'Expired', data: [stats.expired || 0] }
+            ]);
         }).catch(function (err) { console.error('Failed to load institution stats:', err); });
+
+        // ── Expiring Partnerships table — real data (2026-09-06, was hardcoded) ──
+        fetch('/api/partnerships').then(function (r) { return r.json(); }).then(function (partnerships) {
+            var rows = (Array.isArray(partnerships) ? partnerships : [])
+                .filter(function (p) { return p.status === 'Expiring Soon' || p.status === 'Expired'; })
+                .sort(function (a, b) { return new Date(a.end || a.endDate || 0) - new Date(b.end || b.endDate || 0); })
+                .slice(0, 6);
+            var tbody = document.getElementById('expiring-tbody');
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No partnerships are currently expiring or expired.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(function (p) {
+                var typeBadge = p.type === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary';
+                var statusBadge = p.status === 'Expired' ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning';
+                return '<tr>' +
+                    '<td><span class="fw-medium">' + escapeHtml(p.inst || p.institution || '—') + '</span></td>' +
+                    '<td><span class="badge ' + typeBadge + '">' + escapeHtml(p.type || '—') + '</span></td>' +
+                    '<td>' + escapeHtml(p.country || '—') + '</td>' +
+                    '<td>' + escapeHtml(p.end || p.endDate || '—') + '</td>' +
+                    '<td><span class="badge ' + statusBadge + '">' + escapeHtml(p.status || '—') + '</span></td>' +
+                    '</tr>';
+            }).join('');
+        }).catch(function (err) {
+            console.error('Failed to load expiring partnerships:', err);
+            document.getElementById('expiring-tbody').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Could not load data.</td></tr>';
+        });
 
         // ── Leaflet Map ─────────────────────────────────────────────
         const map = L.map('partnership-map', { center: [20, 15], zoom: 2, zoomControl: true });

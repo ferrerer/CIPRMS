@@ -469,8 +469,9 @@ document.addEventListener('DOMContentLoaded', function(){
           currentEv.setExtendedProp('location', loc);
           currentEv.setExtendedProp('description', desc);
           bsModal.hide(); upcomingEvent();
-        }
-      }).catch(function(e){ console.error(e); alert('Error saving event.'); });
+          showToast('<i class="ri-checkbox-circle-line me-1"></i>Event updated.');
+        } else { showToast(data.error || 'Could not save the event.', '#f06548'); }
+      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); });
     } else {
       // ADD â€” persist to MongoDB then add to FC
       var recipients = Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
@@ -479,8 +480,9 @@ document.addEventListener('DOMContentLoaded', function(){
         if(data.success){
           cal.addEvent(docToFcEvent(data.event));
           bsModal.hide(); upcomingEvent();
-        }
-      }).catch(function(e){ console.error(e); alert('Error saving event.'); });
+          showToast('<i class="ri-checkbox-circle-line me-1"></i>Event created.');
+        } else { showToast(data.error || 'Could not create the event.', '#f06548'); }
+      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); });
     }
   });
 
@@ -490,13 +492,32 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!confirm('Delete "' + currentEv.title + '"?')) return;
     var dbId = currentEv.extendedProps.dbId || currentEv.id;
     apiDelete(dbId).then(function(data){
-      if(data.success){ currentEv.remove(); bsModal.hide(); upcomingEvent(); }
-    }).catch(function(e){ console.error(e); alert('Error deleting event.'); });
+      if(data.success){ currentEv.remove(); bsModal.hide(); upcomingEvent(); showToast('<i class="ri-checkbox-circle-line me-1"></i>Event deleted.'); }
+      else { showToast(data.error || 'Could not delete the event.', '#f06548'); }
+    }).catch(function(e){ console.error(e); showToast('Error deleting event.', '#f06548'); });
   });
 });
 
+function showToast(msg, bg) {
+  const t = document.getElementById('cal-toast');
+  if (!t) return;
+  t.innerHTML = msg; t.style.background = bg || '#405189';
+  t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+  setTimeout(() => { t.style.opacity = '0'; t.style.pointerEvents = 'none'; }, 3500);
+}
+
 })();
 </script>
+
+<!-- Toast -->
+<div id="cal-toast" style="
+    position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+    color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;
+    font-size:.8125rem;font-weight:600;
+    box-shadow:0 4px 16px rgba(0,0,0,.18);
+    opacity:0;pointer-events:none;transition:opacity .3s;
+    display:flex;align-items:center;gap:.4rem;
+"></div>
 
 </body>
 </html>

@@ -140,7 +140,24 @@ app.use(session({
     maxAge: SESSION_IDLE_TIMEOUT_MS,
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production'
+    // 2026-09-06 security hardening (Finding #8): was opt-in to secure
+    // (only true on an exact NODE_ENV==='production' match) — a
+    // misconfigured deploy where NODE_ENV is unset or misspelled would
+    // silently send the session cookie over plain HTTP. A NODE_ENV-based
+    // boolean here turned out to be the wrong tool regardless of which way
+    // it defaulted — `npm start` (package.json) never sets NODE_ENV at all,
+    // so a plain `secure: true`-by-default broke local HTTP development
+    // outright (a real browser silently refuses to store a Secure cookie
+    // over http://, confirmed live: login appeared to succeed server-side
+    // but every following request had no session at all). 'auto' is
+    // express-session's own built-in answer to exactly this: it sets
+    // Secure per-request from the connection's actual security (req.secure,
+    // which already respects `trust proxy`/X-Forwarded-Proto, set above) —
+    // secure automatically once Render's real HTTPS termination is in
+    // front of it, plain over any non-TLS connection (local dev, and
+    // supertest's in-process test requests) with no environment-variable
+    // guessing involved at all.
+    secure: 'auto'
   }
 }));
 app.use(passport.initialize());
@@ -500,12 +517,21 @@ app.post('/signup', signupLimiter, async (req, res) => {
 });
 
 // ── LOGOUT —————————————————————————————————————————————————
-app.get('/logout', (req, res) => {
+// POST-only (2026-09-06 security hardening, Finding #7): a GET route that
+// destroys the session is reachable via top-level navigation even under
+// sameSite=lax (e.g. an <img>/<a> on another site pointing here), a minor
+// "logout CSRF" nuisance. Every logout link in the app now fires a real
+// POST via fetch() (see views/partials/header.ejs and the sidebar_*
+// partials) instead of navigating to a GET URL. Full CSRF-token protection
+// for state-changing requests generally is a separate, larger effort
+// (deliberately out of scope here — see the Phase 0 report) — this closes
+// only the one concretely reachable gap.
+app.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) console.error('❌ Logout session destroy error:', err);
     // Clear the session cookie from the browser so it cannot reuse the old ID
     res.clearCookie('connect.sid', { path: '/' });
-    res.redirect('/');
+    res.json({ success: true });
   });
 });
 
@@ -560,7 +586,17 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
 app.get('/api/partnerships', requireUploader, async (req, res) => {
   try {
     const db = getDb();
-    const docs = await db.collection('partnerships').find({}).toArray();
+    // Newest registry record first by default (id is the auto-incrementing,
+    // immutable creation-order field assigned once at insert — see the
+    // `nextId`/`sort({id:-1})` pattern in POST /api/partnerships above —
+    // there is no createdAt field on this collection and `start`/`end` are
+    // user-editable signing dates, not registry-entry order). Every consumer
+    // of this endpoint (Administrator/Staff Monitoring+Registry via
+    // registry-gridjs.init.js, and Auth. Personnel's lifecycle page via
+    // lifecycle-gridjs.init.js) renders rows in the order returned here with
+    // no client-side re-sort, so this one server-side sort is what keeps all
+    // of them consistently newest-first.
+    const docs = await db.collection('partnerships').find({}).sort({ id: -1 }).toArray();
     res.json(docs);
   } catch (err) {
     console.error(err);
@@ -600,7 +636,15 @@ app.get('/api/requests', requireAuth, async (req, res) => {
     const db = getDb();
     const email = req.session.user ? req.session.user.email : '';
     const filter = req.session.user && REQUEST_REVIEWER_ROLES.includes(req.session.user.role) ? {} : { submittedByEmail: email };
-    const requests = await db.collection('requests').find(filter).toArray();
+    // Newest submission first by default. `id` (auto-incrementing, assigned
+    // once at insert in POST /api/requests, never touched by either PATCH
+    // route) is the authoritative submission-order field here — there is no
+    // createdAt on this collection, `date` is a display-only formatted
+    // string with day-only granularity, and `updatedAt` is deliberately NOT
+    // used for this because it's overwritten on every admin/staff review
+    // action (approve/reject/edit), which would reorder the list by "last
+    // touched" instead of "newly submitted" every time a request is reviewed.
+    const requests = await db.collection('requests').find(filter).sort({ id: -1 }).toArray();
     res.json(requests);
   } catch (err) {
     console.error(err);
@@ -1101,7 +1145,11 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
 
       res.json({ success: true, documentId, fileLink, request: updated });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      // 2026-09-06 security hardening (Finding #6, follow-up sweep): a
+      // failure here is most often a filesystem/disk error on the just-
+      // written upload — never echo that raw path/message to the client.
+      console.error('❌ Partnership request draft upload error:', e);
+      res.status(500).json({ error: 'Unable to save the uploaded document right now. Please try again.' });
     }
   });
 });
@@ -1547,7 +1595,8 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
 
       res.json({ success: true, documentId, fileLink, request: updated });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      console.error('❌ Document request draft upload error:', e);
+      res.status(500).json({ error: 'Unable to save the uploaded document right now. Please try again.' });
     }
   });
 });
@@ -1748,13 +1797,31 @@ app.get('/api/documents/mine', requireAuth, async (req, res) => {
 
 // Lets a user correct any OCR-suggested metadata (title/type/institution/etc.)
 // on a document that was already auto-archived to the library.
+//
+// 2026-09-06 security hardening (Finding #3): Administrator keeps full
+// cross-user access — this route exists specifically so Administrator can
+// correct metadata on any document, not just their own. Auth. Personnel is
+// restricted to documents they uploaded, mirroring the existing
+// SELF_UPLOAD_ONLY_ROLES allowlist pattern used by
+// GET /uploads/documents/:filename below (same idea, scoped to this
+// route's own role set instead of reusing that exact constant, since this
+// route's gate — requirePersonnel — is Administrator + Auth. Personnel
+// only, a different role set than that route's).
+const DOCUMENT_METADATA_SELF_ONLY_ROLES = ['Auth. Personnel'];
 app.patch('/api/documents/:id', requirePersonnel, async (req, res) => {
   try {
+    const db = getDb();
+    const doc = await db.collection('documents').findOne({ id: parseInt(req.params.id) });
+    if (!doc) return res.status(404).json({ error: 'Not found.' });
+    if (DOCUMENT_METADATA_SELF_ONLY_ROLES.includes(req.session.user.role) && doc.uploadedByEmail !== req.session.user.email) {
+      return res.status(403).json({ error: 'You can only edit metadata for documents you uploaded.' });
+    }
     const updated = await updateDocument(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'Not found.' });
     res.json({ success: true, document: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document metadata update error:', err);
+    res.status(500).json({ error: 'Unable to update the document right now. Please try again.' });
   }
 });
 
@@ -1791,7 +1858,8 @@ app.post('/api/document-folders', requireUploader, async (req, res) => {
     await db.collection('documentfolders').insertOne(folder);
     res.json({ success: true, folder });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Create document folder error:', err);
+    res.status(500).json({ error: 'Unable to create the folder right now. Please try again.' });
   }
 });
 
@@ -1816,7 +1884,8 @@ app.patch('/api/document-folders/:id', requireUploader, async (req, res) => {
     await db.collection('documentfolders').updateOne({ id }, { $set: updates });
     res.json({ success: true, folder: await db.collection('documentfolders').findOne({ id }) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Update document folder error:', err);
+    res.status(500).json({ error: 'Unable to update the folder right now. Please try again.' });
   }
 });
 
@@ -1842,7 +1911,8 @@ app.patch('/api/documents/:id/organize', requireUploader, async (req, res) => {
     await db.collection('documents').updateOne({ id }, { $set: updates });
     res.json({ success: true, document: await db.collection('documents').findOne({ id }) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Organize document error:', err);
+    res.status(500).json({ error: 'Unable to update the document right now. Please try again.' });
   }
 });
 
@@ -2743,18 +2813,23 @@ async function computeCustomReportData(db, query, user) {
 
   // Build DB filter
   const filter = {};
-  if (cat) filter.cat = cat;
+  // typeof-guarded exactly like buildPartnershipFilter() elsewhere in this
+  // file (2026-09-06 security hardening, Finding #5): Express's query
+  // parser turns bracket-notation params like ?cat[$ne]=x into an object,
+  // not a string — without this guard that object would be assigned
+  // straight into the MongoDB filter as a live operator.
+  if (typeof cat === 'string' && cat) filter.cat = cat;
   // `unit` can be stored as either a plain string (legacy records) or an
   // array of strings (multi-select Responsible Unit) — a plain equality
   // match here is intentional: MongoDB already treats `{unit: "CCS"}`
   // against an array field as "array contains CCS", so this one line is
   // backward-compatible with both shapes with no extra code.
-  if (unit) filter.unit = unit;
+  if (typeof unit === 'string' && unit) filter.unit = unit;
   if (agtype && ['MOA', 'MOU'].includes(agtype)) filter.type = agtype;
-  if (region) filter.region = region;
+  if (typeof region === 'string' && region) filter.region = region;
   if (country) filter.country = buildExactCaseInsensitiveMatch(country);
   if (inst) filter.inst = { $regex: escapeRegexLiteral(inst), $options: 'i' };
-  if (nature) filter.nature = nature;
+  if (typeof nature === 'string' && nature) filter.nature = nature;
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
@@ -3624,13 +3699,16 @@ async function computeComparisonReport(db, query, user) {
   const statusB     = query.statusB  || '';
 
   // Build MongoDB base filter (indexed fields)
+  // typeof-guarded exactly like buildPartnershipFilter() / the identical fix
+  // in computeCustomReportData above (2026-09-06 security hardening,
+  // Finding #5) — see that function's comment for why this is needed.
   const filter = {};
-  if (unit)    filter.unit    = unit;
+  if (typeof unit === 'string' && unit)     filter.unit    = unit;
   if (agtype && ['MOA', 'MOU'].includes(agtype)) filter.type = agtype;
-  if (nature)  filter.nature  = nature;
-  if (region)  filter.region  = region;
+  if (typeof nature === 'string' && nature) filter.nature  = nature;
+  if (typeof region === 'string' && region) filter.region  = region;
   if (country) filter.country = buildExactCaseInsensitiveMatch(country);
-  if (cat)     filter.cat     = cat;
+  if (typeof cat === 'string' && cat)       filter.cat     = cat;
   if (inst)    filter.inst    = { $regex: escapeRegexLiteral(inst), $options: 'i' };
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
@@ -3998,8 +4076,20 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
 app.get('/api/users', requireStaffAccess, async (req, res) => {
   try {
     const db = getDb();
-    // Never expose password field to the client
-    const docs = await db.collection('users').find({}, { projection: { password: 0 } }).toArray();
+    // Newest account first by default. `createdAt` does exist on this
+    // collection, but it's a locale-formatted display string (e.g. "Sep 8,
+    // 2026", day-only granularity) set once at account creation in
+    // POST /api/users — sorting on it as a string would be chronologically
+    // wrong across months/years (e.g. "Dec 1, 2025" would sort after
+    // "Jan 1, 2026"). `id` is the auto-incrementing field actually assigned
+    // in creation order (same `nextId` pattern as POST /api/users) and is
+    // never included in PATCH /api/users/:id's update payload — editing a
+    // profile can never move a user in this ordering, only creating a new
+    // account can. This also drives users.ejs's User Management table
+    // (Administrator + Staff, shared page) and calendar.ejs's recipient
+    // picker; the latter had no defined order before this change either, so
+    // this only replaces an incidental order with a deterministic one there.
+    const docs = await db.collection('users').find({}, { projection: { password: 0 } }).sort({ id: -1 }).toArray();
     res.json(docs);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -4077,7 +4167,16 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // tempPassword is only ever returned this one time so the admin can relay it out-of-band.
     res.json({ success: true, user: safeEntry, tempPassword });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // The findOne check above is a courtesy, not a guarantee — two
+    // near-simultaneous creates for the same email can both pass it before
+    // either commits. The unique index on users.email (db.js) is the real
+    // guard; code 11000 is Mongo's duplicate-key error, caught here so the
+    // race still surfaces as the same clean 400 rather than a raw 500.
+    if (err && err.code === 11000) {
+      return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+    console.error('❌ Add user error:', err);
+    res.status(500).json({ error: 'Unable to create the account right now. Please try again.' });
   }
 });
 
@@ -4168,7 +4267,8 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     await logActivity(db, req.session.user, 'EDIT', `User updated: ${updated.name} — role: ${updated.role}, status: ${updated.status}`);
     res.json({ success: true, user: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Edit user error:', err);
+    res.status(500).json({ error: 'Unable to update the account right now. Please try again.' });
   }
 });
 
@@ -4197,7 +4297,8 @@ app.delete('/api/users/:id', requireStaffAccess, async (req, res) => {
     await logActivity(db, req.session.user, 'DELETE', `User deleted: ${target ? target.name + ' (' + target.email + ')' : 'ID #' + id}`);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Delete user error:', err);
+    res.status(500).json({ error: 'Unable to delete the account right now. Please try again.' });
   }
 });
 
@@ -4805,10 +4906,16 @@ app.get('/api/admin/profile', requireAdmin, async (req, res) => {
 });
 
 // Admin profile POST
+// Email is intentionally NOT accepted from the client here (2026-09-06
+// security hardening): it is the authenticated identity, not an editable
+// profile field, and almost every ownership check in this app is keyed on
+// req.session.user.email. Any `email` in the request body is ignored — the
+// stored/returned profile always uses the real session email.
 app.post('/api/admin/profile', requireAdmin, async (req, res) => {
-  const { name, email, dept, position, institution } = req.body;
-  if (!name || !email || !dept || !position || !institution)
+  const { name, dept, position, institution } = req.body;
+  if (!name || !dept || !position || !institution)
     return res.status(400).json({ error: 'Missing required fields.' });
+  const email = req.session.user.email;
   try {
     const db = getDb();
     await db.collection('profiles').updateOne(
@@ -4816,8 +4923,6 @@ app.post('/api/admin/profile', requireAdmin, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
-    // Keep session email in sync
-    req.session.user.email = email;
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
@@ -4830,9 +4935,9 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
   const { oldPassword, newPassword } = req.body;
   try {
     const db = getDb();
-    // Look up by the stable numeric id, not email — the profile form lets an
-    // admin edit req.session.user.email without that change ever reaching the
-    // users collection, which would otherwise make this lookup silently fail.
+    // Look up by the stable numeric id, not email — defense in depth even
+    // though the profile form can no longer change session email at all
+    // (2026-09-06 security hardening).
     const userId = req.session.user.id;
     const userDoc = await db.collection('users').findOne({ id: userId });
     const passwordMatches = await verifyPassword(oldPassword, userDoc && userDoc.password);
@@ -4843,7 +4948,12 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // 2026-09-06 security hardening (Finding #6): every real validation
+    // failure already returns its own clean message above — this only
+    // catches genuine unexpected errors, which must never echo raw
+    // internals (Mongo driver messages, etc.) back to the client.
+    console.error('❌ Admin password change error:', err);
+    res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
   }
 });
 
@@ -4859,10 +4969,13 @@ app.get('/api/personnel/profile', requirePersonnel, async (req, res) => {
 });
 
 // Personnel profile POST
+// Email is intentionally NOT accepted from the client here (2026-09-06
+// security hardening) — see the identical note on /api/admin/profile above.
 app.post('/api/personnel/profile', requirePersonnel, async (req, res) => {
-  const { name, email, dept, position, institution } = req.body;
-  if (!name || !email || !dept || !position || !institution)
+  const { name, dept, position, institution } = req.body;
+  if (!name || !dept || !position || !institution)
     return res.status(400).json({ error: 'Missing required fields.' });
+  const email = req.session.user.email;
   try {
     const db = getDb();
     await db.collection('profiles').updateOne(
@@ -4870,7 +4983,6 @@ app.post('/api/personnel/profile', requirePersonnel, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
-    req.session.user.email = email;
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
@@ -4883,9 +4995,9 @@ app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, 
   const { oldPassword, newPassword } = req.body;
   try {
     const db = getDb();
-    // Look up by the stable numeric id, not email — the profile form lets personnel
-    // edit req.session.user.email without that change ever reaching the users
-    // collection, which would otherwise make this lookup silently fail.
+    // Look up by the stable numeric id, not email — defense in depth even
+    // though the profile form can no longer change session email at all
+    // (2026-09-06 security hardening).
     const userId = req.session.user.id;
     const userDoc = await db.collection('users').findOne({ id: userId });
     const passwordMatches = await verifyPassword(oldPassword, userDoc && userDoc.password);
@@ -4896,7 +5008,8 @@ app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, 
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Personnel password change error:', err);
+    res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
   }
 });
 
@@ -4913,10 +5026,13 @@ app.get('/api/staff/profile', requireStaffAccess, async (req, res) => {
 });
 
 // Staff profile POST
+// Email is intentionally NOT accepted from the client here (2026-09-06
+// security hardening) — see the identical note on /api/admin/profile above.
 app.post('/api/staff/profile', requireStaffAccess, async (req, res) => {
-  const { name, email, dept, position, institution } = req.body;
-  if (!name || !email || !dept || !position || !institution)
+  const { name, dept, position, institution } = req.body;
+  if (!name || !dept || !position || !institution)
     return res.status(400).json({ error: 'Missing required fields.' });
+  const email = req.session.user.email;
   try {
     const db = getDb();
     await db.collection('profiles').updateOne(
@@ -4924,7 +5040,6 @@ app.post('/api/staff/profile', requireStaffAccess, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
-    req.session.user.email = email;
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
@@ -4937,9 +5052,9 @@ app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async 
   const { oldPassword, newPassword } = req.body;
   try {
     const db = getDb();
-    // Look up by the stable numeric id, not email — the profile form lets Staff
-    // edit req.session.user.email without that change ever reaching the users
-    // collection, which would otherwise make this lookup silently fail.
+    // Look up by the stable numeric id, not email — defense in depth even
+    // though the profile form can no longer change session email at all
+    // (2026-09-06 security hardening).
     const userId = req.session.user.id;
     const userDoc = await db.collection('users').findOne({ id: userId });
     const passwordMatches = await verifyPassword(oldPassword, userDoc && userDoc.password);
@@ -4950,12 +5065,18 @@ app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async 
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Staff password change error:', err);
+    res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
   }
 });
 
 // ── INSTITUTION API PROXY ─────────────────────────────────────────────────────
-app.get('/api/institutions', institutionsLimiter, async (req, res) => {
+// 2026-09-06 security hardening (quick win): this was reachable with no
+// session at all, unlike almost every other route in the app — requireAuth
+// added so an unauthenticated caller can no longer use CIPRMS as a free
+// relay against the third-party universities API. Every real caller
+// (Add/Edit Partnership's institution autocomplete) is already logged in.
+app.get('/api/institutions', requireAuth, institutionsLimiter, async (req, res) => {
   const name = req.query.name || '';
   if (!name || name.trim().length < 2) {
     return res.json([]);
@@ -5027,6 +5148,187 @@ app.use('/uploads/avatars', requireAuth, express.static(path.join(__dirname, 'up
 // migration) — both render this same set of live counters/DSS insights, just
 // into their own template with their own sidebar. Kept as one function so the
 // two dashboards can never silently drift out of sync with each other.
+// ── MONTHLY/YEARLY TARGET TRACKER (2026-09-06) ──────────────────────────────
+// Org-wide only (no per-unit/college dimension — confirmed with the user;
+// the existing `unit` array field and its normalization pattern remain
+// available if that's ever needed later, but inventing it now would be an
+// unrequested dimension). Counts every partnership regardless of `nature`
+// (New vs Renewal both count, per the same confirmation) — the only filter
+// is the partnership's own signing date (`start`) falling inside the target
+// period.
+const TARGET_TYPES = ['monthly', 'yearly'];
+const TARGET_YEAR_MIN = 2000;
+const TARGET_YEAR_MAX = 2100;
+
+/**
+ * Deliberately NOT reusing Reports & Analytics' filterByDateRange() — that
+ * function answers "was this partnership active during this window"
+ * (start <= dateTo AND end >= dateFrom), a period-OVERLAP question. A
+ * target asks "was this partnership newly accomplished (signed) in this
+ * period" — an entirely different question that happens to share the same
+ * `start` field. Reusing filterByDateRange here would silently count
+ * partnerships that merely span the period without having been signed in
+ * it (e.g. a 2021-2026 partnership would count toward every single year's
+ * target in between), which is exactly the "January belongs to January"
+ * kind of error the spec warned about.
+ *
+ * Both year and month are derived from parsing the SAME `start` string with
+ * one `new Date()` call (never mixing a precomputed `startYear` field with a
+ * freshly parsed month) so a monthly boundary can never disagree with the
+ * year it's nested inside. `start` is a non-ISO display string ("Apr 12,
+ * 2026"), so `new Date(start)` parses as local time — consistent with how
+ * every other date-string comparison in this codebase already treats it
+ * (see filterByDateRange's own comment on this exact point), so there is no
+ * UTC/local timezone shift risk here.
+ */
+async function computeTargetAccomplishment(db, target) {
+  const docs = await db.collection('partnerships').find({}, { projection: { start: 1, startYear: 1 } }).toArray();
+  const current = docs.filter(p => {
+    if (!p.start) return false;
+    const d = new Date(p.start);
+    if (isNaN(d)) return false;
+    if (target.type === 'yearly') {
+      // Falls back to the parsed year for legacy records that predate the
+      // startYear helper field — same fallback Reports & Analytics already
+      // uses for its own "Year" grouping (cirl.js computeCustomReportData).
+      const y = p.startYear || d.getFullYear();
+      return y === target.year;
+    }
+    return d.getFullYear() === target.year && (d.getMonth() + 1) === target.month;
+  }).length;
+
+  const lacking = Math.max(target.targetCount - current, 0);
+  const rawPercentage = target.targetCount > 0 ? Math.round((current / target.targetCount) * 100) : 0;
+  const percentage = Math.min(100, Math.max(0, rawPercentage));
+  let status;
+  if (current === 0) status = 'NOT_STARTED';
+  else if (current < target.targetCount) status = 'IN_PROGRESS';
+  else if (current === target.targetCount) status = 'TARGET_REACHED';
+  else status = 'TARGET_EXCEEDED';
+
+  return { current, lacking, percentage, rawPercentage, status };
+}
+
+async function withTargetProgress(db, targets) {
+  return Promise.all(targets.map(async (t) => ({ ...t, progress: await computeTargetAccomplishment(db, t) })));
+}
+
+function validateTargetInput(body) {
+  const type = body.type;
+  if (!TARGET_TYPES.includes(type)) return { error: 'type must be "monthly" or "yearly".' };
+
+  const year = parseInt(body.year, 10);
+  if (!Number.isInteger(year) || year < TARGET_YEAR_MIN || year > TARGET_YEAR_MAX) {
+    return { error: `year must be an integer between ${TARGET_YEAR_MIN} and ${TARGET_YEAR_MAX}.` };
+  }
+
+  let month = null;
+  if (type === 'monthly') {
+    month = parseInt(body.month, 10);
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      return { error: 'month must be an integer between 1 and 12 for a monthly target.' };
+    }
+  } else if (body.month !== undefined && body.month !== null && body.month !== '') {
+    return { error: 'month must not be provided for a yearly target.' };
+  }
+
+  const targetCount = parseInt(body.targetCount, 10);
+  if (!Number.isInteger(targetCount) || targetCount < 1) {
+    return { error: 'targetCount must be a positive integer.' };
+  }
+
+  return { value: { type, year, month, targetCount } };
+}
+
+// Viewing is Administrator+Staff (full dashboard parity, matching every
+// other dashboard-adjacent read in this app) — Auth. Personnel and
+// potential_partner get no target-management visibility, unchanged from
+// their existing access policy. Mutations are requireAdmin-only below.
+app.get('/api/targets', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const targets = await db.collection('targets').find({}).sort({ year: -1, month: -1 }).toArray();
+    res.json(await withTargetProgress(db, targets));
+  } catch (err) {
+    console.error('❌ Failed to load targets:', err);
+    res.status(500).json({ error: 'Failed to load targets.' });
+  }
+});
+
+app.post('/api/targets', requireAdmin, async (req, res) => {
+  const { error, value } = validateTargetInput(req.body);
+  if (error) return res.status(400).json({ error });
+  try {
+    const db = getDb();
+    const last = await db.collection('targets').find({}).sort({ id: -1 }).limit(1).toArray();
+    const nextId = last.length ? last[0].id + 1 : 1;
+    const now = new Date().toISOString();
+    const entry = {
+      id: nextId, ...value, active: true,
+      createdBy: req.session.user.name, createdByEmail: req.session.user.email,
+      createdAt: now, updatedAt: now
+    };
+    await db.collection('targets').insertOne(entry);
+    await logActivity(db, req.session.user, 'ADD',
+      `Target created: ${value.type === 'monthly' ? `${value.month}/${value.year}` : value.year} — ${value.targetCount} partnerships`);
+    res.json({ success: true, target: { ...entry, progress: await computeTargetAccomplishment(db, entry) } });
+  } catch (err) {
+    // Duplicate-key from the unique (type, year, month) index — the
+    // findOne-based race this catches is inherent to check-then-insert; a
+    // concurrent duplicate attempt fails cleanly here instead of silently
+    // creating two targets for the same period.
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'A target for this period already exists.' });
+    }
+    console.error('❌ Failed to create target:', err);
+    res.status(500).json({ error: 'Failed to create target.' });
+  }
+});
+
+app.patch('/api/targets/:id', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const db = getDb();
+    const existing = await db.collection('targets').findOne({ id });
+    if (!existing) return res.status(404).json({ error: 'Target not found.' });
+
+    const targetCount = parseInt(req.body.targetCount, 10);
+    if (!Number.isInteger(targetCount) || targetCount < 1) {
+      return res.status(400).json({ error: 'targetCount must be a positive integer.' });
+    }
+    // Only targetCount (and active) are editable — type/year/month define the
+    // record's identity and are covered by the unique index; changing them
+    // would just be deleting one target and creating another.
+    const setFields = { targetCount, updatedAt: new Date().toISOString() };
+    if (req.body.active !== undefined) setFields.active = !!req.body.active;
+
+    await db.collection('targets').updateOne({ id }, { $set: setFields });
+    const updated = await db.collection('targets').findOne({ id });
+    await logActivity(db, req.session.user, 'EDIT',
+      `Target updated: ${updated.type === 'monthly' ? `${updated.month}/${updated.year}` : updated.year} — now ${updated.targetCount} partnerships`);
+    res.json({ success: true, target: { ...updated, progress: await computeTargetAccomplishment(db, updated) } });
+  } catch (err) {
+    console.error('❌ Failed to update target:', err);
+    res.status(500).json({ error: 'Failed to update target.' });
+  }
+});
+
+app.delete('/api/targets/:id', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const db = getDb();
+    const existing = await db.collection('targets').findOne({ id });
+    if (!existing) return res.status(404).json({ error: 'Target not found.' });
+    await db.collection('targets').deleteOne({ id });
+    await logActivity(db, req.session.user, 'DELETE',
+      `Target removed: ${existing.type === 'monthly' ? `${existing.month}/${existing.year}` : existing.year} — ${existing.targetCount} partnerships`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Failed to delete target:', err);
+    res.status(500).json({ error: 'Failed to delete target.' });
+  }
+});
+
 async function computeDashboardStats(db) {
   const [allPartnerships, allRequests] = await Promise.all([
     db.collection('partnerships').find({}).toArray(),
@@ -5477,7 +5779,8 @@ app.post('/api/partner/password', partnerPasswordLimiter, requirePartner, async 
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partner password change error:', err);
+    res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
   }
 });
 
@@ -5498,7 +5801,8 @@ app.post('/api/partner/avatar', requirePartner, (req, res) => {
       );
       res.json({ success: true, avatarUrl });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      console.error('❌ Avatar upload error:', e);
+      res.status(500).json({ error: 'Unable to save the uploaded photo right now. Please try again.' });
     }
   });
 });
@@ -5542,7 +5846,18 @@ if (require.main === module) {
       await runLifecycleCheck(); // catch up immediately on startup, don't wait for the first interval tick
       setInterval(runLifecycleCheck, LIFECYCLE_CHECK_INTERVAL_MS);
     } catch (err) {
-      console.error('❌ Failed to connect to MongoDB on startup:', err);
+      // 2026-09-08 Phase 5 production-readiness fix: this used to only log
+      // and keep running — the HTTP server was already bound (app.listen's
+      // callback runs before this try/catch), so a failed DB connection left
+      // a "zombie" process silently accepting requests that would all fail
+      // once they touched getDb(). Exiting lets the host's process
+      // supervisor (Render, systemd, Docker, etc.) restart the service and
+      // retry the connection, instead of an outage persisting until someone
+      // notices the app is up but non-functional. Matches the same
+      // fail-closed philosophy already applied to a missing MONGO_URI in
+      // db.js — a real DB outage should surface as a restart, not silence.
+      console.error('❌ Failed to connect to MongoDB on startup — exiting so the process can be restarted:', err);
+      process.exit(1);
     }
     try {
       const { default: open } = await import('open');

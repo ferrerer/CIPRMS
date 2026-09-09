@@ -11,6 +11,7 @@ const { createTestUser, loginAs, cleanupAll } = require('./helpers');
 let adminAgent, staffAgent, submitterAgent;
 let createdRequestIds = [];
 let createdPartnershipIds = [];
+let createdTargetIds = [];
 
 beforeAll(async () => {
   await connectDB();
@@ -26,6 +27,7 @@ afterAll(async () => {
   const db = await connectDB();
   if (createdPartnershipIds.length) await db.collection('partnerships').deleteMany({ id: { $in: createdPartnershipIds } });
   if (createdRequestIds.length) await db.collection('requests').deleteMany({ id: { $in: createdRequestIds } });
+  if (createdTargetIds.length) await db.collection('targets').deleteMany({ id: { $in: createdTargetIds } });
   await db.collection('notifications').deleteMany({ title: { $regex: 'jesttest Conversion' } });
   await cleanupAll();
   await closeDB();
@@ -166,4 +168,39 @@ test('Ordinary partnership creation (no sourceRequestId) still works unchanged',
   expect(res.body.success).toBe(true);
   expect(res.body.partnership.sourceRequestId).toBeUndefined();
   createdPartnershipIds.push(res.body.partnership.id);
+});
+
+// Phase 4 integration validation (2026-09-06): the Request→Registry
+// conversion (built 2026-09-04) and the Target Tracker (built 2026-09-06)
+// were never previously tested together — each has its own dedicated suite,
+// but nothing proved a partnership that arrives via the conversion flow
+// (rather than a plain manual Add) is actually counted by
+// computeTargetAccomplishment(), since that function reads the `partnerships`
+// collection directly and has no awareness of how a record got there. A
+// deliberately far-future signing year (2038) keeps this isolated from any
+// real data or other tests' date ranges.
+test('A partnership created via Request→Registry conversion counts toward its signing month/year Target, exactly like a manually-added one', async () => {
+  const reqEntry = await submitRequest(submitterAgent, 'jesttest Conversion Target Tracker University');
+
+  const convertRes = await adminAgent.post('/api/partnerships').send({
+    inst: reqEntry.institution, country: 'Testland', region: 'Asia', type: 'MOA', nature: 'Research',
+    cat: 'International', unit: ['CIRL'], start: 'May 15, 2038', end: 'May 15, 2042',
+    remarks: 'jesttest', sourceRequestId: reqEntry.id
+  });
+  expect(convertRes.status).toBe(200);
+  createdPartnershipIds.push(convertRes.body.partnership.id);
+
+  const targetRes = await adminAgent.post('/api/targets').send({ type: 'monthly', year: 2038, month: 5, targetCount: 1 });
+  expect(targetRes.status).toBe(200);
+  createdTargetIds.push(targetRes.body.target.id);
+
+  // The converted partnership alone should already satisfy a target of 1.
+  expect(targetRes.body.target.progress.current).toBe(1);
+  expect(targetRes.body.target.progress.status).toBe('TARGET_REACHED');
+
+  // Re-fetching the target list (as the Dashboard widget does) must reflect
+  // the same live count — not a value frozen at target-creation time.
+  const listRes = await adminAgent.get('/api/targets');
+  const found = listRes.body.find(t => t.id === targetRes.body.target.id);
+  expect(found.progress.current).toBe(1);
 });

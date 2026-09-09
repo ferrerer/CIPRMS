@@ -331,6 +331,32 @@ table.table-custom {
 }
 .fs-14 { font-size: 0.875rem !important; }
 
+/* ── Loading state for fetch()-driven tables (Grid.js pages) ──
+   These tables render blank until their fetch() resolves; this
+   gives that wait a visible, intentional state instead of an
+   empty box that looks broken. */
+.table-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    padding: 3rem 1rem;
+    color: #878a99;
+    font-size: .8125rem;
+}
+
+/* ── Icon-only button focus/accessibility ──────────────────
+   Bootstrap's default focus ring is easy to lose against the
+   Velzon sidebar/topbar backgrounds; make it visible everywhere
+   without changing the resting appearance of any button. */
+.btn:focus-visible,
+.nav-link:focus-visible,
+a:focus-visible {
+    outline: 2px solid #405189;
+    outline-offset: 2px;
+}
+
 /* Responsive fixes ─────────────────────────────────────── */
 @media (max-width: 768px) {
     .stats-row { grid-template-columns: 1fr 1fr; }

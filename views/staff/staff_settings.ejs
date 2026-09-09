@@ -102,7 +102,7 @@
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-email">Email Address <span class="text-danger">*</span></label>
-                          <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. staff@cspc.edu.ph">
+                          <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. staff@cspc.edu.ph" disabled title="Email is tied to your login and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-dept">Department / College <span class="text-danger">*</span></label>
@@ -145,7 +145,7 @@
                           <label class="form-label" for="oldpasswordInput">Current Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
                             <input type="password" class="form-control pe-5" id="oldpasswordInput" placeholder="Enter current password">
-                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('oldpasswordInput',this)">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('oldpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>
                           </div>
@@ -154,7 +154,7 @@
                           <label class="form-label" for="newpasswordInput">New Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
                             <input type="password" class="form-control pe-5" id="newpasswordInput" placeholder="Min. 8 characters, with upper/lowercase and a number">
-                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('newpasswordInput',this)">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('newpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>
                           </div>
@@ -163,7 +163,7 @@
                           <label class="form-label" for="confirmpasswordInput">Confirm New Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
                             <input type="password" class="form-control pe-5" id="confirmpasswordInput" placeholder="Repeat new password">
-                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('confirmpasswordInput',this)">
+                            <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('confirmpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>
                           </div>
@@ -271,20 +271,19 @@
 
   async function saveSettings() {
     const name = document.getElementById('s-name').value.trim();
-    const email = document.getElementById('s-email').value.trim();
     const dept = document.getElementById('s-dept').value;
     const position = document.getElementById('s-position').value.trim();
     const institution = document.getElementById('s-institution').value.trim();
-    if (!name || !email || !dept || !position || !institution)
+    if (!name || !dept || !position || !institution)
       return showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields.', '#f06548');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      return showToast('<i class="ri-error-warning-line me-1"></i>Invalid email address.', '#f06548');
     const btn = document.getElementById('save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
     try {
+      // Email is not submitted here — it's tied to the authenticated account
+      // and cannot be changed from this form (server ignores it either way).
       const res = await fetch('/api/staff/profile', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, email, dept, position, institution })
+        body: JSON.stringify({ name, dept, position, institution })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');

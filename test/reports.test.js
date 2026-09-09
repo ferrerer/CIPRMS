@@ -1312,3 +1312,77 @@ describe('Audit Trail: Staff sees only their own records (privacy boundary)', ()
     expect(sawOtherStaffEntry).toBe(false);
   });
 });
+
+// Phase 3 validation (2026-09-06): the PDF path for a zero-match filter was
+// already covered (line ~85), but Excel and Comparison had no equivalent
+// regression test proving they degrade the same way — a real, valid,
+// empty(ish) output rather than a crash or a silent fallback to the
+// unfiltered dataset. `country` is used as the zero-match filter here since
+// it is a plain equality match with no legacy/array ambiguity to muddy the
+// result.
+describe('Empty result set — Preview/Excel/Comparison must never crash or silently ignore the filter', () => {
+  const NO_SUCH_COUNTRY = 'jesttest-NoSuchCountry-Phase3';
+
+  test('Preview: a filter matching zero records reports totalRecords: 0, not a misleading count', async () => {
+    const res = await agent.get(`/api/reports/custom/preview?country=${encodeURIComponent(NO_SUCH_COUNTRY)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totalRecords).toBe(0);
+    expect(res.body.records).toEqual([]);
+    expect(res.body.summary.totalCount).toBe(0);
+  });
+
+  test('Excel export: a filter matching zero records still returns a real, valid, empty workbook', async () => {
+    const res = await agent.get(`/api/reports/partnerships/excel?country=${encodeURIComponent(NO_SUCH_COUNTRY)}`)
+      .buffer(true).parse((res2, cb) => {
+        const chunks = [];
+        res2.on('data', c => chunks.push(c));
+        res2.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(res.status).toBe(200);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(res.body); // throws if the file is malformed — proves no crash produced a corrupt file
+    expect(workbook.worksheets.length).toBeGreaterThan(0);
+    let dataRowCount = 0;
+    workbook.worksheets[0].eachRow(row => {
+      const first = String(row.getCell(1).value || '');
+      if (first.includes(NO_SUCH_COUNTRY)) dataRowCount++; // would only appear if a real record leaked in
+    });
+    expect(dataRowCount).toBe(0);
+  });
+
+  test('Comparison preview: a base filter matching zero records yields totalA=0, totalB=0 — never a fallback to the full dataset', async () => {
+    const res = await agent.get(`/api/reports/comparison/preview?compType=Active vs Inactive&country=${encodeURIComponent(NO_SUCH_COUNTRY)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totalA).toBe(0);
+    expect(res.body.totalB).toBe(0);
+    expect(res.body.totalBoth).toBe(0);
+    expect(res.body.groupARecords).toEqual([]);
+    expect(res.body.groupBRecords).toEqual([]);
+  });
+
+  test('Comparison PDF/Excel: a zero-match base filter still produces valid, non-crashing files', async () => {
+    const pdfRes = await agent.get(`/api/reports/comparison/pdf?compType=Active vs Inactive&country=${encodeURIComponent(NO_SUCH_COUNTRY)}`);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.body.slice(0, 4).toString()).toBe('%PDF');
+
+    const excelRes = await agent.get(`/api/reports/comparison/excel?compType=Active vs Inactive&country=${encodeURIComponent(NO_SUCH_COUNTRY)}`)
+      .buffer(true).parse((res2, cb) => {
+        const chunks = [];
+        res2.on('data', c => chunks.push(c));
+        res2.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(excelRes.status).toBe(200);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    expect(workbook.worksheets.length).toBeGreaterThan(0);
+  });
+
+  test('"Compare Against" with a zero-match ORIGINAL filter keeps Group A empty rather than reverting to the unfiltered registry', async () => {
+    const res = await agent.get(
+      `/api/reports/comparison/preview?compType=Compare Against&country=${encodeURIComponent(NO_SUCH_COUNTRY)}&compareField=status&compareValue=Active`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.totalA).toBe(0);
+    expect(res.body.groupARecords).toEqual([]);
+  });
+});

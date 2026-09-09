@@ -805,6 +805,21 @@
       return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
+    // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
+    // dangerous URL scheme (javascript:/data:/vbscript:) placed into an href
+    // or src attribute — item.link can be a submitter's free-text
+    // attachmentLink, not just a server-generated upload path. Only allow
+    // absolute http(s) URLs or the app's own relative paths; refuse anything
+    // else rather than guess (same pattern as registry-gridjs.init.js's
+    // sanitizeUrl()).
+    function sanitizeUrl(url) {
+      const s = String(url == null ? '' : url).trim();
+      if (!s) return '';
+      if (/^https?:\/\//i.test(s)) return s;
+      if (s.charAt(0) === '/' && s.charAt(1) !== '/') return s;
+      return '';
+    }
+
     /* ─── STATE ─── */
     var prData = [], drData = [];
     var prFiltered = [], drFiltered = [];
@@ -957,9 +972,12 @@
 
       tbody.innerHTML = prFiltered.map((r, i) => {
         const uid = String(r.id || i);
-        const by = r.requestedBy || r.by || '—';
-        const inst = r.institution || r.inst || '—';
-        const country = r.country || '—';
+        // Institution/requester/country/notes are free-form fields any
+        // potential_partner or Auth. Personnel can submit — escape before
+        // interpolating into innerHTML (2026-09-06 security hardening).
+        const by = escapeHtml(r.requestedBy || r.by || '—');
+        const inst = escapeHtml(r.institution || r.inst || '—');
+        const country = escapeHtml(r.country || '—');
         const type = r.type || '—';
         const date = r.date || '—';
         const status = r.status || 'Pending';
@@ -994,9 +1012,11 @@
       if (!r) return;
       currentPRId = uid;
 
-      const by = r.requestedBy || r.by || '—';
-      const inst = r.institution || r.inst || '—';
-      const country = r.country || '—';
+      // Free-form fields — escape before interpolating into innerHTML
+      // (2026-09-06 security hardening).
+      const by = escapeHtml(r.requestedBy || r.by || '—');
+      const inst = escapeHtml(r.institution || r.inst || '—');
+      const country = escapeHtml(r.country || '—');
       const type = r.type || '—';
       const nature = r.nature || '—';
       const category = r.category || '—';
@@ -1005,7 +1025,7 @@
       const startDate = r.startDate || '—';
       const endDate = r.endDate || '—';
       const date = r.date || '—';
-      const notes = r.notes || '—';
+      const notes = escapeHtml(r.notes || '—');
       const isReview = IS_ADMIN && (r.status === 'Pending' || r.status === 'Under Review');
 
       const scMap = {
@@ -1169,10 +1189,13 @@
       if (!item || !item.link) return;
       const kind = fileKind(item.filename, item.fileType);
       const body = document.getElementById('draft-preview-body');
-      if (kind === 'pdf') {
-        body.innerHTML = `<iframe src="${escapeHtml(item.link)}" style="width:100%;height:60vh;border:1px solid var(--vz-border-color, #e9ebec);border-radius:.25rem;"></iframe>`;
+      const safeLink = sanitizeUrl(item.link);
+      if (!safeLink) {
+        body.innerHTML = `<div class="text-center text-muted py-5"><i class="ri-error-warning-line fs-1 d-block mb-2"></i>This link cannot be previewed (unrecognized or unsafe URL).</div>`;
+      } else if (kind === 'pdf') {
+        body.innerHTML = `<iframe src="${safeLink}" style="width:100%;height:60vh;border:1px solid var(--vz-border-color, #e9ebec);border-radius:.25rem;"></iframe>`;
       } else if (kind === 'image') {
-        body.innerHTML = `<div class="text-center"><img src="${escapeHtml(item.link)}" style="max-width:100%;max-height:60vh;border:1px solid var(--vz-border-color, #e9ebec);border-radius:.25rem;"></div>`;
+        body.innerHTML = `<div class="text-center"><img src="${safeLink}" style="max-width:100%;max-height:60vh;border:1px solid var(--vz-border-color, #e9ebec);border-radius:.25rem;"></div>`;
       } else {
         body.innerHTML = `<div class="text-center text-muted py-5"><i class="ri-file-3-line fs-1 d-block mb-2"></i>Preview not available for this file type.</div>`;
       }
@@ -1181,7 +1204,7 @@
       document.getElementById('draft-preview-when').textContent = item.when;
       document.getElementById('draft-preview-note').textContent = item.note || '—';
       const downloadBtn = document.getElementById('draft-preview-download-btn');
-      downloadBtn.href = item.link;
+      downloadBtn.href = safeLink || '#';
       downloadBtn.setAttribute('download', item.filename);
 
       // Hide whichever draft-collaboration modal called this (there's only
@@ -1236,6 +1259,10 @@
       const previewBtn = (kind === 'pdf' || kind === 'image')
         ? `<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal('${prefix || 'pr'}', ${idx})"><i class="ri-eye-line me-1"></i>Preview</button>`
         : `<span class="text-muted fs-12 align-self-center">Preview not available for this file type</span>`;
+      const safeItemLink = sanitizeUrl(item.link);
+      const downloadBtnHtml = safeItemLink
+        ? `<a href="${safeItemLink}" download="${escapeHtml(item.filename)}" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>`
+        : `<span class="text-muted fs-12 align-self-center">Link unavailable</span>`;
       return `<div class="d-flex gap-3 mb-3">
         ${avatar}
         <div class="flex-grow-1 border rounded p-3">
@@ -1244,7 +1271,7 @@
           ${item.note ? `<div class="fs-13 text-muted mt-1 fst-italic">"${escapeHtml(item.note)}"</div>` : ''}
           <div class="d-flex align-items-center gap-2 mt-2">
             ${previewBtn}
-            <a href="${escapeHtml(item.link)}" download="${escapeHtml(item.filename)}" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>
+            ${downloadBtnHtml}
           </div>
         </div>
       </div>`;
@@ -1497,9 +1524,9 @@
         const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
         return `<tr>
           <td class="text-muted fw-semibold fs-13">${i + 1}</td>
-          <td><span class="fw-semibold fs-13">${r.institution || '—'}</span></td>
+          <td><span class="fw-semibold fs-13">${escapeHtml(r.institution || '—')}</span></td>
           <td>${drDocTypeBadges(r)}</td>
-          <td class="fw-medium fs-13">${r.requestedBy || '—'}</td>
+          <td class="fw-medium fs-13">${escapeHtml(r.requestedBy || '—')}</td>
           <td class="text-muted fs-13">${r.date || '—'}</td>
           <td>${statusBadge(cs || 'Received')}</td>
           <td>

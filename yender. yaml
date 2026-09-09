@@ -1,0 +1,10 @@
+services:
+    -type:web
+    name: CIPRMS
+    env: node
+    plan: free
+    buildCommand: npm install 
+    startCOmmand: node cirl.js
+    envVars:
+        -key: NODE_ENV
+        value: production

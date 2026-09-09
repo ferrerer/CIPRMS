@@ -345,6 +345,7 @@
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
 <script>
     function showToast(msg, bg) {
@@ -357,6 +358,18 @@
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+    // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
+    // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
+    // item.link can be a submitter's free-text attachmentLink. Only allow
+    // absolute http(s) URLs or the app's own relative paths.
+    function sanitizeUrl(url) {
+        var s = String(url == null ? '' : url).trim();
+        if (!s) return '';
+        if (/^https?:\/\//i.test(s)) return s;
+        if (s.charAt(0) === '/' && s.charAt(1) !== '/') return s;
+        return '';
     }
 
     function statusBadgeClass(status) {
@@ -487,10 +500,13 @@
         if (!item || !item.link) return;
         var kind = fileKind(item.filename, item.fileType);
         var body = document.getElementById('draft-preview-body');
-        if (kind === 'pdf') {
-            body.innerHTML = '<iframe src="' + item.link + '" style="width:100%;height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></iframe>';
+        var safeLink = sanitizeUrl(item.link);
+        if (!safeLink) {
+            body.innerHTML = '<div class="text-center text-muted py-5"><i class="ri-error-warning-line fs-1 d-block mb-2"></i>This link cannot be previewed (unrecognized or unsafe URL).</div>';
+        } else if (kind === 'pdf') {
+            body.innerHTML = '<iframe src="' + safeLink + '" style="width:100%;height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></iframe>';
         } else if (kind === 'image') {
-            body.innerHTML = '<div class="text-center"><img src="' + item.link + '" style="max-width:100%;max-height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></div>';
+            body.innerHTML = '<div class="text-center"><img src="' + safeLink + '" style="max-width:100%;max-height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></div>';
         } else {
             body.innerHTML = '<div class="text-center text-muted py-5"><i class="ri-file-3-line fs-1 d-block mb-2"></i>Preview not available for this file type.</div>';
         }
@@ -499,7 +515,7 @@
         document.getElementById('draft-preview-when').textContent = item.when;
         document.getElementById('draft-preview-note').textContent = item.note || '—';
         var downloadBtn = document.getElementById('draft-preview-download-btn');
-        downloadBtn.href = item.link;
+        downloadBtn.href = safeLink || '#';
         downloadBtn.setAttribute('download', item.filename);
 
         var sourceEl = document.getElementById((prefix || 'pr') + '-draft-modal');
@@ -529,11 +545,15 @@
         var previewBtn = (kind === 'pdf' || kind === 'image')
             ? '<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal(\'' + (prefix || 'pr') + '\', ' + idx + ')"><i class="ri-eye-line me-1"></i>Preview</button>'
             : '<span class="text-muted fs-12 align-self-center">Preview not available for this file type</span>';
+        var safeItemLink = sanitizeUrl(item.link);
+        var downloadBtnHtml = safeItemLink
+            ? ('<a href="' + safeItemLink + '" download="' + escapeHtml(item.filename) + '" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>')
+            : '<span class="text-muted fs-12 align-self-center">Link unavailable</span>';
         return '<div class="d-flex gap-3 mb-3">' + avatar +
             '<div class="flex-grow-1 border rounded p-3">' + header +
             '<div class="fs-13 fw-medium mt-1">' + escapeHtml(item.filename) + (sizeStr ? ' <span class="text-muted fs-12">(' + sizeStr + ')</span>' : '') + '</div>' +
             (item.note ? '<div class="fs-13 text-muted mt-1 fst-italic">"' + escapeHtml(item.note) + '"</div>' : '') +
-            '<div class="d-flex align-items-center gap-2 mt-2">' + previewBtn + ' <a href="' + escapeHtml(item.link) + '" download="' + escapeHtml(item.filename) + '" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a></div>' +
+            '<div class="d-flex align-items-center gap-2 mt-2">' + previewBtn + ' ' + downloadBtnHtml + '</div>' +
             '</div></div>';
     }
 

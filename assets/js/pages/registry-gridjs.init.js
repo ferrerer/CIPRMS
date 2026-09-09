@@ -43,6 +43,22 @@ function escapeHtml(s) {
   });
 }
 
+// Validate a stored document/partner link before it's ever placed into an
+// href (2026-09-06 security hardening) — escaping alone protects text
+// content but NOT an attribute that can carry its own dangerous scheme
+// (javascript:, data:, vbscript:, ...). The Add/Edit Partnership form's
+// Document Link field is a native type="url" input seeded with an
+// "https://…" placeholder, so only absolute http(s) URLs or the app's own
+// relative paths are ever legitimately stored here — anything else is
+// refused rather than guessed at.
+function sanitizeUrl(url) {
+  var s = String(url == null ? '' : url).trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.charAt(0) === '/' && s.charAt(1) !== '/') return s; // same-app relative path, not protocol-relative
+  return '';
+}
+
 // ── "Responsible Unit" combobox — searchable multi-select restricted to the
 // predefined CSPC unit list, with removable chips (2026-09-03). Unlike the
 // Document Request combobox elsewhere in this app, no custom/free-text
@@ -352,7 +368,7 @@ function renderDssAlerts() {
     if (expiringSoon.length) {
       var soonest = expiringSoon[0];
       actionEl.innerHTML = '<span class="fw-semibold">Action Required:</span> '
-        + soonest.inst + ' ' + soonest.type + ' expires in <strong>' + soonest.days + ' day' + (soonest.days===1?'':'s') + '</strong>. '
+        + escapeHtml(soonest.inst) + ' ' + escapeHtml(soonest.type) + ' expires in <strong>' + soonest.days + ' day' + (soonest.days===1?'':'s') + '</strong>. '
         + (expiringSoon.length > 1 ? (expiringSoon.length-1) + ' other partnership' + (expiringSoon.length>2?'s are':' is') + ' also expiring within 90 days.' : 'Consider initiating renewal.');
     } else {
       actionEl.textContent = 'No partnerships are currently expiring within the next 90 days.';
@@ -365,7 +381,7 @@ function renderDssAlerts() {
       var mostOverdue = expired.slice().sort(function(a,b){ return a.days-b.days; })[0];
       var overdueDays = Math.abs(mostOverdue.days);
       reviewEl.innerHTML = '<span class="fw-semibold">Review Suggested:</span> '
-        + mostOverdue.inst + ' ' + mostOverdue.type + ' expired ' + overdueDays + ' day' + (overdueDays===1?'':'s') + ' ago. '
+        + escapeHtml(mostOverdue.inst) + ' ' + escapeHtml(mostOverdue.type) + ' expired ' + overdueDays + ' day' + (overdueDays===1?'':'s') + ' ago. '
         + (expired.length > 1 ? (expired.length-1) + ' other expired partnership' + (expired.length>2?'s remain':' remains') + ' unrenewed.' : 'Renew or archive this record.');
     } else {
       reviewEl.textContent = 'No expired partnerships currently require review.';
@@ -444,43 +460,46 @@ function buildGrid() {
         var dot = critical ? 'bg-danger' : 'bg-warning';
         var sub = critical ? 'text-danger' : 'text-warning';
         var label = p.status==='Expired' ? 'Expired' : (p.days+' days');
-        return '<li class="list-group-item px-3 py-2"><div class="d-flex align-items-center gap-2"><span class="badge '+dot+' rounded-circle p-1">&nbsp;</span><div><div class="fw-semibold fs-13">'+p.inst+'</div><div class="text-muted fs-12">'+p.type+' &middot; <strong class="'+sub+'">'+label+'</strong></div></div></div></li>';
+        return '<li class="list-group-item px-3 py-2"><div class="d-flex align-items-center gap-2"><span class="badge '+dot+' rounded-circle p-1">&nbsp;</span><div><div class="fw-semibold fs-13">'+escapeHtml(p.inst)+'</div><div class="text-muted fs-12">'+escapeHtml(p.type)+' &middot; <strong class="'+sub+'">'+label+'</strong></div></div></div></li>';
       }).join('');
 
   renderDssAlerts();
 
   var data = filtered.map(function(p) {
-    var typeBadge   = '<span class="badge '+(p.type==='MOU'?'bg-info-subtle text-info':'bg-primary-subtle text-primary')+'">'+p.type+'</span>';
-    var unitBadge   = '<span class="badge bg-success-subtle text-success">'+(Array.isArray(p.unit)?p.unit.join(', '):p.unit)+'</span>';
+    // Type/Unit are intentionally NOT rendered as table columns (2026-09-08
+    // UI change) — they still live on `p` and are shown in full in the
+    // View/Preview modal (openViewModal below) and everywhere else (Edit
+    // form, Reports, filters); this table just no longer duplicates them.
     var statusBadge = sbadge(p.status);
     var endColor    = p.status==='Expired'?'#dc2626':p.status==='Expiring Soon'?'#d97706':'#15803d';
-    var instHtml    = p.inst+(p.coordinator?'<div class="text-muted fs-11"><i class="ri-user-line me-1"></i>'+p.coordinator+'</div>':'');
-    var countryHtml = p.country+'<div class="text-muted fs-11"><i class="ri-map-pin-line me-1"></i>'+p.region+'</div>';
+    var instHtml    = escapeHtml(p.inst)+(p.coordinator?'<div class="text-muted fs-11"><i class="ri-user-line me-1"></i>'+escapeHtml(p.coordinator)+'</div>':'');
+    var countryHtml = escapeHtml(p.country)+'<div class="text-muted fs-11"><i class="ri-map-pin-line me-1"></i>'+escapeHtml(p.region)+'</div>';
     var endHtml     = '<span style="color:'+endColor+';font-weight:600">'+p.end+'</span>';
     // Mutation controls (Edit/Approve/Renew/Delete) are Administrator- and
     // Staff-only — the View button always shows for every other role.
     // POST/PATCH/DELETE /api/partnerships enforce this server-side regardless.
     var canManage = typeof CAN_MANAGE_REGISTRY !== 'undefined' && CAN_MANAGE_REGISTRY;
     var actions = '<div class="d-flex gap-1 flex-wrap">'
-      +'<button class="btn btn-sm btn-soft-info" onclick="openViewModal('+p.id+')"><i class="ri-eye-line"></i></button>'
+      +'<button class="btn btn-sm btn-soft-info" title="View details" aria-label="View details" onclick="openViewModal('+p.id+')"><i class="ri-eye-line"></i></button>'
       +(!canManage ? '' : (p.status==='Pending Approval'
-        ?'<button class="btn btn-sm btn-soft-success" onclick="approveRecord('+p.id+')"><i class="ri-checkbox-circle-line"></i></button>'
-        :'<button class="btn btn-sm btn-soft-success" onclick="openEditModal('+p.id+')"><i class="ri-pencil-line"></i></button>'))
+        ?'<button class="btn btn-sm btn-soft-success" title="Approve" aria-label="Approve" onclick="approveRecord('+p.id+')"><i class="ri-checkbox-circle-line"></i></button>'
+        :'<button class="btn btn-sm btn-soft-success" title="Edit" aria-label="Edit" onclick="openEditModal('+p.id+')"><i class="ri-pencil-line"></i></button>'))
       +(!canManage ? '' : (p.status==='Expired'||p.status==='Expiring Soon'
-        ?'<button class="btn btn-sm btn-soft-warning" onclick="openRenewModal('+p.id+')"><i class="ri-refresh-line"></i></button>':''))
-      +(canManage ? '<button class="btn btn-sm btn-soft-danger" onclick="openDeleteModal('+p.id+')"><i class="ri-delete-bin-line"></i></button>' : '')
+        ?'<button class="btn btn-sm btn-soft-warning" title="Renew" aria-label="Renew" onclick="openRenewModal('+p.id+')"><i class="ri-refresh-line"></i></button>':''))
+      +(canManage ? '<button class="btn btn-sm btn-soft-danger" title="Delete" aria-label="Delete" onclick="openDeleteModal('+p.id+')"><i class="ri-delete-bin-line"></i></button>' : '')
       +'</div>';
-    return [gridjs.html(instHtml), gridjs.html(countryHtml), gridjs.html(typeBadge), p.nature, gridjs.html(unitBadge), p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
+    return [gridjs.html(instHtml), gridjs.html(countryHtml), p.nature, p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
   });
 
   if (window._regGrid) { window._regGrid.updateConfig({data:data}).forceRender(); return; }
-  document.getElementById('reg-grid') && (window._regGrid = new gridjs.Grid({
+  var regGridEl = document.getElementById('reg-grid');
+  if (regGridEl) regGridEl.innerHTML = ''; // clear the template's loading placeholder — Grid.js requires an empty container on first render
+  regGridEl && (window._regGrid = new gridjs.Grid({
     columns:[
-      {name:'Institution',width:'19%'},{name:'Country/Region',width:'11%'},
-      {name:'Type',width:'6%',sort:false},{name:'Nature',width:'9%'},
-      {name:'Unit',width:'7%',sort:false},{name:'Start',width:'8%'},
-      {name:'End',width:'9%'},{name:'Days Left',width:'9%',sort:false},
-      {name:'Status',width:'9%',sort:false},{name:'Actions',width:'8%',sort:false}
+      {name:'Institution',width:'23%'},{name:'Country/Region',width:'14%'},
+      {name:'Nature',width:'11%'},{name:'Start',width:'10%'},
+      {name:'End',width:'11%'},{name:'Days Left',width:'11%',sort:false},
+      {name:'Status',width:'10%',sort:false},{name:'Actions',width:'10%',sort:false}
     ],
     data:data, search:true, pagination:{limit:6}, sort:true,
     className:{table:'table table-hover align-middle mb-0',thead:'table-light',search:'mb-3'},
@@ -493,22 +512,24 @@ function buildGrid() {
 function openViewModal(id) {
   var p = partnerships.find(function(x){return x.id===id;}); if(!p) return;
   document.getElementById('view-title').textContent = p.inst;
+  var safeDocLink = sanitizeUrl(p.docLink);
+  var safePartnerEmail = escapeHtml(p.partnerEmail || '');
   document.getElementById('view-body').innerHTML =
     '<div class="row g-3">'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Institution</div><div class="fw-semibold">'+p.inst+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Country</div><div class="fw-semibold">'+p.country+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Region</div><div class="fw-semibold">'+p.region+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Type</div><div class="fw-semibold">'+p.type+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Nature</div><div class="fw-semibold">'+p.nature+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Category</div><div class="fw-semibold">'+p.cat+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Start Date</div><div class="fw-semibold">'+p.start+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">End Date</div><div class="fw-semibold">'+p.end+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Institution</div><div class="fw-semibold">'+escapeHtml(p.inst)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Country</div><div class="fw-semibold">'+escapeHtml(p.country)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Region</div><div class="fw-semibold">'+escapeHtml(p.region)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Type</div><div class="fw-semibold">'+escapeHtml(p.type)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Nature</div><div class="fw-semibold">'+escapeHtml(p.nature)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Category</div><div class="fw-semibold">'+escapeHtml(p.cat)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Start Date</div><div class="fw-semibold">'+escapeHtml(p.start)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">End Date</div><div class="fw-semibold">'+escapeHtml(p.end)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Status</div><div>'+sbadge(p.status)+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Responsible Unit</div><div class="fw-semibold">'+(Array.isArray(p.unit)?p.unit.join(', '):p.unit)+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">CIRL Coordinator</div><div class="fw-semibold">'+(p.coordinator||'—')+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Partner Email</div><div>'+(p.partnerEmail?'<a href="mailto:'+p.partnerEmail+'">'+p.partnerEmail+'</a>':'—')+'</div></div>'
-    +'<div class="col-sm-12"><div class="text-muted fs-12">Document Link</div><div>'+(p.docLink?'<a href="'+p.docLink+'" target="_blank">'+p.docLink+'</a>':'— Not uploaded')+'</div></div>'
-    +'<div class="col-sm-12"><div class="text-muted fs-12">Remarks</div><div>'+(p.remarks||'—')+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Responsible Unit</div><div class="fw-semibold">'+escapeHtml(Array.isArray(p.unit)?p.unit.join(', '):p.unit)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">CIRL Coordinator</div><div class="fw-semibold">'+(p.coordinator?escapeHtml(p.coordinator):'—')+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Partner Email</div><div>'+(p.partnerEmail?'<a href="mailto:'+safePartnerEmail+'">'+safePartnerEmail+'</a>':'—')+'</div></div>'
+    +'<div class="col-sm-12"><div class="text-muted fs-12">Document Link</div><div>'+(safeDocLink?'<a href="'+safeDocLink+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(p.docLink)+'</a>':(p.docLink?'— Invalid link':'— Not uploaded'))+'</div></div>'
+    +'<div class="col-sm-12"><div class="text-muted fs-12">Remarks</div><div>'+(p.remarks?escapeHtml(p.remarks):'—')+'</div></div>'
     +'</div>';
   new bootstrap.Modal(document.getElementById('viewPartnershipModal')).show();
 }
@@ -557,7 +578,7 @@ function saveEdit(){
   var units=eUnitCombo.getValues();
   if(!inst||!end||!units.length){
     if(!units.length) eUnitCombo.markInvalid();
-    alert('Institution name, End Date, and at least one Responsible Unit are required.');
+    showToast('Institution name, End Date, and at least one Responsible Unit are required.');
     return;
   }
   var fmt=function(v){return new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
@@ -599,7 +620,7 @@ function computeRenewStatus(){
   document.getElementById('renew-validity').value=(y>0?y+' yr'+(y>1?'s':''):'')+(m>0?(y>0?' ':'')+m+' mo':'')||'< 1 month';
 }
 function saveRenew(){
-  var newEnd=document.getElementById('renew-new-end').value; if(!newEnd){alert('Please set a new end date.');return;}
+  var newEnd=document.getElementById('renew-new-end').value; if(!newEnd){showToast('Please set a new end date.');return;}
   var fmt=function(v){return new Date(v).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
   var p=partnerships.find(function(x){return x.id===renewingId;}); if(!p) return;
   var d=Math.ceil((new Date(newEnd)-new Date())/86400000);

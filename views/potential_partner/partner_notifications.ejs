@@ -9,6 +9,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
 </head>
 <body>
 
@@ -20,69 +21,118 @@
         <div class="page-content">
             <div class="container-fluid">
 
+                <!-- Page Title -->
                 <div class="row">
-                  <div class="col-12">
-                    <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
-                      <h4 class="mb-sm-0"><i class="ri-notification-3-line me-2 text-primary"></i>Notifications</h4>
-                      <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
-                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
-                          <li class="breadcrumb-item active">Notifications</li>
-                        </ol>
-                      </div>
+                    <div class="col-12">
+                        <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+                            <h4 class="mb-sm-0"><i class="ri-notification-3-line me-2 text-primary"></i>Notifications</h4>
+                            <div class="page-title-right">
+                                <ol class="breadcrumb m-0">
+                                    <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                                    <li class="breadcrumb-item active">Notifications</li>
+                                </ol>
+                            </div>
+                        </div>
                     </div>
-                  </div>
                 </div>
 
-                <div class="row g-3">
-                    <!-- Left: Summary -->
-                    <div class="col-xl-4">
-                        <div class="card mb-0">
-                            <div class="card-header align-items-center d-flex">
-                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-pie-chart-line me-2 text-primary"></i>Summary</h4>
-                            </div>
+                <!-- Summary Tiles -->
+                <div class="row">
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
                             <div class="card-body">
-                                <div class="row g-2 text-center mb-3">
-                                    <div class="col-4">
-                                        <div class="border rounded p-3">
-                                            <h4 class="mb-0" id="sum-total">0</h4>
-                                            <p class="text-muted fs-11 mb-0">Total</p>
-                                        </div>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Total Notifications</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-total">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-primary-subtle text-primary mb-0">All notifications</span></p>
                                     </div>
-                                    <div class="col-4">
-                                        <div class="border rounded p-3">
-                                            <h4 class="mb-0 text-primary" id="sum-unread">0</h4>
-                                            <p class="text-muted fs-11 mb-0">Unread</p>
-                                        </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-primary-subtle rounded-circle fs-2">
+                                            <i class="ri-notification-4-line text-primary"></i>
+                                        </span>
                                     </div>
-                                    <div class="col-4">
-                                        <div class="border rounded p-3">
-                                            <h4 class="mb-0 text-success" id="sum-read">0</h4>
-                                            <p class="text-muted fs-11 mb-0">Read</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="fw-semibold text-muted fs-12 text-uppercase d-block mb-2">Filter</span>
-                                <div class="btn-group w-100" role="group" id="pills-read">
-                                    <button class="btn btn-sm btn-primary pill-btn" data-val="all" onclick="setPill(this)">All</button>
-                                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="unread" onclick="setPill(this)">Unread</button>
-                                    <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="read" onclick="setPill(this)">Read</button>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Unread Notifications</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-unread">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-warning-subtle text-warning mb-0"><i class="ri-mail-unread-line align-middle"></i> Needs attention</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-warning-subtle rounded-circle fs-2">
+                                            <i class="ri-mail-unread-line text-warning"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Read Notifications</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-read">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-success-subtle text-success mb-0"><i class="ri-checkbox-circle-line align-middle"></i> Reviewed</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-success-subtle rounded-circle fs-2">
+                                            <i class="ri-mail-open-line text-success"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6">
+                        <div class="card card-animate">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <p class="fw-medium text-muted mb-0">Today's Notifications</p>
+                                        <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="tile-today">0</span></h2>
+                                        <p class="mb-0 text-muted"><span class="badge bg-info-subtle text-info mb-0"><i class="ri-calendar-event-line align-middle"></i> Today</span></p>
+                                    </div>
+                                    <div class="avatar-sm flex-shrink-0">
+                                        <span class="avatar-title bg-info-subtle rounded-circle fs-2">
+                                            <i class="ri-calendar-event-line text-info"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- end Summary Tiles -->
 
-                    <!-- Right: Notification list -->
-                    <div class="col-xl-8">
+                <div class="row g-3 mb-3">
+                    <!-- Notifications -->
+                    <div class="col-12">
                         <div class="card mb-0 h-100">
                             <div class="card-header border-0">
                                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                     <h4 class="card-title mb-0"><i class="ri-notification-4-line me-2 text-primary"></i>Notification List</h4>
                                     <div class="d-flex align-items-center gap-2">
                                         <span class="text-muted fs-12" id="notif-count"></span>
-                                        <button class="btn btn-primary btn-sm" onclick="markAllRead()">
+                                        <button class="btn btn-primary btn-sm" id="mark-all-read-btn" onclick="markAllRead()">
                                             <i class="ri-check-double-line align-bottom me-1"></i>Mark All Read
                                         </button>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
+                                    <span class="fw-semibold text-muted fs-12 text-uppercase">Status Filter</span>
+                                    <div class="btn-group" role="group" id="pills-read">
+                                        <button class="btn btn-sm btn-primary pill-btn" data-val="all" onclick="setPill(this)">All</button>
+                                        <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="unread" onclick="setPill(this)">Unread</button>
+                                        <button class="btn btn-sm btn-soft-secondary pill-btn" data-val="read" onclick="setPill(this)">Read</button>
                                     </div>
                                 </div>
                             </div>
@@ -94,6 +144,9 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Pagination Container -->
+                <div id="notif-pagination"></div>
 
             </div>
         </div>
@@ -112,25 +165,86 @@
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
 <script>
     let allNotifs = [];
+
+    const tagColor = {
+        lifecycle: 'warning', calendar: 'primary', request: 'info', requests: 'info',
+        registry: 'success', dashboard: 'secondary'
+    };
+
     let activeRead = 'all';
+    let currentPage = 1;
+    const itemsPerPage = 4;
+
+    // ── Summary tiles — real counts from allNotifs, no hardcoded values ──
+    function isToday(timeStr) {
+        if (!timeStr) return false;
+        const d = new Date(timeStr);
+        return !isNaN(d) && d.toDateString() === new Date().toDateString();
+    }
+
+    function updateSummaryTiles() {
+        const total = allNotifs.length;
+        const unread = allNotifs.filter(function (n) { return n.unread; }).length;
+        const read = total - unread;
+        const today = allNotifs.filter(function (n) { return isToday(n.time); }).length;
+        const setTile = function (id, val) { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setTile('tile-total', total);
+        setTile('tile-unread', unread);
+        setTile('tile-read', read);
+        setTile('tile-today', today);
+    }
 
     function loadNotifications() {
         fetch('/api/notifications/mine').then(function (r) { return r.json(); }).then(function (notifs) {
-            allNotifs = notifs;
-            updateSummary();
+            allNotifs = Array.isArray(notifs) ? notifs : [];
+            updateSummaryTiles();
             render();
         }).catch(function () {
             document.getElementById('notif-feed').innerHTML = '<div class="card"><div class="card-body text-center py-5 text-danger">Failed to load notifications.</div></div>';
         });
     }
 
-    function updateSummary() {
-        document.getElementById('sum-total').textContent = allNotifs.length;
-        document.getElementById('sum-unread').textContent = allNotifs.filter(function (n) { return n.unread; }).length;
-        document.getElementById('sum-read').textContent = allNotifs.filter(function (n) { return !n.unread; }).length;
+    function goToPage(p) { currentPage = p; render(); }
+
+    // ── Reusable windowed pagination (shared with the Administrator/Staff/
+    // Auth. Personnel notifications page) — "1 2 3 4 5 … 10" instead of
+    // listing every page number. ────────────────────────────────────────
+    function buildPageList(current, total, maxVisible) {
+        maxVisible = maxVisible || 5;
+        if (total <= maxVisible + 2) {
+            return Array.from({ length: total }, function (_, i) { return i + 1; });
+        }
+        let start = Math.max(1, current - Math.floor(maxVisible / 2));
+        let end = start + maxVisible - 1;
+        if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+        const pages = [];
+        for (let i = start; i <= end; i++) pages.push(i);
+        if (start > 1) { pages.unshift('…'); pages.unshift(1); }
+        if (end < total) { pages.push('…'); pages.push(total); }
+        return pages;
+    }
+
+    function buildPaginationHtml(current, total, onClickFn) {
+        if (total <= 1) return '';
+        const pageItem = function (label, page, opts) {
+            opts = opts || {};
+            const disabled = opts.disabled ? ' disabled' : '';
+            const active = opts.active ? ' active' : '';
+            const click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+            return '<li class="page-item' + disabled + active + '"><a class="page-link" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+        };
+        let html = pageItem('<i class="ri-arrow-left-s-line"></i>', current - 1, { disabled: current === 1 });
+        buildPageList(current, total).forEach(function (p) {
+            html += p === '…'
+                ? pageItem('…', null, { ellipsis: true, disabled: true })
+                : pageItem(p, p, { active: p === current });
+        });
+        html += pageItem('<i class="ri-arrow-right-s-line"></i>', current + 1, { disabled: current === total });
+        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-sm m-0">' + html + '</ul></div>';
     }
 
     function setPill(btn) {
@@ -139,73 +253,130 @@
         });
         btn.className = btn.className.replace('btn-soft-secondary', 'btn-primary');
         activeRead = btn.dataset.val;
+        currentPage = 1;
         render();
     }
 
+    function markAllRead() {
+        fetch('/api/notifications/markallread/mine', { method: 'PATCH' }).then(function () {
+            allNotifs.forEach(function (n) { n.unread = false; });
+            const badge = document.getElementById('notif-badge');
+            if (badge) badge.style.display = 'none';
+            updateSummaryTiles();
+            render();
+        }).catch(function (err) { console.error('markAllRead failed:', err); });
+    }
+
     function markRead(id) {
-        var n = allNotifs.find(function (x) { return x.id === id; });
+        const n = allNotifs.find(function (x) { return x.id === id; });
         if (n && n.unread) {
             fetch('/api/notifications/' + id, {
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false })
             }).then(function () {
                 n.unread = false;
-                updateSummary();
+                const cnt = allNotifs.filter(function (x) { return x.unread; }).length;
+                if (cnt === 0) { const b = document.getElementById('notif-badge'); if (b) b.style.display = 'none'; }
+                updateSummaryTiles();
                 render();
-            });
+            }).catch(function (err) { console.error('markRead failed:', err); });
         }
     }
 
     // Click a notification — mark read, then navigate to its Request Details
-    // page (if it has one). Clicks on the download button are excluded so
-    // "Download" doesn't also trigger navigation.
+    // page (if it has one). Clicks on the download or delete buttons are
+    // excluded so they don't also trigger navigation.
     function openNotif(id, evt) {
-        if (evt && evt.target.closest('.notif-download-btn')) return;
-        var n = allNotifs.find(function (x) { return x.id === id; });
+        if (evt && evt.target.closest('.notif-download-btn,.notif-delete-btn')) return;
+        const n = allNotifs.find(function (x) { return x.id === id; });
         markRead(id);
         if (n && n.link) window.location.href = n.link;
     }
 
-    function markAllRead() {
-        fetch('/api/notifications/markallread/mine', { method: 'PATCH' }).then(loadNotifications);
+    // ── Delete a single notification (own only) ───────────────────────
+    function deleteNotif(id, evt) {
+        if (evt) evt.stopPropagation();
+        if (!confirm('Delete this notification? This cannot be undone.')) return;
+        fetch('/api/notifications/' + id, { method: 'DELETE' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.success || d.message === 'Notification deleted') {
+                    allNotifs = allNotifs.filter(function (x) { return x.id !== id; });
+                    const unreadLeft = allNotifs.filter(function (x) { return x.unread; }).length;
+                    const badge = document.getElementById('notif-badge');
+                    if (badge) {
+                        if (unreadLeft > 0) { badge.textContent = unreadLeft; badge.style.display = ''; }
+                        else { badge.style.display = 'none'; }
+                    }
+                    updateSummaryTiles();
+                    render();
+                } else {
+                    alert(d.error || 'Could not delete notification.');
+                }
+            })
+            .catch(function () { alert('Network error. Please try again.'); });
     }
 
     function render() {
-        var filtered = allNotifs.filter(function (n) {
-            if (activeRead === 'unread') return n.unread;
-            if (activeRead === 'read') return !n.unread;
-            return true;
+        const filtered = allNotifs.filter(function (n) {
+            return activeRead === 'all' || (activeRead === 'unread' ? n.unread : !n.unread);
         });
 
-        var feed = document.getElementById('notif-feed');
-        var countEl = document.getElementById('notif-count');
+        const feed = document.getElementById('notif-feed');
+        const countEl = document.getElementById('notif-count');
         if (countEl) countEl.textContent = filtered.length + ' notification' + (filtered.length === 1 ? '' : 's');
-
         if (!filtered.length) {
             feed.innerHTML = '<div class="card"><div class="card-body text-center py-5 text-muted">' +
                 '<i class="ri-notification-off-line fs-1 d-block mb-2"></i>No notifications found.</div></div>';
+            document.getElementById('notif-pagination').innerHTML = '';
             return;
         }
 
-        feed.innerHTML = '<div class="card mb-0"><ul class="list-group list-group-flush">' +
-            filtered.map(function (n) {
-                var color = n.color || 'info';
-                var icon = n.icon || 'ri-information-line';
-                return '<li class="list-group-item px-3 py-3 ' + (n.unread ? 'bg-primary-subtle' : '') + '" onclick="openNotif(' + n.id + ', event)" style="cursor:pointer;">' +
-                    '<div class="d-flex gap-3 align-items-start">' +
-                        '<div class="flex-shrink-0"><span class="avatar-xs avatar-title bg-' + color + '-subtle rounded-circle"><i class="' + icon + ' text-' + color + '"></i></span></div>' +
-                        '<div class="flex-grow-1">' +
-                            '<div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">' +
-                                '<span class="fw-semibold fs-13 ' + (n.unread ? 'text-dark' : 'text-muted') + '">' + n.title + (n.unread ? ' <span class="badge bg-primary-subtle text-primary fs-10 ms-1">New</span>' : '') + '</span>' +
-                                '<span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>' + (n.time || '') + '</span>' +
+        const totalPages = Math.ceil(filtered.length / itemsPerPage);
+        if (currentPage > totalPages) currentPage = Math.max(1, totalPages);
+        const startIdx = (currentPage - 1) * itemsPerPage;
+        const paged = filtered.slice(startIdx, startIdx + itemsPerPage);
+
+        const groups = {};
+        paged.forEach(function (n) {
+            const key = n.time && n.time.startsWith('Today') ? 'Today' : (n.time || '');
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(n);
+        });
+
+        let html = Object.entries(groups).map(function (entry, index) {
+            const date = entry[0], items = entry[1];
+            return '<p class="text-uppercase fw-semibold text-muted fs-11 mb-2 ' + (index === 0 ? 'mt-0' : 'mt-3') + '">' + date + '</p>' +
+                '<div class="card mb-0"><ul class="list-group list-group-flush">' +
+                items.map(function (n) {
+                    const color = n.color || 'info';
+                    const icon = n.icon || 'ri-information-line';
+                    const tagCls = tagColor[n.module] || 'secondary';
+                    return '<li class="list-group-item px-3 py-3 ' + (n.unread ? 'bg-primary-subtle' : '') + '" onclick="openNotif(' + n.id + ', event)" style="cursor:pointer;">' +
+                        '<div class="d-flex gap-3 align-items-start">' +
+                            '<div class="flex-shrink-0"><span class="avatar-xs avatar-title bg-' + color + '-subtle rounded-circle"><i class="' + icon + ' text-' + color + '"></i></span></div>' +
+                            '<div class="flex-grow-1">' +
+                                '<div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">' +
+                                    '<span class="fw-semibold fs-13 ' + (n.unread ? 'text-dark' : 'text-muted') + '">' + n.title + '</span>' +
+                                    '<span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>' + (n.time || '') + '</span>' +
+                                '</div>' +
+                                '<p class="text-muted fs-12 mb-1">' + (n.desc || '') + '</p>' +
+                                (n.tag ? '<span class="badge bg-' + tagCls + '-subtle text-' + tagCls + '">' + n.tag + '</span>' : '') +
+                                (n.downloadLink ? '<a href="' + n.downloadLink + '" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm ms-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>' : '') +
                             '</div>' +
-                            '<p class="text-muted fs-12 mb-0">' + (n.desc || '') + '</p>' +
-                            (n.downloadLink ? '<a href="' + n.downloadLink + '" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm mt-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>' : '') +
+                            '<div class="flex-shrink-0 d-flex flex-column align-items-end gap-1">' +
+                                (n.unread ? '<span class="badge bg-primary rounded-circle" style="width:8px;height:8px;padding:0;"></span>' : '') +
+                                '<button class="btn btn-icon btn-sm btn-soft-danger notif-delete-btn" onclick="deleteNotif(' + n.id + ', event)" title="Delete notification" style="width:28px;height:28px;line-height:1;">' +
+                                    '<i class="ri-delete-bin-line fs-14"></i>' +
+                                '</button>' +
+                            '</div>' +
                         '</div>' +
-                        (n.unread ? '<div class="flex-shrink-0 mt-1"><span class="badge bg-primary rounded-circle" style="width:8px;height:8px;padding:0;"></span></div>' : '') +
-                    '</div>' +
-                '</li>';
-            }).join('') +
-        '</ul></div>';
+                    '</li>';
+                }).join('') +
+                '</ul></div>';
+        }).join('');
+
+        feed.innerHTML = html;
+        document.getElementById('notif-pagination').innerHTML = buildPaginationHtml(currentPage, totalPages, 'goToPage');
     }
 
     document.addEventListener('DOMContentLoaded', loadNotifications);

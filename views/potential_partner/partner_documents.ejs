@@ -192,6 +192,7 @@
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
 <script>
     let allDocs = [];
@@ -272,7 +273,7 @@
         fetch('/api/document-folders', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
         }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) loadFolders(); else alert(data.error || 'Failed to create folder.');
+            if (data.success) { loadFolders(); showToast('<i class="ri-checkbox-circle-line me-1"></i>Folder created.'); } else showToast(data.error || 'Failed to create folder.', '#f06548');
         });
     }
 
@@ -283,7 +284,7 @@
         fetch('/api/document-folders/' + id, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() })
         }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) loadFolders(); else alert(data.error || 'Failed to rename folder.');
+            if (data.success) { loadFolders(); showToast('<i class="ri-checkbox-circle-line me-1"></i>Folder renamed.'); } else showToast(data.error || 'Failed to rename folder.', '#f06548');
         });
     }
 
@@ -291,8 +292,8 @@
         fetch('/api/document-folders/' + id, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: archived })
         }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) { loadFolders(); if (currentFolder === id) filterFolder('all'); }
-            else alert(data.error || 'Failed to update folder.');
+            if (data.success) { loadFolders(); if (currentFolder === id) filterFolder('all'); showToast('<i class="ri-checkbox-circle-line me-1"></i>Folder updated.'); }
+            else showToast(data.error || 'Failed to update folder.', '#f06548');
         });
     }
 
@@ -305,7 +306,8 @@
                 var doc = allDocs.find(function (d) { return d.id === docId; });
                 if (doc) doc.folderId = folderId;
                 renderFiltered();
-            } else alert(data.error || 'Failed to move document.');
+                showToast('<i class="ri-checkbox-circle-line me-1"></i>Document moved.');
+            } else showToast(data.error || 'Failed to move document.', '#f06548');
         });
     }
 
@@ -318,7 +320,8 @@
                 if (doc) doc.archived = archived;
                 renderFolderList();
                 renderFiltered();
-            } else alert(data.error || 'Failed to update document.');
+                showToast('<i class="ri-checkbox-circle-line me-1"></i>' + (archived ? 'Document archived.' : 'Document unarchived.'));
+            } else showToast(data.error || 'Failed to update document.', '#f06548');
         });
     }
 
@@ -401,9 +404,9 @@
                                     '<p class="text-muted fs-12 mb-0">' + (doc.date || '') + '</p>' +
                                 '</div>' +
                             '</div>' +
-                            '<div class="d-flex justify-content-between align-items-center mb-3">' +
-                                '<span class="fw-bold fs-12">' + doc.type + '</span>' +
-                                '<span class="badge ' + statusBadge + ' fs-10">' + doc.status + '</span>' +
+                            '<div class="d-flex justify-content-between align-items-center mb-3" style="gap:.5rem;">' +
+                                '<span class="fw-bold fs-12 text-truncate" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (doc.type || '') + '">' + doc.type + '</span>' +
+                                '<span class="badge ' + statusBadge + ' fs-10" style="flex-shrink:0;">' + doc.status + '</span>' +
                             '</div>' +
                             '<div class="d-flex gap-2 mb-2">' +
                                 '<a class="btn btn-sm btn-soft-primary flex-grow-1" href="' + (doc.fileLink || '#') + '" target="_blank" rel="noopener"><i class="ri-eye-line me-1"></i>Preview</a>' +
@@ -435,7 +438,7 @@
             return '<tr>' +
                 '<td><span class="avatar-title bg-light rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="' + icon + '"></i></span></td>' +
                 '<td class="text-truncate" style="max-width:240px" title="' + doc.title + '">' + doc.title + '</td>' +
-                '<td>' + doc.type + '</td>' +
+                '<td class="text-truncate" style="max-width:180px" title="' + (doc.type || '') + '">' + doc.type + '</td>' +
                 '<td>' + (doc.date || '—') + '</td>' +
                 '<td><span class="badge ' + statusBadge + ' fs-10">' + (doc.status || '—') + '</span></td>' +
                 '<td style="min-width:140px"><select class="form-select form-select-sm" title="Move to folder" onchange="moveDocument(' + doc.id + ', this.value)">' + folderOptionsHtml(doc) + '</select></td>' +
@@ -448,6 +451,25 @@
         }).join('');
     }
 
+    // ── Toast (shared pattern used across CIPRMS pages) ──────────────────
+    function showToast(msg, bg) {
+        const t = document.getElementById('doc-toast');
+        if (!t) return;
+        t.innerHTML = msg; t.style.background = bg || '#405189';
+        t.style.opacity = '1'; t.style.pointerEvents = 'auto';
+        setTimeout(() => { t.style.opacity = '0'; t.style.pointerEvents = 'none'; }, 3500);
+    }
 </script>
+
+<!-- Toast -->
+<div id="doc-toast" style="
+    position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+    color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;
+    font-size:.8125rem;font-weight:600;
+    box-shadow:0 4px 16px rgba(0,0,0,.18);
+    opacity:0;pointer-events:none;transition:opacity .3s;
+    display:flex;align-items:center;gap:.4rem;
+"></div>
+
 </body>
 </html>

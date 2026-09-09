@@ -96,7 +96,10 @@ function buildGrid() {
         return;
     }
 
-    document.getElementById('lc-grid') && (lcGrid = new gridjs.Grid({
+    var lcGridEl = document.getElementById('lc-grid');
+    if (lcGridEl) lcGridEl.innerHTML = ''; // clear the template's loading placeholder — Grid.js requires an empty container on first render
+
+    lcGridEl && (lcGrid = new gridjs.Grid({
         columns: [
             { name: 'Institution', width: '28%' },
             { name: 'Type',        width: '8%',  sort: false },

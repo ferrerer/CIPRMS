@@ -119,11 +119,11 @@
                                             <tr>
                                                 <th>Request #</th><th>Institution</th><th>Request Type</th><th>Status</th>
                                                 <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
-                                                <th>Administrator</th><th>Remarks</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                                <th>Administrator</th><th>Remarks</th><th class="text-end">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="pr-monitor-body">
-                                            <tr><td colspan="11" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                            <tr><td colspan="10" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -147,11 +147,11 @@
                                             <tr>
                                                 <th>Request #</th><th>Institution</th><th>Document Type</th><th>Status</th>
                                                 <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
-                                                <th>Administrator</th><th>Remarks</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                                <th>Administrator</th><th>Remarks</th><th class="text-end">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="dr-monitor-body">
-                                            <tr><td colspan="11" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                            <tr><td colspan="10" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -405,6 +405,7 @@
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
 <script>
     function showToast(msg, bg) {
@@ -417,6 +418,47 @@
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
+    }
+
+    // ── Inline "See more / See less" for long table cell text (Remarks,
+    // Document Type). Renders both the truncated and full text into the DOM
+    // up front and toggles which is visible — the complete original value is
+    // never discarded, only visually collapsed. ────────────────────────────
+    function renderExpandable(text, limit) {
+        var raw = text == null ? '' : String(text);
+        if (!raw) return '—';
+        var safeFull = escapeHtml(raw);
+        if (raw.length <= limit) return safeFull;
+        var safeShort = escapeHtml(raw.slice(0, limit)) + '…';
+        return '<span class="text-expandable">' +
+            '<span class="text-expandable-short">' + safeShort + '</span>' +
+            '<span class="text-expandable-full d-none">' + safeFull + '</span>' +
+            ' <button type="button" class="btn btn-link btn-sm p-0 align-baseline text-expandable-toggle" onclick="toggleExpandable(this)" aria-expanded="false">See more</button>' +
+            '</span>';
+    }
+
+    function toggleExpandable(btn) {
+        var wrap = btn.closest('.text-expandable');
+        if (!wrap) return;
+        var shortEl = wrap.querySelector('.text-expandable-short');
+        var fullEl = wrap.querySelector('.text-expandable-full');
+        var expanded = !fullEl.classList.contains('d-none');
+        fullEl.classList.toggle('d-none', expanded);
+        shortEl.classList.toggle('d-none', !expanded);
+        btn.textContent = expanded ? 'See more' : 'See less';
+        btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    }
+
+    // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
+    // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
+    // item.link can be a submitter's free-text attachmentLink. Only allow
+    // absolute http(s) URLs or the app's own relative paths.
+    function sanitizeUrl(url) {
+        var s = String(url == null ? '' : url).trim();
+        if (!s) return '';
+        if (/^https?:\/\//i.test(s)) return s;
+        if (s.charAt(0) === '/' && s.charAt(1) !== '/') return s;
+        return '';
     }
 
     function statusBadgeClass(status) {
@@ -491,16 +533,18 @@
     // Attached Documents = the submitter's own OCR-attached file (Partnership
     // Requests only) plus any supporting documents CIRL staff uploaded during
     // review — both are already-archived Document Library entries.
-    // Attached Documents (the row's summary column, and the "View Details"
-    // modal's own docs list — a quicker-glance sibling to the full "View
-    // Draft" collaboration timeline). Reuses that same timeline's item
-    // builders (buildDraftTimelineItems for Partnership Requests,
+    // Used by the "View Details" modal's own docs list (2026-09-09: no
+    // longer duplicated as a table column — the table already links to this
+    // same detail view, so this is the one place it's shown). Reuses the
+    // "View Draft" collaboration timeline's item builders
+    // (buildDraftTimelineItems for Partnership Requests,
     // buildDRDraftTimelineItems for Document Requests, defined further down
     // this file) so every file gets the same real Preview (via the shared
     // draft-preview-modal) and Download (original filename preserved)
     // actions, not just a single bare icon-link. Items are cached under a
     // key unique to this request (not the shared 'pr'/'dr' slot the draft
-    // modal uses) since many rows render their own summary at once.
+    // modal uses) since the Partnership/Document Request detail modals for
+    // different rows can be opened one after another without colliding.
     function renderAttachedDocs(r) {
         var isDR = typeof r.documentType !== 'undefined';
         var allItems = isDR ? buildDRDraftTimelineItems(r) : buildDraftTimelineItems(r);
@@ -574,10 +618,13 @@
         if (!item || !item.link) return;
         var kind = fileKind(item.filename, item.fileType);
         var body = document.getElementById('draft-preview-body');
-        if (kind === 'pdf') {
-            body.innerHTML = '<iframe src="' + item.link + '" style="width:100%;height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></iframe>';
+        var safeLink = sanitizeUrl(item.link);
+        if (!safeLink) {
+            body.innerHTML = '<div class="text-center text-muted py-5"><i class="ri-error-warning-line fs-1 d-block mb-2"></i>This link cannot be previewed (unrecognized or unsafe URL).</div>';
+        } else if (kind === 'pdf') {
+            body.innerHTML = '<iframe src="' + safeLink + '" style="width:100%;height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></iframe>';
         } else if (kind === 'image') {
-            body.innerHTML = '<div class="text-center"><img src="' + item.link + '" style="max-width:100%;max-height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></div>';
+            body.innerHTML = '<div class="text-center"><img src="' + safeLink + '" style="max-width:100%;max-height:60vh;border:1px solid #e9ebec;border-radius:.25rem;"></div>';
         } else {
             body.innerHTML = '<div class="text-center text-muted py-5"><i class="ri-file-3-line fs-1 d-block mb-2"></i>Preview not available for this file type.</div>';
         }
@@ -586,7 +633,7 @@
         document.getElementById('draft-preview-when').textContent = item.when;
         document.getElementById('draft-preview-note').textContent = item.note || '—';
         var downloadBtn = document.getElementById('draft-preview-download-btn');
-        downloadBtn.href = item.link;
+        downloadBtn.href = safeLink || '#';
         downloadBtn.setAttribute('download', item.filename);
 
         var sourceEl = document.getElementById((prefix || 'pr') + '-draft-modal');
@@ -618,11 +665,15 @@
         var previewBtn = (kind === 'pdf' || kind === 'image')
             ? '<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal(\'' + (prefix || 'pr') + '\', ' + idx + ')"><i class="ri-eye-line me-1"></i>Preview</button>'
             : '<span class="text-muted fs-12 align-self-center">Preview not available for this file type</span>';
+        var safeItemLink = sanitizeUrl(item.link);
+        var downloadBtnHtml = safeItemLink
+            ? ('<a href="' + safeItemLink + '" download="' + escapeHtml(item.filename) + '" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>')
+            : '<span class="text-muted fs-12 align-self-center">Link unavailable</span>';
         return '<div class="d-flex gap-3 mb-3">' + avatar +
             '<div class="flex-grow-1 border rounded p-3">' + header +
             '<div class="fs-13 fw-medium mt-1">' + escapeHtml(item.filename) + (sizeStr ? ' <span class="text-muted fs-12">(' + sizeStr + ')</span>' : '') + '</div>' +
             (item.note ? '<div class="fs-13 text-muted mt-1 fst-italic">"' + escapeHtml(item.note) + '"</div>' : '') +
-            '<div class="d-flex align-items-center gap-2 mt-2">' + previewBtn + ' <a href="' + escapeHtml(item.link) + '" download="' + escapeHtml(item.filename) + '" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a></div>' +
+            '<div class="d-flex align-items-center gap-2 mt-2">' + previewBtn + ' ' + downloadBtnHtml + '</div>' +
             '</div></div>';
     }
 
@@ -779,7 +830,7 @@
     function renderPRTable() {
         var body = document.getElementById('pr-monitor-body');
         if (!myRequests.length) {
-            body.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
+            body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
             return;
         }
         body.innerHTML = myRequests.map(function (r) {
@@ -801,8 +852,7 @@
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
                 '<td>' + (PR_STAGE_LABEL[r.status] || r.status) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
-                '<td class="fs-12">' + (r.notes ? escapeHtml(r.notes).slice(0, 60) + (r.notes.length > 60 ? '…' : '') : '—') + '</td>' +
-                '<td>' + renderAttachedDocs(r) + '</td>' +
+                '<td class="fs-12" style="max-width:220px;">' + renderExpandable(r.notes, 60) + '</td>' +
                 '<td class="text-end text-nowrap">' + actions + '</td></tr>';
         }).join('');
     }
@@ -810,7 +860,7 @@
     function renderDRTable() {
         var body = document.getElementById('dr-monitor-body');
         if (!myDocRequests.length) {
-            body.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">No document requests yet.</td></tr>';
+            body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No document requests yet.</td></tr>';
             return;
         }
         body.innerHTML = myDocRequests.map(function (r) {
@@ -826,14 +876,13 @@
             return '<tr data-dr-id="' + r.id + '">' +
                 '<td class="text-muted">#' + r.id + '</td>' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
-                '<td>' + escapeHtml(r.documentType) + '</td>' +
+                '<td style="max-width:200px;">' + renderExpandable(r.documentType, 60) + '</td>' +
                 '<td><span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span></td>' +
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
                 '<td>' + (DR_STAGE_LABEL[cs] || cs) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
-                '<td class="fs-12">' + (r.remark ? escapeHtml(r.remark).slice(0, 60) + (r.remark.length > 60 ? '…' : '') : '—') + '</td>' +
-                '<td>' + renderAttachedDocs(r) + '</td>' +
+                '<td class="fs-12" style="max-width:220px;">' + renderExpandable(r.remark, 60) + '</td>' +
                 '<td class="text-end text-nowrap">' + actions + '</td></tr>';
         }).join('');
     }
@@ -943,7 +992,7 @@
 
             return openFromQuery();
         }).catch(function () {
-            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
             document.getElementById('approval-progress-body').innerHTML = '';
         });
     }
@@ -954,7 +1003,7 @@
             renderDRTable();
             return openFromQuery();
         }).catch(function () {
-            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
         });
     }
 

@@ -1,4 +1,4 @@
-<!-- ========== Staff Sidebar (2026-08-27 View-Only → Staff migration) ========== -->
+<!-- ========== Staff Sidebar ========== -->
 <div class="app-menu navbar-menu">
     <div class="navbar-brand-box">
         <a href="/staff/dashboard" class="logo logo-dark">
@@ -55,7 +55,7 @@
             <a class="dropdown-item" href="/staff/settings"><i
                     class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span
                     class="align-middle">Settings</span></a>
-            <a class="dropdown-item" href="/logout"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i>
+            <a class="dropdown-item" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i>
                 <span class="align-middle">Logout</span></a>
         </div>
     </div>
@@ -155,7 +155,7 @@
 
                 <!-- Logout -->
                 <li class="nav-item">
-                    <a class="nav-link menu-link" href="/logout">
+                    <a class="nav-link menu-link" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });">
                         <i class="ri-logout-box-r-line"></i>
                         <span>Logout</span>
                     </a>

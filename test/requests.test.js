@@ -119,3 +119,68 @@ describe('Requests full parity: Staff reviews like Administrator', () => {
     expect(res.body.request.status).toBe('Approved');
   });
 });
+
+// UI/UX + Data Display Consistency fix — Administrator → Partnership Requests
+// (partnership_requests.ejs) renders GET /api/requests's response in the
+// exact order returned, with no client-side re-sort (prData.filter() never
+// reorders), so the newest-first default has to be enforced here, server-side.
+describe('GET /api/requests — newest-first default ordering', () => {
+  let orderIds = [];
+
+  afterAll(async () => {
+    if (orderIds.length) {
+      const db = await connectDB();
+      await db.collection('requests').deleteMany({ id: { $in: orderIds } });
+      orderIds = [];
+    }
+  });
+
+  async function submit(institution) {
+    const res = await submitterAgent.post('/api/requests').send({
+      institution, country: 'Testland', type: 'MOA', nature: 'Research', notes: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    orderIds.push(res.body.request.id);
+    return res.body.request.id;
+  }
+
+  test('Newest request (highest id — this collection has no createdAt, and updatedAt is overwritten on every review action) appears before older ones', async () => {
+    const idA = await submit('Jest Test Ordering Requests University A (oldest)');
+    const idB = await submit('Jest Test Ordering Requests University B (middle)');
+    const idC = await submit('Jest Test Ordering Requests University C (newest)');
+
+    const res = await staffAgent.get('/api/requests');
+    expect(res.status).toBe(200);
+    const ids = res.body.map(r => r.id);
+    const posA = ids.indexOf(idA), posB = ids.indexOf(idB), posC = ids.indexOf(idC);
+    expect(posC).toBeLessThan(posB);
+    expect(posB).toBeLessThan(posA);
+    expect(res.body[0].id).toBe(idC);
+
+    const idD = await submit('Jest Test Ordering Requests University D (newest of all)');
+    const res2 = await staffAgent.get('/api/requests');
+    expect(res2.body[0].id).toBe(idD);
+  });
+
+  test('Approving/rejecting an older request (which touches updatedAt) does not move it to the top', async () => {
+    const idOld = await submit('Jest Test Ordering Requests University OLD (to be approved)');
+    const idNew = await submit('Jest Test Ordering Requests University NEW (submitted after)');
+
+    // Approve the OLDER request — this updates its updatedAt/decidedBy, but
+    // must not change its position relative to the newer, untouched request.
+    const patchRes = await staffAgent.patch(`/api/requests/${idOld}`).send({ status: 'Approved' });
+    expect(patchRes.status).toBe(200);
+
+    const res = await staffAgent.get('/api/requests');
+    const ids = res.body.map(r => r.id);
+    expect(ids.indexOf(idNew)).toBeLessThan(ids.indexOf(idOld));
+  });
+
+  test('Ordering is strictly descending by id across the entire result set, not just the test records', async () => {
+    const res = await staffAgent.get('/api/requests');
+    const ids = res.body.map(r => r.id);
+    for (let i = 1; i < ids.length; i++) {
+      expect(ids[i - 1]).toBeGreaterThan(ids[i]);
+    }
+  });
+});
