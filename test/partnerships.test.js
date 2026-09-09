@@ -1,0 +1,285 @@
+// Covers the thesis's Black-Box Table 5 "Partnership Registry Module":
+// Add / Edit / Delete / View Partnership Record, plus the RBAC boundary
+// (Registry write access is Administrator-only as of 2026-07-23 — Auth.
+// Personnel lost Add/Edit/Delete here alongside the rest of their Registry
+// access removal; they retain read access via /api/partnerships and
+// /api/partnerships/stats, used elsewhere on their Dashboard/Monitoring pages).
+const request = require('supertest');
+const app = require('../cirl');
+const { connectDB, closeDB } = require('../db');
+const { createTestUser, loginAs, cleanupAll } = require('./helpers');
+
+let adminAgent, personnelAgent, staffAgent, createdId;
+
+beforeAll(async () => {
+  await connectDB();
+  adminAgent = request.agent(app);
+  await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
+  personnelAgent = request.agent(app);
+  await loginAs(personnelAgent, await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' }));
+  staffAgent = request.agent(app);
+  await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+});
+
+afterAll(async () => {
+  if (createdId) {
+    const db = await connectDB();
+    await db.collection('partnerships').deleteOne({ id: createdId });
+  }
+  await cleanupAll();
+  await closeDB();
+});
+
+test('Add Partnership Record: Administrator can create a partnership', async () => {
+  const res = await adminAgent.post('/api/partnerships').send({
+    inst: 'Jest Test University', country: 'Testland', region: 'Asia', type: 'MOA',
+    nature: 'Research', cat: 'International', unit: 'CCS',
+    start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active',
+    remarks: 'jesttest'
+  });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(res.body.partnership.inst).toBe('Jest Test University');
+  // Legacy singular string input is normalized to an array on write —
+  // backward-compatible input shape, array-only storage going forward.
+  expect(res.body.partnership.unit).toEqual(['CCS']);
+  createdId = res.body.partnership.id;
+});
+
+test('View Partnership Record: the new record appears in the full list (read access — any authorized role)', async () => {
+  const res = await personnelAgent.get('/api/partnerships');
+  expect(res.status).toBe(200);
+  const found = res.body.find(p => p.id === createdId);
+  expect(found).toBeDefined();
+  expect(found.status).toBe('Active');
+});
+
+test('Edit Partnership Record: fields update and persist', async () => {
+  const res = await adminAgent.patch(`/api/partnerships/${createdId}`).send({
+    inst: 'Jest Test University (Renamed)', status: 'Expired'
+  });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(res.body.partnership.inst).toBe('Jest Test University (Renamed)');
+  expect(res.body.partnership.status).toBe('Expired');
+});
+
+// Reversed 2026-08-27 (full-parity revision) — Staff shares the exact same
+// Registry CRUD authority as Administrator now.
+test('Staff CAN create, edit, and delete a partnership (full parity with Administrator)', async () => {
+  const createRes = await staffAgent.post('/api/partnerships').send({
+    inst: 'Jest Test University (Staff)', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+    unit: 'CCS', start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+  });
+  expect(createRes.status).toBe(200);
+  expect(createRes.body.success).toBe(true);
+  const staffCreatedId = createRes.body.partnership.id;
+
+  const editRes = await staffAgent.patch(`/api/partnerships/${staffCreatedId}`).send({ status: 'Expired' });
+  expect(editRes.status).toBe(200);
+  expect(editRes.body.partnership.status).toBe('Expired');
+
+  const deleteRes = await staffAgent.delete(`/api/partnerships/${staffCreatedId}`);
+  expect(deleteRes.status).toBe(200);
+});
+
+// Registry → Add New Partnership → CSPC-CIRL Details → Responsible Unit
+// (2026-09-03): the field became a multi-select combobox restricted to a
+// predefined unit list, backed by an array field. Administrator and Staff
+// share identical authority here, same as the rest of Registry CRUD.
+describe('Responsible Unit — multi-select combobox (array field)', () => {
+  test('Multiple Responsible Units are stored as an array and both are returned', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Multi-Unit University', country: 'Testland', region: 'Asia', type: 'MOA',
+      nature: 'Research', cat: 'International', unit: ['CCS', 'CIRL'],
+      start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CCS', 'CIRL']);
+    const id = res.body.partnership.id;
+
+    const listRes = await adminAgent.get('/api/partnerships');
+    const found = listRes.body.find(p => p.id === id);
+    expect(found.unit).toEqual(['CCS', 'CIRL']);
+
+    await adminAgent.delete(`/api/partnerships/${id}`);
+  });
+
+  test('Duplicate values in the same array are silently de-duplicated', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Dup-Unit University', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CCS', 'CCS', 'CIRL', 'CIRL'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CCS', 'CIRL']);
+    await adminAgent.delete(`/api/partnerships/${res.body.partnership.id}`);
+  });
+
+  test('A value outside the predefined list (e.g. a custom/free-text unit) is rejected', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Should Not Be Created', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CCS', 'Not A Real Unit'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unit must only contain/);
+  });
+
+  test('An empty Responsible Unit array is rejected (at least one is required)', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Should Not Be Created', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: [], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unit is required/);
+  });
+
+  test('Edit Partnership Record: Responsible Unit updates from one to multiple values and persists', async () => {
+    const createRes = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Unit Edit University', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: 'CETE', start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    const id = createRes.body.partnership.id;
+    expect(createRes.body.partnership.unit).toEqual(['CETE']);
+
+    const editRes = await adminAgent.patch(`/api/partnerships/${id}`).send({ unit: ['CETE', 'CNAS', 'CAMS'] });
+    expect(editRes.status).toBe(200);
+    expect(editRes.body.partnership.unit).toEqual(['CETE', 'CNAS', 'CAMS']);
+
+    const getRes = await adminAgent.get('/api/partnerships');
+    expect(getRes.body.find(p => p.id === id).unit).toEqual(['CETE', 'CNAS', 'CAMS']);
+
+    await adminAgent.delete(`/api/partnerships/${id}`);
+  });
+
+  test('Staff can create a partnership with multiple Responsible Units (full parity with Administrator)', async () => {
+    const res = await staffAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Multi-Unit (Staff)', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CILS', 'CIRL'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.partnership.unit).toEqual(['CILS', 'CIRL']);
+    await staffAgent.delete(`/api/partnerships/${res.body.partnership.id}`);
+  });
+
+  test('/api/partnerships/stats byUnit tallies a multi-unit partnership toward EACH of its units', async () => {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst: 'Jest Test Stats Multi-Unit', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: ['CNAS', 'CAMS'], start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active', remarks: 'jesttest'
+    });
+    const id = res.body.partnership.id;
+    try {
+      const statsRes = await adminAgent.get('/api/partnerships/stats');
+      expect(statsRes.body.byUnit.CNAS).toBeGreaterThanOrEqual(1);
+      expect(statsRes.body.byUnit.CAMS).toBeGreaterThanOrEqual(1);
+    } finally {
+      await adminAgent.delete(`/api/partnerships/${id}`);
+    }
+  });
+});
+
+test('Auth. Personnel cannot create, edit, or delete a partnership (Registry access removed 2026-07-23)', async () => {
+  const createRes = await personnelAgent.post('/api/partnerships').send({
+    inst: 'Should Not Be Created', country: 'X', region: 'Asia', type: 'MOA', nature: 'Research', remarks: 'jesttest'
+  });
+  expect(createRes.status).toBe(302);
+
+  const editRes = await personnelAgent.patch(`/api/partnerships/${createdId}`).send({ status: 'Active' });
+  expect(editRes.status).toBe(302);
+
+  const deleteRes = await personnelAgent.delete(`/api/partnerships/${createdId}`);
+  expect(deleteRes.status).toBe(302);
+
+  // Confirm none of the blocked calls above actually mutated the record.
+  const listRes = await personnelAgent.get('/api/partnerships');
+  const stillThere = listRes.body.find(p => p.id === createdId);
+  expect(stillThere).toBeDefined();
+  expect(stillThere.status).toBe('Expired');
+});
+
+test('Delete Partnership Record: Administrator removes it', async () => {
+  const res = await adminAgent.delete(`/api/partnerships/${createdId}`);
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+
+  const listRes = await personnelAgent.get('/api/partnerships');
+  expect(listRes.body.find(p => p.id === createdId)).toBeUndefined();
+  createdId = null; // already deleted, afterAll doesn't need to clean it up
+});
+
+test('/api/partnerships/stats reflects real aggregate counts (Active + Expiring Soon + Expired == total)', async () => {
+  const res = await personnelAgent.get('/api/partnerships/stats');
+  expect(res.status).toBe(200);
+  const { total, active, expiring, expired } = res.body;
+  expect(active + expiring + expired).toBeLessThanOrEqual(total);
+  expect(typeof res.body.byType).toBe('object');
+  expect(typeof res.body.byUnit).toBe('object');
+});
+
+// UI/UX + Data Display Consistency fix — Administrator/Staff Monitoring and
+// Partnership Registry are both driven by this one endpoint (registry-gridjs.
+// init.js and lifecycle-gridjs.init.js render rows in the exact order this
+// returns, with no client-side re-sort), so the newest-first default has to
+// be enforced here, server-side, once, for every consumer to agree.
+describe('GET /api/partnerships — newest-first default ordering', () => {
+  let orderIds = [];
+
+  afterAll(async () => {
+    if (orderIds.length) {
+      const db = await connectDB();
+      await db.collection('partnerships').deleteMany({ id: { $in: orderIds } });
+      orderIds = [];
+    }
+  });
+
+  async function create(inst) {
+    const res = await adminAgent.post('/api/partnerships').send({
+      inst, country: 'Testland', region: 'Asia', type: 'MOA', nature: 'Research',
+      cat: 'International', unit: 'CIRL', start: 'Jan 1, 2026', end: 'Jan 1, 2030', remarks: 'jesttest'
+    });
+    expect(res.status).toBe(200);
+    orderIds.push(res.body.partnership.id);
+    return res.body.partnership.id;
+  }
+
+  test('Newest record (highest id, the authoritative registry-creation-order field — this collection has no createdAt) appears before older ones', async () => {
+    const idA = await create('jesttest Ordering University A (oldest)');
+    const idB = await create('jesttest Ordering University B (middle)');
+    const idC = await create('jesttest Ordering University C (newest)');
+
+    const res = await adminAgent.get('/api/partnerships');
+    expect(res.status).toBe(200);
+    const ids = res.body.map(p => p.id);
+    const posA = ids.indexOf(idA), posB = ids.indexOf(idB), posC = ids.indexOf(idC);
+    expect(posC).toBeLessThan(posB);
+    expect(posB).toBeLessThan(posA);
+    // The very first row overall must be the newest of the three, since ids
+    // are strictly increasing and no other record was created after it.
+    expect(res.body[0].id).toBe(idC);
+
+    const idD = await create('jesttest Ordering University D (newest of all)');
+    const res2 = await adminAgent.get('/api/partnerships');
+    expect(res2.body[0].id).toBe(idD);
+    const ids2 = res2.body.map(p => p.id);
+    expect(ids2.indexOf(idD)).toBeLessThan(ids2.indexOf(idC));
+    expect(ids2.indexOf(idC)).toBeLessThan(ids2.indexOf(idB));
+    expect(ids2.indexOf(idB)).toBeLessThan(ids2.indexOf(idA));
+  });
+
+  test('Ordering is strictly descending by id across the entire result set, not just the test records', async () => {
+    const res = await adminAgent.get('/api/partnerships');
+    const ids = res.body.map(p => p.id);
+    for (let i = 1; i < ids.length; i++) {
+      expect(ids[i - 1]).toBeGreaterThan(ids[i]);
+    }
+  });
+
+  test('Staff sees the exact same newest-first order as Administrator (same endpoint, same query)', async () => {
+    const idA = await create('jesttest Ordering Staff-View A (oldest)');
+    const idB = await create('jesttest Ordering Staff-View B (newest)');
+
+    const staffRes = await staffAgent.get('/api/partnerships');
+    expect(staffRes.status).toBe(200);
+    const ids = staffRes.body.map(p => p.id);
+    expect(ids.indexOf(idB)).toBeLessThan(ids.indexOf(idA));
+  });
+});

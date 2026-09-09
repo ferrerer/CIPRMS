@@ -1,0 +1,30 @@
+ngrok http 3000
+
+To add all changes: git add .
+To add a specific file: git add note.txt
+Then commit: git commit -m "Your message"
+And push: git push
+
+Auth. Personnel (new pages)
+Page	URL
+Dashboard	http://localhost:3000/personnel/dashboard
+Registry	http://localhost:3000/personnel/registry
+Requests	http://localhost:3000/personnel/requests
+Lifecycle	http://localhost:3000/personnel/lifecycle
+Calendar	http://localhost:3000/personnel/calendar
+Reports	http://localhost:3000/personnel/reports
+Notifications	http://localhost:3000/personnel/notifications
+
+
+Staff (2026-08-27 View-Only → Staff migration — new pages)
+Page	URL
+Dashboard	http://localhost:3000/staff/dashboard
+Calendar	http://localhost:3000/staff/calendar
+Monitoring	http://localhost:3000/staff/lifecycle
+Requests	http://localhost:3000/staff/requests
+Registry	http://localhost:3000/staff/registry
+Document Library	http://localhost:3000/staff/documents
+Reports & Analytics	http://localhost:3000/staff/reports
+User Management	http://localhost:3000/staff/users
+Notifications	http://localhost:3000/staff/notifications
+Settings	http://localhost:3000/staff/settings

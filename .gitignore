@@ -1,0 +1,49 @@
+# Database backups (contain real user PII — never commit)
+Database_backup/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archived template and backup files
+_REDUNDANT_BACKUP/
+
+node.module/
+# Build outputs
+dist/
+build/
+
+# OCR temp uploads (deleted automatically after processing; never committed)
+uploads/tmp/*
+!uploads/tmp/.gitkeep
+
+# Archived Document Library uploads (runtime user data, not source)
+uploads/documents/*
+!uploads/documents/.gitkeep
+
+# Profile picture uploads (runtime user data, not source)
+uploads/avatars/*
+!uploads/avatars/.gitkeep

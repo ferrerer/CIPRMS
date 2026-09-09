@@ -1,0 +1,293 @@
+<header id="page-topbar">
+    <div class="layout-width">
+        <div class="navbar-header">
+            <div class="d-flex">
+                <!-- LOGO -->
+    <div class="navbar-brand-box horizontal-logo">
+        <% var homeDashboard = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/dashboard' : user.role === 'Auth. Personnel' ? '/personnel/dashboard' : user.role === 'potential_partner' ? '/partner/dashboard' : '/staff/dashboard') : '/'; %>
+        <% var notificationsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Auth. Personnel' ? '/personnel/notifications' : user.role === 'potential_partner' ? '/partner/notifications' : user.role === 'Staff' ? '/staff/notifications' : '/notifications') : '/notifications'; %>
+        <a href="<%= homeDashboard %>" class="logo logo-dark">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;margin-right:6px;">
+                <span style="font-size:18px;font-weight:700;color:#405189;vertical-align:middle;">CIPRMS</span>
+            </span>
+        </a>
+        <a href="<%= homeDashboard %>" class="logo logo-light">
+            <span class="logo-sm">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
+            </span>
+            <span class="logo-lg">
+                <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;margin-right:6px;">
+                <span style="font-size:18px;font-weight:700;color:#fff;vertical-align:middle;">CIPRMS</span>
+            </span>
+        </a>
+    </div>
+
+                <button type="button" class="btn btn-sm px-3 fs-16 header-item vertical-menu-btn topnav-hamburger material-shadow-none" id="topnav-hamburger-icon" aria-label="Toggle sidebar menu">
+                    <span class="hamburger-icon">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </span>
+                </button>
+
+                <!-- App Search -->
+                <form class="app-search d-none d-md-block">
+                    <div class="position-relative">
+                        <input type="text" class="form-control" placeholder="Search pages, partnerships…" autocomplete="off" id="search-options" value="">
+                        <span class="mdi mdi-magnify search-widget-icon"></span>
+                        <span class="mdi mdi-close-circle search-widget-icon search-widget-icon-close d-none" id="search-close-options"></span>
+                    </div>
+                    <div class="dropdown-menu dropdown-menu-lg" id="search-dropdown">
+                        <div data-simplebar style="max-height: 320px;">
+                            <div class="dropdown-header">
+                                <h6 class="text-overflow text-muted mb-0 text-uppercase">Recent Searches</h6>
+                            </div>
+                            <div class="dropdown-item bg-transparent text-wrap">
+                                <a href="/lifecycle" class="btn btn-soft-secondary btn-sm rounded-pill">Monitoring <i class="mdi mdi-magnify ms-1"></i></a>
+                            </div>
+                            <div class="dropdown-header mt-2">
+                                <h6 class="text-overflow text-muted mb-1 text-uppercase">Pages</h6>
+                            </div>
+                            <a href="/dashboard" class="dropdown-item notify-item">
+                                <i class="ri-dashboard-2-line align-middle fs-18 text-muted me-2"></i>
+                                <span>Dashboard</span>
+                            </a>
+                            <!-- Registry — removed 2026-09-05: consolidated into Monitoring
+                                 (/registry still exists as a redirect to /lifecycle). -->
+                            <a href="/lifecycle" class="dropdown-item notify-item">
+                                <i class="ri-refresh-line align-middle fs-18 text-muted me-2"></i>
+                                <span>Monitoring (Partnership Registry)</span>
+                            </a>
+                            <a href="/calendar" class="dropdown-item notify-item">
+                                <i class="ri-calendar-2-line align-middle fs-18 text-muted me-2"></i>
+                                <span>Partnership Calendar</span>
+                            </a>
+                        </div>
+                        <div class="text-center pt-3 pb-1">
+                            <a href="/lifecycle" class="btn btn-primary btn-sm">View All Records <i class="ri-arrow-right-line ms-1"></i></a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="d-flex align-items-center">
+
+                <!-- Mobile Search -->
+                <div class="dropdown d-md-none topbar-head-dropdown header-item">
+                    <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle" id="page-header-search-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Search">
+                        <i class="bx bx-search fs-22"></i>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-0" aria-labelledby="page-header-search-dropdown">
+                        <form class="p-3">
+                            <div class="form-group m-0">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" placeholder="Search pages, partnerships...">
+                                    <button class="btn btn-primary" type="submit"><i class="mdi mdi-magnify"></i></button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Fullscreen -->
+                <div class="ms-1 header-item d-none d-sm-flex">
+                    <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle" data-toggle="fullscreen" aria-label="Toggle fullscreen">
+                        <i class='bx bx-fullscreen fs-22'></i>
+                    </button>
+                </div>
+
+                <!-- Dark Mode -->
+                <div class="ms-1 header-item d-none d-sm-flex">
+                    <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle light-dark-mode" aria-label="Toggle dark mode">
+                        <i class='bx bx-moon fs-22'></i>
+                    </button>
+                </div>
+
+                <!-- Notifications -->
+                <div class="dropdown topbar-head-dropdown ms-1 header-item" id="notificationDropdown">
+                    <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle" id="page-header-notifications-dropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+                        <i class='bx bx-bell fs-22'></i>
+                        <span class="position-absolute topbar-badge fs-10 translate-middle badge rounded-pill bg-danger" id="notif-badge" style="display:none;">0<span class="visually-hidden">unread notifications</span></span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-lg dropdown-menu-end p-0" aria-labelledby="page-header-notifications-dropdown">
+                        <div class="dropdown-head bg-primary bg-pattern rounded-top">
+                            <div class="p-3">
+                                <div class="row align-items-center">
+                                    <div class="col">
+                                        <h6 class="m-0 fs-16 fw-semibold text-white">Notifications</h6>
+                                    </div>
+                                    <div class="col-auto dropdown-tabs">
+                                        <span class="badge bg-light text-body fs-13" id="notif-count-badge">0 New</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="px-2 pt-2">
+                                <ul class="nav nav-tabs dropdown-tabs nav-tabs-custom" data-dropdown-tabs="true" id="notificationItemsTab" role="tablist">
+                                    <li class="nav-item waves-effect waves-light">
+                                        <a class="nav-link active" data-bs-toggle="tab" href="#all-noti-tab" role="tab">All</a>
+                                    </li>
+                                    <li class="nav-item waves-effect waves-light">
+                                        <a class="nav-link" data-bs-toggle="tab" href="#alerts-tab" role="tab">Alerts</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="tab-content" id="notificationItemsTabContent">
+                            <div class="tab-pane fade show active py-2 ps-2" id="all-noti-tab" role="tabpanel">
+                                <div data-simplebar style="max-height: 300px;" class="pe-2" id="notif-list">
+                                    <div class="text-center text-muted py-4 fs-13">Loading…</div>
+                                </div>
+                                <div class="my-3 text-center view-all">
+                                    <a href="<%= notificationsHref %>" class="btn btn-soft-success waves-effect waves-light">View All Notifications <i class="ri-arrow-right-line align-middle"></i></a>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade py-2 ps-2" id="alerts-tab" role="tabpanel">
+                                <div data-simplebar style="max-height: 300px;" class="pe-2" id="notif-alerts-list">
+                                    <div class="text-center text-muted py-4 fs-13">Loading…</div>
+                                </div>
+                                <div class="my-2 text-center view-all">
+                                    <a href="<%= notificationsHref %>" class="btn btn-soft-primary btn-sm">View Unread Notifications <i class="ri-arrow-right-line align-middle"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Dropdown -->
+                <div class="dropdown ms-sm-3 header-item topbar-user">
+                    <button type="button" class="btn material-shadow-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="d-flex align-items-center">
+                            <img class="rounded-circle header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+                            <span class="text-start ms-xl-2">
+                                <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text"><%= typeof user !== 'undefined' && user ? user.name || 'User' : 'User' %></span>
+                                <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : (user.role || '')) : '' %></span>
+                            </span>
+                        </span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end">
+                        <h6 class="dropdown-header">Welcome!</h6>
+                <% var settingsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/admin/settings' : user.role === 'Auth. Personnel' ? '/personnel/settings' : user.role === 'potential_partner' ? '/partner/settings' : user.role === 'Staff' ? '/staff/settings' : '/') : '/'; %>
+                <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Profile</span></a>
+                <a class="dropdown-item" href="<%= notificationsHref %>"><i class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Notifications</span></a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Settings</span></a>
+                <a class="dropdown-item" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Logout</span></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- removeNotificationModal -->
+<div id="removeNotificationModal" class="modal fade zoomIn" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mt-2 text-center">
+                    <div class="mt-4 pt-2 fs-15 mx-4 mx-sm-5">
+                        <h4>Are you sure?</h4>
+                        <p class="text-muted mx-4 mb-0">Are you sure you want to remove this Notification?</p>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-center mt-4 mb-2">
+                    <button type="button" class="btn w-sm btn-light" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn w-sm btn-danger" id="delete-notification">Yes, Delete It!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Load notification badge
+fetch('/api/notifications/unread-count')
+    .then(r => r.json())
+    .then(d => {
+        const count = d.count || 0;
+        const badge = document.getElementById('notif-badge');
+        const countBadge = document.getElementById('notif-count-badge');
+        if (badge && count > 0) {
+            badge.textContent = count;
+            badge.style.display = '';
+        }
+        if (countBadge) countBadge.textContent = count + ' New';
+    }).catch(() => {});
+
+// ── Notification bell dropdown — real data, click-to-navigate ───────────────
+// Reuses the same /api/notifications/mine feed and PATCH-mark-read pattern as
+// the full Notifications page (views/administrator/notifications.ejs) —
+// clicking an item here marks it read then jumps straight to its `link`
+// (which for Partnership/Document Requests deep-links into that request's
+// detail modal, same as the full page already does).
+(function () {
+    let notifCache = [];
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function renderNotifItem(n) {
+        const color = n.color || 'primary';
+        const icon = n.icon || 'ri-notification-3-line';
+        return `<div class="text-reset notification-item d-block dropdown-item position-relative${n.unread ? ' bg-light-subtle' : ''}" data-notif-id="${n.id}" style="cursor:pointer;">
+            <div class="d-flex">
+                <div class="avatar-xs me-3 flex-shrink-0">
+                    <span class="avatar-title bg-${color}-subtle text-${color} rounded-circle fs-16"><i class="${icon}"></i></span>
+                </div>
+                <div class="flex-grow-1">
+                    <h6 class="mt-0 mb-1 lh-base fs-13 ${n.unread ? 'fw-semibold' : 'fw-normal text-muted'}">${escapeHtml(n.title)}</h6>
+                    <p class="mb-1 fs-12 text-muted">${escapeHtml(n.desc || '')}</p>
+                    <p class="mb-0 fs-11 fw-medium text-uppercase text-muted"><i class="mdi mdi-clock-outline"></i> ${escapeHtml(n.time || '')}</p>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function handleNotifClick(id) {
+        const n = notifCache.find(x => x.id === id);
+        if (n && n.unread) {
+            fetch('/api/notifications/' + id, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false })
+            }).catch(() => {});
+        }
+        if (n && n.link) window.location.href = n.link;
+    }
+
+    function renderList(elId, items, emptyMsg) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        if (!items.length) {
+            el.innerHTML = `<div class="text-center text-muted py-4 fs-13">${emptyMsg}</div>`;
+            return;
+        }
+        el.innerHTML = items.map(renderNotifItem).join('');
+        el.querySelectorAll('[data-notif-id]').forEach(item => {
+            item.addEventListener('click', () => handleNotifClick(parseInt(item.dataset.notifId)));
+        });
+    }
+
+    function loadDropdownNotifications() {
+        fetch('/api/notifications/mine')
+            .then(r => r.json())
+            .then(data => {
+                notifCache = Array.isArray(data) ? data : [];
+                renderList('notif-list', notifCache.slice(0, 6), 'No notifications yet.');
+                renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, 6), 'No unread notifications.');
+            })
+            .catch(() => {
+                renderList('notif-list', [], 'Could not load notifications.');
+                renderList('notif-alerts-list', [], 'Could not load notifications.');
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadDropdownNotifications);
+})();
+</script>
