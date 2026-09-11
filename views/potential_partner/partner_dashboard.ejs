@@ -3,6 +3,7 @@
     data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 
 <head>
+    <%- include('../partials/ui-state-init') %>
     <meta charset="utf-8" />
     <title>Dashboard | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -401,7 +402,7 @@
                 const code = COUNTRY_CODE[country];
                 const flag = code
                     ? `<img src="https://flagcdn.com/w40/${code}.png" alt="${country}" class="rounded" style="width:32px;height:20px;object-fit:cover;">`
-                    : `<span class="avatar-title bg-light text-muted rounded" style="width:32px;height:20px;font-size:11px;"><i class="ri-earth-line"></i></span>`;
+                    : `<span class="avatar-title bg-light-subtle text-muted rounded" style="width:32px;height:20px;font-size:11px;"><i class="ri-earth-line"></i></span>`;
                 const pct = Math.round((count / max) * 100);
                 return `<div class="d-flex align-items-center mb-3">
         <div class="flex-shrink-0 me-3">${flag}</div>

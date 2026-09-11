@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
+    <%- include('../partials/ui-state-init') %>
     <meta charset="utf-8" />
     <title>Requests | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,9 +74,9 @@
       .section-tab {
           padding: .45rem 1.15rem; border-radius: 20px; font-size: .82rem; font-weight: 600;
           cursor: pointer; border: 2px solid transparent; transition: all .18s;
-          display: flex; align-items: center; gap: .4rem; background: #f3f4fa; color: #495057;
+          display: flex; align-items: center; gap: .4rem; background: var(--vz-light-bg-subtle); color: var(--vz-body-color);
       }
-      .section-tab:hover { background: #e8eaf6; color: #405189; }
+      .section-tab:hover { background: var(--vz-primary-bg-subtle); color: #405189; }
       .section-tab.active { background: #405189; color: #fff; border-color: #405189; }
 
       /* ── CSPC-F-CIRL-04 "Documents Request Form" — styled to resemble the
@@ -90,19 +91,19 @@
       .dr-form-header .dr-form-subtitle { font-size: .75rem; color: #878a99; margin: 0; }
       .dr-form-header .dr-form-code { margin-left: auto; font-size: .72rem; font-weight: 700; color: #405189; text-align: right; }
 
-      .dr-form-table { border: 1px solid #dfe3ea; border-radius: 6px; overflow: hidden; margin-top: 16px; }
-      .dr-row { display: flex; border-bottom: 1px solid #dfe3ea; }
+      .dr-form-table { border: 1px solid var(--vz-border-color); border-radius: 6px; overflow: hidden; margin-top: 16px; }
+      .dr-row { display: flex; border-bottom: 1px solid var(--vz-border-color); }
       .dr-row:last-child { border-bottom: none; }
       .dr-label {
-          flex: 0 0 230px; background: #f8f9fb; font-weight: 600; font-size: .78rem;
-          text-transform: uppercase; letter-spacing: .3px; color: #495057;
-          padding: 12px 16px; display: flex; align-items: center; border-right: 1px solid #dfe3ea;
+          flex: 0 0 230px; background: var(--vz-light-bg-subtle); font-weight: 600; font-size: .78rem;
+          text-transform: uppercase; letter-spacing: .3px; color: var(--vz-body-color);
+          padding: 12px 16px; display: flex; align-items: center; border-right: 1px solid var(--vz-border-color);
       }
       .dr-value { flex: 1; padding: 10px 16px; display: flex; align-items: center; min-width: 0; }
       .dr-row-tall .dr-value { align-items: flex-start; padding-top: 12px; }
       .dr-readonly {
-          color: #21252980; color: #313a46; font-weight: 500; font-size: .875rem;
-          background: #fbfbfc; border: 1px dashed #dfe3ea; border-radius: 4px;
+          color: var(--vz-body-color); font-weight: 500; font-size: .875rem;
+          background: var(--vz-light-bg-subtle); border: 1px dashed var(--vz-border-color); border-radius: 4px;
           padding: 6px 10px; width: 100%;
       }
       .dr-readonly small { display: block; color: #878a99; font-weight: 400; font-size: .68rem; margin-top: 2px; }
@@ -113,7 +114,7 @@
 
       @media (max-width: 576px) {
           .dr-row { flex-direction: column; }
-          .dr-label { border-right: none; border-bottom: 1px solid #dfe3ea; flex: 1 1 auto; }
+          .dr-label { border-right: none; border-bottom: 1px solid var(--vz-border-color); flex: 1 1 auto; }
           .dr-form-header { flex-wrap: wrap; }
           .dr-form-header .dr-form-code { margin-left: 0; text-align: left; }
       }

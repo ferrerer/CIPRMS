@@ -121,7 +121,7 @@
                                         <h6 class="m-0 fs-16 fw-semibold text-white">Notifications</h6>
                                     </div>
                                     <div class="col-auto dropdown-tabs">
-                                        <span class="badge bg-light text-body fs-13" id="notif-count-badge">0 New</span>
+                                        <span class="badge bg-light-subtle text-body fs-13" id="notif-count-badge">0 New</span>
                                     </div>
                                 </div>
                             </div>
@@ -266,12 +266,35 @@ fetch('/api/notifications/unread-count')
         if (!el) return;
         if (!items.length) {
             el.innerHTML = `<div class="text-center text-muted py-4 fs-13">${emptyMsg}</div>`;
-            return;
+        } else {
+            el.innerHTML = items.map(renderNotifItem).join('');
+            el.querySelectorAll('[data-notif-id]').forEach(item => {
+                item.addEventListener('click', () => handleNotifClick(parseInt(item.dataset.notifId)));
+            });
         }
-        el.innerHTML = items.map(renderNotifItem).join('');
-        el.querySelectorAll('[data-notif-id]').forEach(item => {
-            item.addEventListener('click', () => handleNotifClick(parseInt(item.dataset.notifId)));
-        });
+        // Vendor app.js's own init (function H()) independently checks this
+        // same .tab-pane for .notification-item elements shortly after page
+        // load, and — if it runs before this fetch has resolved — appends
+        // its own "Hey! You have no any notifications" placeholder and
+        // hides the "View All" link, based on the container being empty at
+        // that earlier moment. That race used to be masked by the
+        // render-blocking Toastify/Choices/Flatpickr document.write() calls
+        // removed from plugins.js (2026-09-10 UI-state task) — those
+        // accidentally delayed app.js long enough for this fetch to always
+        // finish first. With that delay gone, H() can now run first and
+        // leave a stale placeholder sitting next to the real list once it
+        // loads. Since this render is always the authoritative, up-to-date
+        // state, clear anything H() left behind and restore "View All" to
+        // match reality — this keeps app.js itself untouched (its own
+        // behavior is still correct for the vendor's other static dropdowns)
+        // while fixing the actual collision.
+        const pane = el.closest('.tab-pane');
+        if (pane) {
+            const stale = pane.querySelector('.empty-notification-elem');
+            if (stale) stale.remove();
+            const viewAll = pane.querySelector('.view-all');
+            if (viewAll) viewAll.style.display = items.length ? 'block' : 'none';
+        }
     }
 
     function loadDropdownNotifications() {

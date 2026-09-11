@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
+    <%- include('../partials/ui-state-init') %>
     <meta charset="utf-8" />
     <title>Monitoring | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -119,11 +120,11 @@
                                             <tr>
                                                 <th>Institution</th><th>Request Type</th><th>Status</th>
                                                 <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
-                                                <th>Administrator</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                                <th>Administrator</th><th class="text-end">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="pr-monitor-body">
-                                            <tr><td colspan="9" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                            <tr><td colspan="8" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -147,11 +148,11 @@
                                             <tr>
                                                 <th>Institution</th><th>Request Type</th><th>Status</th>
                                                 <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
-                                                <th>Administrator</th><th>Attached Documents</th><th class="text-end">Actions</th>
+                                                <th>Administrator</th><th class="text-end">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="dr-monitor-body">
-                                            <tr><td colspan="9" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                            <tr><td colspan="8" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -415,37 +416,12 @@
         return isNaN(d) ? (fallback || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
-    // Attached Documents = the submitter's own OCR-attached file (Partnership
-    // Requests only) plus any supporting documents CIRL staff uploaded during
-    // review — both are already-archived Document Library entries, never a
-    // second copy of the same file.
-    // Attached Documents (the row's summary column — this page has no
-    // separate "View Details" modal). Reuses the same "View Draft" timeline
-    // item builders (buildDraftTimelineItems / buildDRDraftTimelineItems,
-    // defined further down this file) so every file gets a real Preview
-    // (via the shared draft-preview-modal) and Download (original filename
-    // preserved) action, not just a single bare icon-link. Items are cached
-    // under a key unique to this request (not the shared 'pr'/'dr' slot the
-    // draft modal uses) since many rows render their own summary at once.
-    function renderAttachedDocs(r) {
-        var isDR = typeof r.documentType !== 'undefined';
-        var allItems = isDR ? buildDRDraftTimelineItems(r) : buildDraftTimelineItems(r);
-        var items = allItems.filter(function (it) { return it.link; });
-        if (!items.length) return '<span class="text-muted fs-12">—</span>';
-        var key = 'attach-' + (isDR ? 'dr' : 'pr') + '-' + r.id;
-        DRAFT_TIMELINE_ITEMS[key] = items;
-        return items.map(function (it, idx) {
-            var kind = fileKind(it.filename, it.fileType);
-            var previewBtn = (kind === 'pdf' || kind === 'image')
-                ? '<button type="button" class="btn btn-sm btn-soft-primary" title="Preview: ' + escapeHtml(it.filename) + '" onclick="openDraftPreviewModal(\'' + key + '\', ' + idx + ')"><i class="ri-eye-line"></i></button>'
-                : '';
-            return '<div class="d-flex align-items-center gap-1 mb-1">' +
-                '<span class="text-truncate fs-12" style="max-width:100px;" title="' + escapeHtml(it.filename) + '">' + escapeHtml(it.filename) + '</span>' +
-                previewBtn +
-                '<a href="' + escapeHtml(it.link) + '" download="' + escapeHtml(it.filename) + '" class="btn btn-sm btn-soft-success" title="Download: ' + escapeHtml(it.filename) + '"><i class="ri-download-2-line"></i></a>' +
-                '</div>';
-        }).join('');
-    }
+    // Attached documents are no longer duplicated as a table column
+    // (2026-09-10) — they remain fully accessible via the existing "View
+    // Draft" button/modal on each row (openDraftModal/openDRDraftModal
+    // below), which independently renders every attached file with real
+    // Preview and Download actions through the same
+    // buildDraftTimelineItems/buildDRDraftTimelineItems item builders.
 
     function setCount(id, n) {
         var el = document.getElementById(id);
@@ -709,7 +685,7 @@
     function renderPRTable() {
         var body = document.getElementById('pr-monitor-body');
         if (!myRequests.length) {
-            body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
             return;
         }
         body.innerHTML = myRequests.map(function (r) {
@@ -725,15 +701,15 @@
                 actions += ' <button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line me-1"></i>Draft</button>';
             }
             if (!actions) actions = '<span class="text-muted fs-12">—</span>';
+            var prType = r.isRenewal ? 'Renewal' : 'Partnership';
             return '<tr data-pr-id="' + r.id + '">' +
                 '<td>' + (escapeHtml(r.institution) || '<span class="text-muted">(untitled draft)</span>') + '</td>' +
-                '<td>' + (r.isRenewal ? 'Renewal' : 'Partnership') + '</td>' +
+                '<td class="text-truncate" style="max-width:200px" title="' + prType + '">' + prType + '</td>' +
                 '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
                 '<td>' + (PR_STAGE_LABEL[r.status] || r.status) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
-                '<td>' + renderAttachedDocs(r) + '</td>' +
                 '<td class="text-end">' + actions + '</td></tr>';
         }).join('');
     }
@@ -741,7 +717,7 @@
     function renderDRTable() {
         var body = document.getElementById('dr-monitor-body');
         if (!myDocRequests.length) {
-            body.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">No document requests yet.</td></tr>';
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No document requests yet.</td></tr>';
             return;
         }
         body.innerHTML = myDocRequests.map(function (r) {
@@ -755,13 +731,12 @@
                     : '');
             return '<tr data-dr-id="' + r.id + '">' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
-                '<td>' + escapeHtml(r.documentType) + '</td>' +
+                '<td class="text-truncate" style="max-width:200px" title="' + escapeHtml(r.documentType || '') + '">' + escapeHtml(r.documentType) + '</td>' +
                 '<td><span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span></td>' +
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
                 '<td>' + (DR_STAGE_LABEL[cs] || cs) + '</td>' +
                 '<td>' + (r.decidedBy || '—') + '</td>' +
-                '<td>' + renderAttachedDocs(r) + '</td>' +
                 '<td class="text-end">' + actions + '</td></tr>';
         }).join('');
     }
@@ -808,7 +783,7 @@
 
             return openFromQuery();
         }).catch(function () {
-            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
             document.getElementById('approval-progress-body').innerHTML = '';
         });
     }
@@ -819,7 +794,7 @@
             renderDRTable();
             return openFromQuery();
         }).catch(function () {
-            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="9" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
         });
     }
 

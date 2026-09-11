@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
+    <%- include('../partials/ui-state-init') %>
     <meta charset="utf-8" />
     <title>Document Library | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,19 +15,19 @@
     <!-- Custom Css -->
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
     <style>
-        .doc-card { transition: all 0.2s; border: 1px solid #e9ebec !important; }
+        .doc-card { transition: all 0.2s; border: 1px solid var(--vz-border-color) !important; }
         .doc-card:hover { transform: translateY(-3px); border-color: #405189 !important; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
         .ocr-spinner { display: none; margin: 20px auto; }
         .extracted-data { display: none; }
         .folder-list .list-group-item { border: none; padding: 0.6rem 1.25rem; transition: all 0.2s; display: flex; align-items: center; }
-        .folder-list .list-group-item:hover { background-color: #f3f6f9; }
-        .folder-list .list-group-item.active { background-color: #e2e5ed; color: #405189; font-weight: 600; }
+        .folder-list .list-group-item:hover { background-color: var(--vz-light-bg-subtle); }
+        .folder-list .list-group-item.active { background-color: var(--vz-primary-bg-subtle); color: #405189; font-weight: 600; }
         .folder-list .list-group-item i.folder-icon { font-size: 16px; width: 24px; }
         .folder-actions { display: none; white-space: nowrap; }
         .folder-list .list-group-item:hover .folder-actions { display: inline-block; }
         .folder-actions i { cursor: pointer; padding: 2px 4px; }
         .folder-actions i:hover { color: #405189; }
-        .stat-box { padding: 12px; border: 1px solid #e9ebec; border-radius: 8px; text-center: center; }
+        .stat-box { padding: 12px; border: 1px solid var(--vz-border-color); border-radius: 8px; text-center: center; }
         .tag-pills-container { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
         .tag-pill { margin-right: 8px; cursor: pointer; }
     </style>
@@ -269,7 +270,7 @@
                 </div>
                 <div class="col-12 mb-3">
                     <label class="form-label">Full OCR Text (Preview)</label>
-                    <textarea class="form-control bg-light" rows="4" readonly id="res-rawtext"></textarea>
+                    <textarea class="form-control bg-light-subtle" rows="4" readonly id="res-rawtext"></textarea>
                 </div>
             </div>
         </div>
@@ -419,7 +420,7 @@
         html += `
           <div class="dropdown-divider"></div>
           <a href="#" class="list-group-item list-group-item-action ${currentFolder === 'archived' ? 'active' : ''}" onclick="filterFolder('archived');return false;">
-            <i class="ri-archive-fill text-muted folder-icon"></i> Archived <span class="badge bg-light text-dark ms-auto">${archivedCount}</span>
+            <i class="ri-archive-fill text-muted folder-icon"></i> Archived <span class="badge bg-secondary-subtle text-secondary ms-auto">${archivedCount}</span>
           </a>`;
         container.innerHTML = html;
     }
@@ -564,7 +565,7 @@
                         <div class="card-body pb-1">
                             <div class="d-flex align-items-start mb-3">
                                 <div class="avatar-sm flex-shrink-0 me-3">
-                                    <span class="avatar-title bg-light rounded fs-3"><i class="${icon}"></i></span>
+                                    <span class="avatar-title bg-light-subtle rounded fs-3"><i class="${icon}"></i></span>
                                 </div>
                                 <div class="flex-grow-1 overflow-hidden">
                                     <h5 class="fs-14 mb-1 text-truncate" title="${doc.title}">${doc.title}</h5>
@@ -624,7 +625,7 @@
 
             return `
                 <tr>
-                    <td><span class="avatar-title bg-light rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="${icon}"></i></span></td>
+                    <td><span class="avatar-title bg-light-subtle rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="${icon}"></i></span></td>
                     <td class="text-truncate" style="max-width:240px" title="${doc.title}">${doc.title}</td>
                     <td class="text-truncate" style="max-width:180px">${doc.institution || doc.partner || '—'}</td>
                     <td class="text-truncate" style="max-width:180px" title="${doc.type || ''}">${doc.type}</td>

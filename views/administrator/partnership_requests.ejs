@@ -3,6 +3,7 @@
   data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 
 <head>
+    <%- include('../partials/ui-state-init') %>
   <meta charset="utf-8" />
   <title>Requests | CIPRMS-CSPC-CIRL</title>
   <meta name="description" content="Manage Partnership Requests and Document Requests for CIPRMS CSPC-CIRL">
@@ -92,20 +93,20 @@
       font-size: .84rem;
       font-weight: 600;
       cursor: pointer;
-      border: 2px solid #e9ecef;
+      border: 2px solid var(--vz-border-color);
       transition: all .2s ease;
       display: flex;
       align-items: center;
       gap: .75rem;
       text-decoration: none;
-      color: #495057;
-      background: #fff;
+      color: var(--vz-body-color);
+      background: var(--vz-card-bg);
       box-shadow: 0 1px 4px rgba(0,0,0,.05);
     }
 
     .section-tab:hover {
       border-color: #405189;
-      background: #f0f3ff;
+      background: var(--vz-primary-bg-subtle);
       color: #405189;
       transform: translateY(-2px);
       box-shadow: 0 4px 14px rgba(64,81,137,.12);
@@ -132,7 +133,7 @@
     }
 
     .section-tab:not(.active) .section-tab-icon {
-      background: #eef1fb;
+      background: var(--vz-primary-bg-subtle);
       color: #405189;
     }
 
@@ -144,11 +145,11 @@
     /* DR variant accent */
     .section-tab[id="tab-dr"]:not(.active):hover {
       border-color: #0ab39c;
-      background: #f0fdf4;
+      background: var(--vz-success-bg-subtle);
       color: #0ab39c;
     }
     .section-tab[id="tab-dr"]:not(.active):hover .section-tab-icon {
-      background: #d1fae5;
+      background: var(--vz-success-bg-subtle);
       color: #0ab39c;
     }
     .section-tab[id="tab-dr"].active {
@@ -182,11 +183,11 @@
       flex-shrink: 0;
     }
     .section-tab:not(.active) .tab-count {
-      background: #e2e7f8;
+      background: var(--vz-primary-bg-subtle);
       color: #405189;
     }
     .section-tab[id="tab-dr"]:not(.active) .tab-count {
-      background: #d1fae5;
+      background: var(--vz-success-bg-subtle);
       color: #0ab39c;
     }
 
@@ -251,11 +252,11 @@
     .detail-value {
       font-weight: 600;
       font-size: .9rem;
-      color: #212529;
+      color: var(--vz-body-color);
     }
 
     .detail-box {
-      background: #f8f9fa;
+      background: var(--vz-light-bg-subtle);
       border-radius: 8px;
       padding: 1rem;
     }
@@ -572,7 +573,7 @@
   <div class="modal fade zoomIn" id="pr-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-light p-3">
+        <div class="modal-header bg-light-subtle p-3">
           <h5 class="modal-title" id="pr-modal-title">
             <i class="ri-building-4-line me-2 text-primary"></i>Partnership Request Details
           </h5>
@@ -588,7 +589,7 @@
   <div class="modal fade zoomIn" id="pr-draft-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-light p-3">
+        <div class="modal-header bg-light-subtle p-3">
           <h5 class="modal-title" id="pr-draft-modal-title">
             <i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration
           </h5>
@@ -624,7 +625,7 @@
   <div class="modal fade zoomIn" id="dr-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
-        <div class="modal-header bg-light p-3">
+        <div class="modal-header bg-light-subtle p-3">
           <h5 class="modal-title">
             <i class="ri-file-shield-2-line me-2 text-secondary"></i>Document Request Details
           </h5>
@@ -679,7 +680,7 @@
               <div class="row g-2">
                 <div class="col-6">
                   <label class="form-label detail-label">Released By</label>
-                  <div class="form-control form-control-sm bg-light text-muted" id="dr-released-by-display">Recorded automatically as you when the status moves to Release</div>
+                  <div class="form-control form-control-sm bg-light-subtle text-muted" id="dr-released-by-display">Recorded automatically as you when the status moves to Release</div>
                 </div>
                 <div class="col-6">
                   <label class="form-label detail-label">Received By</label>
@@ -708,7 +709,7 @@
   <div class="modal fade zoomIn" id="dr-draft-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-light p-3">
+        <div class="modal-header bg-light-subtle p-3">
           <h5 class="modal-title" id="dr-draft-modal-title">
             <i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration
           </h5>
@@ -746,7 +747,7 @@
   <div class="modal fade zoomIn" id="draft-preview-modal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-light p-3">
+        <div class="modal-header bg-light-subtle p-3">
           <h5 class="modal-title"><i class="ri-eye-line me-2 text-primary"></i>Draft Preview</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -844,7 +845,7 @@
         'Received': 'bg-warning-subtle text-warning',
         'Preparing': 'bg-info-subtle text-info',
         'Awaiting for Approval': 'bg-primary-subtle text-primary',
-        'Release': 'bg-dark-subtle text-dark',
+        'Release': 'bg-dark-subtle text-dark-emphasis',
         'Completed': 'bg-success-subtle text-success'
       };
       return `<span class="badge ${m[s] || 'bg-secondary-subtle text-secondary'}">${s}</span>`;
@@ -861,7 +862,7 @@
       const items = drDocTypeItems(r);
       if (!items.length) return '<span class="badge badge-type bg-secondary-subtle text-secondary border border-secondary-subtle">—</span>';
       const first = `<span class="badge badge-type bg-secondary-subtle text-secondary border border-secondary-subtle" title="${escapeHtml(items.join(', '))}">${escapeHtml(items[0])}</span>`;
-      const more = items.length > 1 ? ` <span class="badge bg-light text-muted border">+${items.length - 1} more</span>` : '';
+      const more = items.length > 1 ? ` <span class="badge bg-light-subtle text-muted border">+${items.length - 1} more</span>` : '';
       return first + more;
     }
     function drDocTypeList(r) {
@@ -1028,11 +1029,14 @@
       const notes = escapeHtml(r.notes || '—');
       const isReview = IS_ADMIN && (r.status === 'Pending' || r.status === 'Under Review');
 
+      // Uses Velzon's own theme variables (already Dark-Mode-aware — same
+      // ones the -subtle badge classes resolve to) instead of hardcoded
+      // pastel hex, so this ribbon isn't a light patch in Dark Mode.
       const scMap = {
-        'Pending': { bg: '#fef3c7', border: '#d97706', icon: 'ri-time-line', color: '#d97706' },
-        'Under Review': { bg: '#dbeafe', border: '#1e40af', icon: 'ri-search-eye-line', color: '#1e40af' },
-        'Approved': { bg: '#dcfce7', border: '#15803d', icon: 'ri-checkbox-circle-line', color: '#15803d' },
-        'Rejected': { bg: '#fee2e2', border: '#b91c1c', icon: 'ri-close-circle-line', color: '#b91c1c' }
+        'Pending': { bg: 'var(--vz-warning-bg-subtle)', border: 'var(--vz-warning-border-subtle)', icon: 'ri-time-line', color: 'var(--vz-warning)' },
+        'Under Review': { bg: 'var(--vz-info-bg-subtle)', border: 'var(--vz-info-border-subtle)', icon: 'ri-search-eye-line', color: 'var(--vz-info)' },
+        'Approved': { bg: 'var(--vz-success-bg-subtle)', border: 'var(--vz-success-border-subtle)', icon: 'ri-checkbox-circle-line', color: 'var(--vz-success)' },
+        'Rejected': { bg: 'var(--vz-danger-bg-subtle)', border: 'var(--vz-danger-border-subtle)', icon: 'ri-close-circle-line', color: 'var(--vz-danger)' }
       };
       const sc = scMap[r.status] || scMap['Pending'];
 
@@ -1114,7 +1118,7 @@
         </div>
         ${!isReview ? `
           <div class="status-ribbon"
-            style="background:${sc.bg};border:1.5px solid ${sc.border}33;">
+            style="background:${sc.bg};border:1.5px solid ${sc.border};">
             <i class="${sc.icon} fs-3" style="color:${sc.color}"></i>
             <div>
               <div class="fw-semibold" style="color:${sc.color}">Request ${r.status}</div>

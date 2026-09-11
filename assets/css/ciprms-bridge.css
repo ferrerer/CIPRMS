@@ -40,7 +40,11 @@ body {
 }
 
 .stat-card {
-    background: #fff;
+    /* No background here (2026-09-11 dark-mode fix): this class is always
+       paired with Bootstrap's own .card, whose background already follows
+       data-bs-theme via var(--vz-card-bg). A hardcoded #fff here loaded
+       after app.min.css was winning the cascade and pinning these cards to
+       white even in Dark Mode. */
     border-radius: 0.5rem;
     padding: 1.25rem 1.5rem;
     box-shadow: 0 1px 2px rgba(56,65,74,.15);
@@ -86,7 +90,11 @@ body {
 .notif-card,
 .breakdown-card,
 .settings-card {
-    background: #fff;
+    /* No background here (2026-09-11 dark-mode fix) — see .stat-card above
+       for why. .table-card in particular collides by name with Velzon's own
+       app.min.css class (a spacing-only utility with no background of its
+       own); this hardcoded #fff was silently overriding it everywhere
+       .table-card wraps a table inside a Dark-Mode-aware .card. */
     border-radius: .5rem;
     padding: 1.25rem 1.5rem;
     box-shadow: 0 1px 2px rgba(56,65,74,.15);
@@ -202,12 +210,15 @@ table.table-custom {
 .filter-row input[type="text"],
 .filter-row input[type="search"],
 .filter-row select {
-    border: 1px solid #ced4da;
+    /* No border/color/background here (2026-09-11 dark-mode fix): every
+       input/select actually placed inside .filter-row already carries
+       Bootstrap's own .form-control/.form-select, which is fully
+       Dark-Mode-aware (var(--vz-input-bg-custom) etc.) — this rule's higher
+       selector specificity (class + type-selector) was silently overriding
+       that theming and pinning these fields to a white/light-gray look. */
     border-radius: .375rem;
     padding: .4rem .75rem;
     font-size: .8125rem;
-    color: #495057;
-    background: #fff;
     outline: none;
     transition: border-color .15s;
 }
@@ -355,6 +366,66 @@ table.table-custom {
 a:focus-visible {
     outline: 2px solid #405189;
     outline-offset: 2px;
+}
+
+/* ── Grid.js Dark Mode (2026-09-11) ──────────────────────────
+   Grid.js's own vendored theme (velzon/assets/libs/gridjs/theme/
+   mermaid.min.css) hardcodes every table/pagination/footer color
+   (#fff, #f9fafb, #e5e7eb, etc.) with no CSS variables at all, and Velzon
+   itself only patches the sort-icon color for Dark Mode — the table body,
+   header, footer and pagination were never made theme-aware. This block
+   retargets those elements at Velzon's own existing --vz-* variables
+   (the same ones already used by .card/.table elsewhere) so Grid.js tables
+   (Requests, Reports & Analytics, Audit Trail, Lifecycle, Registry) match
+   the surrounding Dark Mode UI instead of appearing as a white block. */
+[data-bs-theme="dark"] .gridjs-th {
+    background-color: var(--vz-light-bg-subtle);
+    color: var(--vz-secondary-color);
+    border-color: var(--vz-border-color);
+}
+[data-bs-theme="dark"] .gridjs-th-sort:hover {
+    background-color: var(--vz-tertiary-bg);
+}
+[data-bs-theme="dark"] .gridjs-td {
+    background-color: var(--vz-card-bg);
+    color: var(--vz-body-color);
+    border-color: var(--vz-border-color);
+}
+[data-bs-theme="dark"] tr.gridjs-tr:hover td.gridjs-td {
+    background-color: var(--vz-tertiary-bg);
+}
+[data-bs-theme="dark"] .gridjs-footer {
+    background-color: var(--vz-card-bg);
+    border-color: var(--vz-border-color);
+    box-shadow: none;
+}
+[data-bs-theme="dark"] .gridjs-pagination {
+    color: var(--vz-body-color);
+}
+[data-bs-theme="dark"] .gridjs-pagination .gridjs-pages button {
+    background-color: var(--vz-card-bg);
+    border-color: var(--vz-border-color);
+    color: var(--vz-body-color);
+}
+[data-bs-theme="dark"] .gridjs-pagination .gridjs-pages button:hover {
+    background-color: var(--vz-tertiary-bg);
+    color: var(--vz-body-color);
+}
+[data-bs-theme="dark"] .gridjs-pagination .gridjs-pages button[disabled],
+[data-bs-theme="dark"] .gridjs-pagination .gridjs-pages button.gridjs-spread {
+    background-color: var(--vz-card-bg);
+    color: var(--vz-secondary-color);
+}
+[data-bs-theme="dark"] .gridjs-pagination .gridjs-pages button.gridjs-currentPage {
+    background-color: var(--vz-tertiary-bg);
+}
+[data-bs-theme="dark"] .gridjs-search-input {
+    background-color: var(--vz-input-bg-custom);
+    border-color: var(--vz-input-border-custom);
+    color: var(--vz-body-color);
+}
+[data-bs-theme="dark"] .gridjs-loading-bar {
+    background-color: var(--vz-tertiary-bg);
 }
 
 /* Responsive fixes ─────────────────────────────────────── */

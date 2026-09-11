@@ -3,6 +3,7 @@
     data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 
 <head>
+    <%- include('../partials/ui-state-init') %>
     <meta charset="utf-8" />
     <title>Reports & Analytics | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -419,10 +420,10 @@
                                                     <div class="row g-3 mb-4" id="prev-summary-cards"></div>
                                                     <div class="table-responsive">
                                                         <div class="d-flex align-items-center mb-2">
-                                                            <h6 class="fw-semibold mb-0 text-dark flex-grow-1"><i class="ri-list-check-2 me-1 text-primary"></i>Included Records (<span id="prev-records-count">0</span>)</h6>
+                                                            <h6 class="fw-semibold mb-0 flex-grow-1"><i class="ri-list-check-2 me-1 text-primary"></i>Included Records (<span id="prev-records-count">0</span>)</h6>
                                                         </div>
                                                         <table class="table table-sm table-bordered align-middle mb-0">
-                                                            <thead class="bg-light">
+                                                            <thead class="bg-light-subtle">
                                                                 <tr>
                                                                     <th>#</th>
                                                                     <th>Institution</th>
@@ -644,7 +645,7 @@
 
                                                 <h6 class="fw-semibold text-uppercase fs-12 mb-3">Strategic Portfolio
                                                     Gaps</h6>
-                                                <div class="d-flex bg-light rounded p-3 mb-4 border">
+                                                <div class="d-flex bg-light-subtle rounded p-3 mb-4 border">
                                                     <div class="flex-shrink-0 text-primary fs-3">
                                                         <i class="ri-global-line"></i>
                                                     </div>
@@ -803,7 +804,13 @@
                 language: { search: { placeholder: 'Search audit log...' } },
                 style: {
                     table: { border: 'none' },
-                    th: { background: 'var(--vz-table-bg,#f3f6f9)', color: 'var(--vz-table-color,#878a99)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '700', border: 'none', padding: '10px 16px' },
+                    // var(--vz-table-bg)/var(--vz-table-color) look theme-aware but
+                    // are actually Bootstrap's per-variant table context vars (only
+                    // set inside .table-primary/.table-dark/etc.) — unset here, so
+                    // they always fell through to the light-mode fallback regardless
+                    // of Dark Mode. --vz-light-bg-subtle/--vz-secondary-color are the
+                    // actual globally theme-reactive variables (2026-09-11 fix).
+                    th: { background: 'var(--vz-light-bg-subtle)', color: 'var(--vz-secondary-color)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '700', border: 'none', padding: '10px 16px' },
                     td: { border: 'none', padding: '10px 16px', fontSize: '13px' }
                 }
             }).render(document.getElementById('audit-grid'));
@@ -1162,7 +1169,7 @@
                             .sort(function (a, b) { return a.days - b.days; });
                         if (soon.length) {
                             var p = soon[0];
-                            expiringBlock.innerHTML = '<h6 class="mb-1 text-dark">' + escapeHtml(p.inst) + (p.country ? ' (' + escapeHtml(p.country) + ')' : '') + '</h6>'
+                            expiringBlock.innerHTML = '<h6 class="mb-1">' + escapeHtml(p.inst) + (p.country ? ' (' + escapeHtml(p.country) + ')' : '') + '</h6>'
                                 + '<p class="text-muted mb-2 fs-13">This ' + escapeHtml(p.type) + ' expires in <strong>' + p.days + ' day' + (p.days === 1 ? '' : 's') + '</strong>.'
                                 + (soon.length > 1 ? ' ' + (soon.length - 1) + ' other agreement' + (soon.length > 2 ? 's are' : ' is') + ' also expiring within 90 days.' : '') + '</p>'
                                 + '<a href="/lifecycle" class="btn btn-sm btn-warning">Review in Lifecycle Monitor</a>';
@@ -1178,7 +1185,7 @@
                         if (expired.length) {
                             var e = expired[0];
                             var overdueDays = Math.abs(e.days);
-                            expiredBlock.innerHTML = '<h6 class="mb-1 text-dark">' + escapeHtml(e.inst) + (e.country ? ' (' + escapeHtml(e.country) + ')' : '') + '</h6>'
+                            expiredBlock.innerHTML = '<h6 class="mb-1">' + escapeHtml(e.inst) + (e.country ? ' (' + escapeHtml(e.country) + ')' : '') + '</h6>'
                                 + '<p class="text-muted mb-2 fs-13">This ' + escapeHtml(e.type) + ' expired <strong>' + overdueDays + ' day' + (overdueDays === 1 ? '' : 's') + '</strong> ago.'
                                 + (expired.length > 1 ? ' ' + (expired.length - 1) + ' other expired agreement' + (expired.length > 2 ? 's remain' : ' remains') + ' unrenewed.' : '')
                                 + ' <strong>Recommendation:</strong> Renew or archive this record.</p>';
@@ -1202,7 +1209,7 @@
             if (status === 'Expired') return 'bg-danger-subtle text-danger';
             if (status === 'Expiring Soon') return 'bg-warning-subtle text-warning';
             if (status === 'Inactive') return 'bg-secondary-subtle text-secondary';
-            return 'bg-light text-dark';
+            return 'bg-secondary-subtle text-secondary';
         }
 
         /**
@@ -1385,7 +1392,7 @@
 
             summaryEl.innerHTML =
                 '<div class="col-6"><div class="card bg-warning-subtle border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-warning">' + diff + '</div><div class="fs-11 text-warning fw-semibold">Difference</div></div></div>' +
-                '<div class="col-6"><div class="card bg-light border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-dark">' + totalBoth + '</div><div class="fs-11 text-dark fw-semibold">Total Compared</div></div></div>' +
+                '<div class="col-6"><div class="card bg-secondary-subtle border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-secondary">' + totalBoth + '</div><div class="fs-11 text-secondary fw-semibold">Total Compared</div></div></div>' +
                 '<div class="col-12"><div class="card bg-body border p-2 mb-0 text-center"><i class="' + trendIcon + ' fs-4 d-block"></i><div class="fs-12 fw-semibold">' + escapeHtml(trendText) + '</div><div class="fs-11 text-muted">' + pctDiff + '% gap</div></div></div>';
 
             if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
