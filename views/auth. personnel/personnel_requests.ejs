@@ -347,7 +347,10 @@
                                             </div>
                                             <div class="dr-row">
                                                 <div class="dr-label">Contact No.</div>
-                                                <div class="dr-value"><input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000"></div>
+                                                <div class="dr-value" style="flex-direction:column; align-items:flex-start; gap:4px;">
+                                                    <input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000">
+                                                    <div class="form-text text-danger fs-12 mb-0" id="f-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                                                </div>
                                             </div>
                                             <div class="dr-row dr-row-tall">
                                                 <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
@@ -829,10 +832,15 @@
     setDrDateTimeDisplay();
 
     // Contact No. — digits and basic phone punctuation only, no letters.
+    // Warn (rather than silently strip) so the user sees why what they
+    // typed didn't show up.
     var fContactEl = document.getElementById('f-contact');
+    var fContactWarnEl = document.getElementById('f-contact-warn');
     if (fContactEl) {
         fContactEl.addEventListener('input', function () {
-            this.value = this.value.replace(/[^0-9+()\-\s]/g, '');
+            var cleaned = this.value.replace(/[^0-9+()\-\s]/g, '');
+            if (fContactWarnEl) fContactWarnEl.style.display = cleaned !== this.value ? '' : 'none';
+            this.value = cleaned;
         });
     }
 
