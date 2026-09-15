@@ -613,6 +613,24 @@
         }
     });
 
+    // Same stacking problem, one level up: "View Draft" in the Partnership/
+    // Document Request Details modal opens the draft-collaboration modal on
+    // top of it. Swap instead — hide the details modal, restore it once the
+    // draft modal closes for real (not the temporary hide-for-preview above,
+    // which is why this checks draftPreviewReturnTo first).
+    var draftDetailReturnTo = null;
+    function wireDraftModalReturn(draftModalId, detailModalId) {
+        document.getElementById(draftModalId).addEventListener('hidden.bs.modal', function () {
+            if (draftPreviewReturnTo === draftModalId) return;
+            if (draftDetailReturnTo === detailModalId) {
+                draftDetailReturnTo = null;
+                new bootstrap.Modal(document.getElementById(detailModalId)).show();
+            }
+        });
+    }
+    wireDraftModalReturn('pr-draft-modal', 'pr-detail-modal');
+    wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal');
+
     function openDraftPreviewModal(prefix, idx) {
         var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
         if (!item || !item.link) return;
@@ -750,6 +768,8 @@
         document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('dr-draft-file').value = '';
         document.getElementById('dr-draft-note').value = '';
+        var drDetailInstance = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'));
+        if (drDetailInstance) { draftDetailReturnTo = 'dr-detail-modal'; drDetailInstance.hide(); }
         new bootstrap.Modal(document.getElementById('dr-draft-modal')).show();
     }
 
@@ -793,6 +813,8 @@
         document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('pr-draft-file').value = '';
         document.getElementById('pr-draft-note').value = '';
+        var prDetailInstance = bootstrap.Modal.getInstance(document.getElementById('pr-detail-modal'));
+        if (prDetailInstance) { draftDetailReturnTo = 'pr-detail-modal'; prDetailInstance.hide(); }
         new bootstrap.Modal(document.getElementById('pr-draft-modal')).show();
     }
 
