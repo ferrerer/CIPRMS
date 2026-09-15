@@ -7,7 +7,7 @@ const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
 const { createTestUser, loginAs, cleanupAll } = require('./helpers');
 
-let agent, createdId, expiredId;
+let agent, createdId, expiredId, expiringSoonId;
 
 beforeAll(async () => {
   await connectDB();
@@ -32,12 +32,26 @@ beforeAll(async () => {
     start: 'Jan 1, 2010', end: 'Jan 1, 2015', status: 'Active', remarks: 'jesttest'
   });
   expiredId = expiredRes.body.partnership.id;
+
+  // A third record ending 30 days out (inside computeStatusFromEnd's
+  // Expiring Soon window) — needed by the "By [Dimension]" grouped-report
+  // reconciliation tests below, since the Active/Expired pair above alone
+  // could never expose the "Expiring Soon counted in Total but in neither
+  // metric column" defect.
+  const expiringEnd = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const expiringSoonRes = await agent.post('/api/partnerships').send({
+    inst: 'Jest Report Filter Expiring University', country: 'Testland', region: 'Asia', type: 'MOU',
+    nature: 'Training', cat: 'International', unit: 'CIRL',
+    start: 'Jan 1, 2024', end: expiringEnd, status: 'Active', remarks: 'jesttest'
+  });
+  expiringSoonId = expiringSoonRes.body.partnership.id;
 });
 
 afterAll(async () => {
   const db = await connectDB();
   if (createdId) await db.collection('partnerships').deleteOne({ id: createdId });
   if (expiredId) await db.collection('partnerships').deleteOne({ id: expiredId });
+  if (expiringSoonId) await db.collection('partnerships').deleteOne({ id: expiringSoonId });
   await cleanupAll();
   await closeDB();
 });
@@ -188,6 +202,94 @@ describe('Enhanced Custom Report Builder & Comparison Tool', () => {
     expect(res.body.isComparison).toBe(true);
     expect(res.body.compareBy).toBe('Institution');
     expect(res.body.metricGroups).toEqual(['Active', 'Expired', 'Expiring Soon']);
+  });
+
+  // Regression for the "By [Dimension]" reconciliation bug: these six grouped
+  // report types used to fall through to the generic ['Active','Inactive']
+  // default, whose 'Inactive' matcher never counted "Expiring Soon" — so a
+  // group's Active + Inactive columns could sum to less than Total. Fixed by
+  // giving these report types an explicit ['Active','Expiring Soon','Inactive']
+  // breakdown (computeCustomReportData, the branch right below the Custom
+  // Comparison one above).
+  describe('"By [Dimension]" grouped report reconciliation (Active + Expiring Soon + Inactive = Total)', () => {
+    const dimensionReportTypes = [
+      'By Institution', 'By College / Unit', 'By Country',
+      'By Region', 'By Agreement Type', 'By Nature of Partnership'
+    ];
+
+    test.each(dimensionReportTypes)('%s: every group has an explicit 3-way breakdown that sums to Total', async (reportType) => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=' + encodeURIComponent(reportType));
+      expect(res.status).toBe(200);
+      expect(res.body.isComparison).toBe(true);
+      expect(res.body.metricGroups).toEqual(['Active', 'Expiring Soon', 'Inactive']);
+      expect(res.body.comparisonData.length).toBeGreaterThan(0);
+      res.body.comparisonData.forEach((row) => {
+        expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
+      });
+    });
+
+    // Our three Testland/CIRL fixtures (one Active, one Expired, one Expiring
+    // Soon) isolate a single "Testland" group containing exactly one status
+    // group with no Expired), and a single "CIRL" group (containing all three
+    // statuses at once) — covering both "a group with no Expiring Soon" and
+    // "a group containing Active + Expiring Soon + Expired" from one filter.
+    test('By Country, filtered to Testland: reconciles with all three metrics present in one group', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20Country&country=Testland');
+      expect(res.status).toBe(200);
+      const row = res.body.comparisonData.find(r => r.group === 'Testland');
+      expect(row).toBeDefined();
+      expect(row.Active).toBe(1);
+      expect(row['Expiring Soon']).toBe(1);
+      expect(row.Inactive).toBe(1);
+      expect(row.Total).toBe(3);
+      expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
+    });
+
+    test('By College / Unit, filtered to CIRL unit and Testland: single group containing all three statuses reconciles', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20College%20%2F%20Unit&country=Testland&unit=CIRL');
+      expect(res.status).toBe(200);
+      expect(res.body.comparisonData.length).toBe(1);
+      const row = res.body.comparisonData[0];
+      expect(row.group).toBe('CIRL');
+      expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
+      expect(row.Total).toBe(3);
+    });
+
+    test('By Region, filtered to a status of only Active: group containing only one status still reconciles', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20Region&country=Testland&status=Active');
+      expect(res.status).toBe(200);
+      const row = res.body.comparisonData.find(r => r.group === 'Asia');
+      expect(row).toBeDefined();
+      expect(row.Active).toBe(1);
+      expect(row['Expiring Soon']).toBe(0);
+      expect(row.Inactive).toBe(0);
+      expect(row.Total).toBe(1);
+    });
+
+    test('By Institution, filtered to a country with zero matches: zero-result behavior is unaffected', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20Institution&country=NoSuchCountryZZ');
+      expect(res.status).toBe(200);
+      expect(res.body.isComparison).toBe(true);
+      expect(res.body.comparisonData).toEqual([]);
+      expect(res.body.totalRecords).toBe(0);
+    });
+
+    test('Filtered grouped report (By Nature of Partnership + unit + agreement type combo) still reconciles', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20Nature%20of%20Partnership&country=Testland&unit=CIRL&agtype=MOU');
+      expect(res.status).toBe(200);
+      expect(res.body.comparisonData.length).toBeGreaterThan(0);
+      res.body.comparisonData.forEach((row) => {
+        expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
+      });
+    });
+
+    // Explicit non-regression check for the comparison report the fix must
+    // NOT touch: 'Active vs Inactive' still uses the original 2-way default.
+    test('Active vs Inactive comparison report is unaffected by the grouped-report fix', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=Active%20vs%20Inactive&compareBy=Country');
+      expect(res.status).toBe(200);
+      expect(res.body.metricGroups).toEqual(['Active', 'Inactive']);
+    });
   });
 
   test('Excel Export: includes 2 sheets (Report Summary, Applied Filters) — comparison is a separate dedicated export', async () => {
@@ -1060,116 +1162,157 @@ describe('College / Unit filter — real, array-aware Custom Report Builder filt
 // dateFrom/dateTo, and the shared filterByDateRange()/computeCustomReportData
 // engine is what actually enforces it, so testing the underlying query params
 // proves the fixed tile cards' real behavior end-to-end.
-describe('Mid-Year and Yearly Output Report tile cards — dynamic current-year date range', () => {
+// Regression for the historical-year-leakage bug (2026-09-14 health-check
+// follow-up): Mid-Year/Yearly Output Report used to send a client-computed
+// dateFrom/dateTo straight into the generic filterByDateRange() — an OVERLAP
+// filter (`end >= from && start <= to`). Any still-active multi-year
+// partnership signed long before the report's window (e.g. signed 2020,
+// running through 2030) "overlaps" every year in between and leaked into
+// every Mid-Year/Yearly report regardless of when it was actually
+// established. Fixed by having these two report types filter on the
+// partnership's own signing date (`start` — the same authoritative field
+// Target Tracker's computeTargetAccomplishment() already uses for identical
+// "established in period Y" semantics) against a window computed
+// server-side from the CURRENT calendar year, and by having reports.ejs send
+// `reportType` alone (no dateFrom/dateTo at all) so a client can no longer
+// influence the window.
+describe('Mid-Year and Yearly Output Report — current-calendar-year-only (no historical leakage)', () => {
   const year = new Date().getFullYear();
-  let midYearId, beforeMidYearId, afterMidYearId, yearlyId, nextYearId;
+  const ids = {};
 
   beforeAll(async () => {
-    // Starts and ends entirely inside this year's Jan-Jun window.
-    const midYearRes = await agent.post('/api/partnerships').send({
-      inst: 'Jest Mid-Year Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+    // The exact bug scenario: signed well before this year, still active
+    // (end date years in the future) — an overlap filter would wrongly
+    // include this; a start-date filter correctly excludes it.
+    const priorYearActive = await agent.post('/api/partnerships').send({
+      inst: 'Jest Leak Prior-Year-Signed Still-Active University', country: 'DateTestland', region: 'Asia', type: 'MOU',
       nature: 'Research', cat: 'Local', unit: 'CIRL',
-      start: `Feb 1, ${year}`, end: `May 1, ${year}`, status: 'Active', remarks: 'jesttest'
+      start: `Dec 31, ${year - 1}`, end: `Dec 31, ${year + 5}`, status: 'Active', remarks: 'jesttest'
     });
-    midYearId = midYearRes.body.partnership.id;
+    ids.priorYearActive = priorYearActive.body.partnership.id;
 
-    // Fully in the past (previous year) — must NOT appear in either window.
-    const beforeRes = await agent.post('/api/partnerships').send({
-      inst: 'Jest Before-Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+    // Exact boundary: Jan 1 of the current year — must be included in both.
+    const janFirst = await agent.post('/api/partnerships').send({
+      inst: 'Jest Jan1 Boundary University', country: 'DateTestland', region: 'Asia', type: 'MOU',
       nature: 'Research', cat: 'Local', unit: 'CIRL',
-      start: `Jan 1, ${year - 2}`, end: `Dec 1, ${year - 1}`, status: 'Active', remarks: 'jesttest'
+      start: `Jan 1, ${year}`, end: `Dec 31, ${year + 3}`, status: 'Active', remarks: 'jesttest'
     });
-    beforeMidYearId = beforeRes.body.partnership.id;
+    ids.janFirst = janFirst.body.partnership.id;
 
-    // Starts after this year's Mid-Year window (Jul) but still within the
-    // full Yearly window — must appear in Yearly only, not Mid-Year.
-    const afterRes = await agent.post('/api/partnerships').send({
-      inst: 'Jest After-MidYear-Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+    // Exact boundary: Jun 30 of the current year — last valid Mid-Year day.
+    const juneThirty = await agent.post('/api/partnerships').send({
+      inst: 'Jest Jun30 Boundary University', country: 'DateTestland', region: 'Asia', type: 'MOU',
       nature: 'Research', cat: 'Local', unit: 'CIRL',
-      start: `Aug 1, ${year}`, end: `Nov 1, ${year}`, status: 'Active', remarks: 'jesttest'
+      start: `Jun 30, ${year}`, end: `Dec 31, ${year + 3}`, status: 'Active', remarks: 'jesttest'
     });
-    afterMidYearId = afterRes.body.partnership.id;
+    ids.juneThirty = juneThirty.body.partnership.id;
 
-    // Entirely within the full current year — must appear in Yearly.
-    const yearlyRes = await agent.post('/api/partnerships').send({
-      inst: 'Jest Yearly Window University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+    // Exact boundary: Jul 1 of the current year — first day EXCLUDED from Mid-Year.
+    const julyFirst = await agent.post('/api/partnerships').send({
+      inst: 'Jest Jul1 Boundary University', country: 'DateTestland', region: 'Asia', type: 'MOU',
       nature: 'Research', cat: 'Local', unit: 'CIRL',
-      start: `Mar 1, ${year}`, end: `Oct 1, ${year}`, status: 'Active', remarks: 'jesttest'
+      start: `Jul 1, ${year}`, end: `Dec 31, ${year + 3}`, status: 'Active', remarks: 'jesttest'
     });
-    yearlyId = yearlyRes.body.partnership.id;
+    ids.julyFirst = julyFirst.body.partnership.id;
 
-    // Entirely in NEXT year — must NOT appear in either window.
-    const nextYearRes = await agent.post('/api/partnerships').send({
-      inst: 'Jest Next-Year University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+    // Exact boundary: Dec 31 of the current year — last valid Yearly day.
+    const decThirtyOne = await agent.post('/api/partnerships').send({
+      inst: 'Jest Dec31 Boundary University', country: 'DateTestland', region: 'Asia', type: 'MOU',
       nature: 'Research', cat: 'Local', unit: 'CIRL',
-      start: `Feb 1, ${year + 1}`, end: `May 1, ${year + 1}`, status: 'Active', remarks: 'jesttest'
+      start: `Dec 31, ${year}`, end: `Dec 31, ${year + 3}`, status: 'Active', remarks: 'jesttest'
     });
-    nextYearId = nextYearRes.body.partnership.id;
+    ids.decThirtyOne = decThirtyOne.body.partnership.id;
+
+    // Exact boundary: Jan 1 of NEXT year — first day EXCLUDED from Yearly.
+    const nextYearJanFirst = await agent.post('/api/partnerships').send({
+      inst: 'Jest NextYear Jan1 University', country: 'DateTestland', region: 'Asia', type: 'MOU',
+      nature: 'Research', cat: 'Local', unit: 'CIRL',
+      start: `Jan 1, ${year + 1}`, end: `Dec 31, ${year + 5}`, status: 'Active', remarks: 'jesttest'
+    });
+    ids.nextYearJanFirst = nextYearJanFirst.body.partnership.id;
   });
 
   afterAll(async () => {
     const db = await connectDB();
-    await db.collection('partnerships').deleteMany({
-      id: { $in: [midYearId, beforeMidYearId, afterMidYearId, yearlyId, nextYearId] }
-    });
+    await db.collection('partnerships').deleteMany({ id: { $in: Object.values(ids) } });
   });
 
-  test('Mid-Year window (current year Jan 1 - Jun 30) includes only records overlapping that window', async () => {
+  test('Mid-Year (reportType=Mid-Year) excludes the prior-year-signed still-active record and every boundary outside Jan1-Jun30', async () => {
+    const res = await agent.get(`/api/reports/custom/preview?reportType=Mid-Year&country=DateTestland`);
+    expect(res.status).toBe(200);
+    const returned = res.body.records.map(p => p.id);
+    expect(returned).toContain(ids.janFirst);
+    expect(returned).toContain(ids.juneThirty);
+    expect(returned).not.toContain(ids.priorYearActive); // the actual leakage bug
+    expect(returned).not.toContain(ids.julyFirst);
+    expect(returned).not.toContain(ids.decThirtyOne);
+    expect(returned).not.toContain(ids.nextYearJanFirst);
+  });
+
+  test('Yearly (reportType=Yearly) excludes the prior-year-signed still-active record and next-year records, includes the full current-year span', async () => {
+    const res = await agent.get(`/api/reports/custom/preview?reportType=Yearly&country=DateTestland`);
+    expect(res.status).toBe(200);
+    const returned = res.body.records.map(p => p.id);
+    expect(returned).toContain(ids.janFirst);
+    expect(returned).toContain(ids.juneThirty);
+    expect(returned).toContain(ids.julyFirst);
+    expect(returned).toContain(ids.decThirtyOne);
+    expect(returned).not.toContain(ids.priorYearActive); // the actual leakage bug
+    expect(returned).not.toContain(ids.nextYearJanFirst);
+  });
+
+  test('Mid-Year/Yearly report periods are labeled with the current year and always sum Jan1-Jun30 / Jan1-Dec31', async () => {
+    const midYear = await agent.get(`/api/reports/custom/preview?reportType=Mid-Year&country=DateTestland`);
+    expect(midYear.body.filters.dateFrom).toBe(`Jan 1, ${year}`);
+    expect(midYear.body.filters.dateTo).toBe(`Jun 30, ${year}`);
+    expect(midYear.body.periodLabel).toBe(`Report Period: Jan 1, ${year} to Jun 30, ${year}`);
+
+    const yearly = await agent.get(`/api/reports/custom/preview?reportType=Yearly&country=DateTestland`);
+    expect(yearly.body.filters.dateFrom).toBe(`Jan 1, ${year}`);
+    expect(yearly.body.filters.dateTo).toBe(`Dec 31, ${year}`);
+    expect(yearly.body.periodLabel).toBe(`Report Period: Jan 1, ${year} to Dec 31, ${year}`);
+  });
+
+  // Section 10 requirement: a client-supplied dateFrom/dateTo must never be
+  // able to smuggle in a different year for these two report types — the
+  // server derives the window from its own clock regardless of what the
+  // query string asks for.
+  test('a client-supplied dateFrom/dateTo cannot override the current-year window for Mid-Year/Yearly', async () => {
     const res = await agent.get(
-      `/api/reports/custom/preview?title=Mid-Year%20Output%20Report&dateFrom=${year}-01-01&dateTo=${year}-06-30&country=DateTestland`
+      `/api/reports/custom/preview?reportType=Mid-Year&country=DateTestland&dateFrom=2000-01-01&dateTo=2000-12-31`
     );
     expect(res.status).toBe(200);
-    expect(res.body.filters.dateFrom).toBe(`${year}-01-01`);
-    expect(res.body.filters.dateTo).toBe(`${year}-06-30`);
-    const ids = res.body.records.map(p => p.id);
-    expect(ids).toContain(midYearId);
-    expect(ids).not.toContain(beforeMidYearId);
-    expect(ids).not.toContain(afterMidYearId);
-    expect(ids).not.toContain(nextYearId);
+    expect(res.body.filters.dateFrom).toBe(`Jan 1, ${year}`);
+    expect(res.body.filters.dateTo).toBe(`Jun 30, ${year}`);
+    const returned = res.body.records.map(p => p.id);
+    expect(returned).toContain(ids.janFirst);
+    expect(returned).not.toContain(ids.priorYearActive);
   });
 
-  test('Yearly window (current year Jan 1 - Dec 31) includes every record active during the current year', async () => {
+  // Section 8 requirement: the generic Custom Report Builder's Date From/To
+  // filter (overlap semantics — correct for "what was active during X") must
+  // remain completely unchanged for every OTHER report type. This is the
+  // exact record that must NOT appear in Mid-Year/Yearly (its start date is
+  // in a prior year) yet SHOULD still appear here, proving the two filters
+  // are genuinely independent and neither regressed the other.
+  test('generic Date From/To (reportType=Summary) still uses overlap semantics — unaffected by the Mid-Year/Yearly fix', async () => {
     const res = await agent.get(
-      `/api/reports/custom/preview?title=Yearly%20Output%20Report&dateFrom=${year}-01-01&dateTo=${year}-12-31&country=DateTestland`
+      `/api/reports/custom/preview?reportType=Summary&country=DateTestland&dateFrom=${year}-01-01&dateTo=${year}-06-30`
     );
     expect(res.status).toBe(200);
-    const ids = res.body.records.map(p => p.id);
-    expect(ids).toContain(midYearId);
-    expect(ids).toContain(afterMidYearId);
-    expect(ids).toContain(yearlyId);
-    expect(ids).not.toContain(beforeMidYearId);
-    expect(ids).not.toContain(nextYearId);
+    const returned = res.body.records.map(p => p.id);
+    expect(returned).toContain(ids.priorYearActive);
   });
 
-  test('Mid-Year and Yearly date ranges are never hardcoded to a specific year — the window always tracks new Date().getFullYear()', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const html = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'reports.ejs'), 'utf8');
-    // The tile cards must call the dynamic helper functions, not the old
-    // exportReport(format, {title:'...'}) call with no date range at all.
-    expect(html).toMatch(/onclick="exportMidYearReport\('pdf'\)"/);
-    expect(html).toMatch(/onclick="exportMidYearReport\('excel'\)"/);
-    expect(html).toMatch(/onclick="exportYearlyReport\('pdf'\)"/);
-    expect(html).toMatch(/onclick="exportYearlyReport\('excel'\)"/);
-    expect(html).not.toMatch(/exportReport\('pdf', \{title:'Mid-Year Output Report'\}\)/);
-    expect(html).not.toMatch(/exportReport\('pdf', \{title:'Yearly Output Report'\}\)/);
-    // The helper that computes the window must derive the year live, never
-    // hardcode a specific one (e.g. "2026").
-    expect(html).toMatch(/function currentYearDateRange/);
-    expect(html).toMatch(/new Date\(\)\.getFullYear\(\)/);
-    expect(html).not.toMatch(/dateFrom:\s*['"]\d{4}-01-01['"]/);
-  });
-
-  test('PDF and Excel exports for the Mid-Year window produce the same record set as Preview', async () => {
-    const qs = `dateFrom=${year}-01-01&dateTo=${year}-06-30&country=DateTestland&title=Mid-Year%20Output%20Report`;
-    const previewRes = await agent.get(`/api/reports/custom/preview?${qs}`);
+  test('PDF and Excel exports for Mid-Year produce the same record set as Preview, and reject the client date-range bypass identically', async () => {
+    const previewRes = await agent.get(`/api/reports/custom/preview?reportType=Mid-Year&country=DateTestland`);
     const previewCount = previewRes.body.totalRecords;
 
-    const pdfRes = await agent.get(`/api/reports/partnerships/pdf?${qs}`);
+    const pdfRes = await agent.get(`/api/reports/partnerships/pdf?reportType=Mid-Year&country=DateTestland&dateFrom=2000-01-01&dateTo=2000-12-31`);
     expect(pdfRes.status).toBe(200);
     expect(pdfRes.body.slice(0, 4).toString()).toBe('%PDF');
 
-    const excelRes = await agent.get(`/api/reports/partnerships/excel?${qs}`)
+    const excelRes = await agent.get(`/api/reports/partnerships/excel?reportType=Mid-Year&country=DateTestland&dateFrom=2000-01-01&dateTo=2000-12-31`)
       .buffer(true).parse((res, cb) => {
         const chunks = [];
         res.on('data', c => chunks.push(c));
@@ -1180,6 +1323,35 @@ describe('Mid-Year and Yearly Output Report tile cards — dynamic current-year 
     let excelCount = 0;
     workbook.worksheets[0].eachRow(row => { if (typeof row.getCell(1).value === 'number') excelCount++; });
     expect(excelCount).toBe(previewCount);
+  });
+
+  test('reports.ejs sends reportType (not a client-computed date range) for the Mid-Year/Yearly tile cards', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'reports.ejs'), 'utf8');
+    expect(html).toMatch(/onclick="exportMidYearReport\('pdf'\)"/);
+    expect(html).toMatch(/onclick="exportMidYearReport\('excel'\)"/);
+    expect(html).toMatch(/onclick="exportYearlyReport\('pdf'\)"/);
+    expect(html).toMatch(/onclick="exportYearlyReport\('excel'\)"/);
+    expect(html).toMatch(/reportType:\s*'Mid-Year'/);
+    expect(html).toMatch(/reportType:\s*'Yearly'/);
+    // The old client-side date-range computation (the actual source of the
+    // leakage bug) must be gone, not merely unused.
+    expect(html).not.toMatch(/function currentYearDateRange/);
+  });
+
+  test('conceptual dynamic-year check: the server-side window logic derives from new Date().getFullYear(), never a hardcoded year', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'cirl.js'), 'utf8');
+    expect(src).toMatch(/reportType === 'Mid-Year' \|\| reportType === 'Yearly'/);
+    expect(src).toMatch(/const currentYear = new Date\(\)\.getFullYear\(\);/);
+    // Guards against a regression back to a literal year anywhere in the
+    // Mid-Year/Yearly branch specifically (a loose full-file scan would
+    // false-positive on unrelated comments/tests elsewhere in this file).
+    const branchStart = src.indexOf("reportType === 'Mid-Year' || reportType === 'Yearly'");
+    const branch = src.slice(branchStart, branchStart + 600);
+    expect(branch).not.toMatch(/20\d\d/);
   });
 });
 

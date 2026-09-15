@@ -141,7 +141,7 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
+                                    <% if (typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff')) { %>
                                     <div class="col-md-auto">
                                         <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#uploadModal">
                                             <i class="ri-upload-cloud-2-line align-bottom me-1"></i> Upload & Extract
@@ -215,9 +215,13 @@
     </div>
 </div>
 
-<!-- Upload & OCR Modal — Administrator only (removed for Auth. Personnel 2026-07-23) -->
-<% var isAdmin = typeof user !== 'undefined' && user && user.role === 'Administrator'; %>
-<% if (isAdmin) { %>
+<!-- Upload & OCR Modal — Administrator and Staff only (removed for Auth. Personnel
+     2026-07-23; Staff added 2026-09-14 — the backend (requireUploader,
+     OWN_SCOPE_ROLES) already supported Staff uploads, this template was the
+     only thing blocking it). potential_partner has its own separate
+     Document Library page/template, not this shared one. -->
+<% var canUploadDocuments = typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff'); %>
+<% if (canUploadDocuments) { %>
 <div class="modal fade zoomIn" id="uploadModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content">

@@ -41,7 +41,7 @@
                         <div class="row">
 
                             <!-- col-xl-3 sidebar â€” exact from apps-calendar.html -->
-                            <% var canManageCalendar = typeof user !== 'undefined' && user && user.role === 'Administrator'; %>
+                            <% var canManageCalendar = typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff'); %>
                             <div class="col-xl-3">
                                 <% if (canManageCalendar) { %>
                                 <div class="card">
@@ -223,7 +223,9 @@
 
 // Auth. Personnel lost calendar create/edit/delete 2026-07-23 — view-only
 // unless another existing permission explicitly grants editing (currently
-// none does). Administrator keeps full management, unchanged.
+// none does). Administrator keeps full management, unchanged. Staff gained
+// the same full management as Administrator 2026-09-14 (requireStaffAccess
+// now gates the create/edit/delete API routes too — see cirl.js).
 var CAN_MANAGE = <%- JSON.stringify(canManageCalendar) %>;
 
 var cal, bsModal, currentEv = null, isAdding = false;
@@ -360,9 +362,10 @@ document.addEventListener('DOMContentLoaded', function(){
     if (ev) { deepLinkOpened = true; showView(ev); }
   }
 
-  // Individual-user recipient options — /api/users is Administrator-only, so
-  // Auth. Personnel (who can also reach this page) simply won't see this
-  // group populated; the role-based options above still work for them.
+  // Individual-user recipient options — /api/users is Administrator/Staff-only
+  // (requireStaffAccess), so Auth. Personnel (who can also reach this page)
+  // simply won't see this group populated; the role-based options above
+  // still work for them.
   function escapeHtml(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   fetch('/api/users').then(function(r){ return r.ok ? r.json() : []; }).then(function(users){
     var group = document.getElementById('f-recipients-individuals');
@@ -428,7 +431,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   cal.render();
 
-  // Draggable external events (Administrator only — the palette isn't rendered otherwise)
+  // Draggable external events (Administrator/Staff only — the palette isn't rendered otherwise)
   if(CAN_MANAGE && typeof FullCalendar.Draggable !== 'undefined'){
     new FullCalendar.Draggable(document.getElementById('external-events'),{
       itemSelector: '.external-event',

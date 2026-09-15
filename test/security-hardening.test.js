@@ -116,6 +116,64 @@ describe('Finding #2 — XSS: Dashboard DSS insight strings (server-rendered)', 
   });
 });
 
+// Health-check regression (found via the test above intermittently failing as
+// real Expired data grew): computeDashboardStats()'s "Expiring / Expired"
+// table used to sort strictly by end date ascending, with no regard for
+// status — since every Expired partnership's end date is necessarily in the
+// past (and therefore always "sooner" than any still-Expiring-Soon
+// partnership's future end date), 6+ Expired records silently crowded every
+// actionable Expiring Soon partnership out of the fixed 6-row widget. Fixed
+// by sorting Expiring Soon ahead of Expired first, end date ascending within
+// each group second. This test creates its own 6 Expired + 1 Expiring Soon
+// records so it reproduces the defect deterministically, independent of
+// however much real Expired data exists in the shared database.
+describe('Dashboard "Expiring Partnerships" widget: Expiring Soon must not be crowded out by Expired', () => {
+  let adminAgent;
+  const createdIds = [];
+
+  beforeAll(async () => {
+    adminAgent = request.agent(app);
+    await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
+
+    // Six long-Expired partnerships — enough alone to fill the widget's 6-row
+    // cap under the old buggy sort.
+    for (let i = 0; i < 6; i++) {
+      const res = await adminAgent.post('/api/partnerships').send({
+        inst: `jesttest Crowd-Out Expired ${i}`, country: 'Testland', type: 'MOA',
+        unit: 'CCS', start: 'Jan 1, 2010', end: `Jan ${i + 1}, 2015`, status: 'Expired'
+      });
+      createdIds.push(res.body.partnership.id);
+    }
+
+    // One Expiring Soon partnership — the actionable record the widget must
+    // still surface even with 6 Expired records already competing for slots.
+    const soonEnd = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const soonRes = await adminAgent.post('/api/partnerships').send({
+      inst: 'jesttest Crowd-Out Expiring Soon', country: 'Testland', type: 'MOA',
+      unit: 'CCS', start: 'Jan 1, 2020', end: soonEnd, status: 'Expiring Soon'
+    });
+    createdIds.push(soonRes.body.partnership.id);
+  });
+
+  afterAll(async () => {
+    await db.collection('partnerships').deleteMany({ id: { $in: createdIds } });
+  });
+
+  test('the Expiring Soon record still appears in the dashboard widget despite 6 competing Expired records', async () => {
+    const res = await adminAgent.get('/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('jesttest Crowd-Out Expiring Soon');
+  });
+
+  test('Staff dashboard (same computeDashboardStats(), shared template) shows the same fix', async () => {
+    const staffAgent = request.agent(app);
+    await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+    const res = await staffAgent.get('/staff/dashboard');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('jesttest Crowd-Out Expiring Soon');
+  });
+});
+
 describe('Finding #4 — unique users.email index', () => {
   test('a unique index on email exists on the users collection', async () => {
     const indexes = await db.collection('users').indexes();

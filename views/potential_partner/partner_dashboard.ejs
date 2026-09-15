@@ -253,39 +253,9 @@
                                             <span class="badge bg-primary-subtle text-primary">By Agreements</span>
                                         </div>
                                         <div class="card-body">
-                                            <% var topPartners=[
-                                                {country:'Japan',code:'jp',count:12,pct:100,lat:36,lng:138},
-                                                {country:'United States',code:'us',count:9,pct:75,lat:38,lng:-97},
-                                                {country:'South Korea',code:'kr',count:7,pct:58,lat:37,lng:127},
-                                                {country:'Philippines',code:'ph',count:6,pct:50,lat:13,lng:122},
-                                                {country:'China',code:'cn',count:5,pct:42,lat:35,lng:104},
-                                                {country:'Australia',code:'au',count:4,pct:33,lat:-25,lng:133},
-                                                {country:'Germany',code:'de',count:3,pct:25,lat:51,lng:10} ]; %>
-                                                <% topPartners.forEach(function(p){ %>
-                                                    <div class="d-flex align-items-center mb-3"
-                                                        onclick="flyToContinent(null,<%=p.lat%>,<%=p.lng%>,5)"
-                                                        style="cursor:pointer;">
-                                                        <div class="flex-shrink-0 me-3">
-                                                            <img src="https://flagcdn.com/w40/<%=p.code%>.png"
-                                                                alt="<%=p.country%>" class="rounded"
-                                                                style="width:32px;height:20px;object-fit:cover;">
-                                                        </div>
-                                                        <div class="flex-grow-1">
-                                                            <div class="d-flex justify-content-between mb-1">
-                                                                <span class="fs-13 fw-medium">
-                                                                    <%=p.country%>
-                                                                </span>
-                                                                <span class="fs-12 text-muted">
-                                                                    <%=p.count%>
-                                                                </span>
-                                                            </div>
-                                                            <div class="progress" style="height:4px;">
-                                                                <div class="progress-bar bg-primary"
-                                                                    style="width:<%=p.pct%>%"></div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <% }); %>
+                                            <div id="top-countries-list">
+                                                <p class="text-muted fs-13 mb-0">Loading&hellip;</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

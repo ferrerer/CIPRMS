@@ -207,7 +207,7 @@
                                                                 data-feather="calendar" class="text-info"></i></span>
                                                     </div>
                                                 </div>
-                                                <h6 class="fs-15 fw-semibold">Mid-Year Output Report</h6>
+                                                <h6 class="fs-15 fw-semibold d-flex align-items-center gap-2">Mid-Year Output Report <span class="badge bg-info-subtle text-info fw-normal">Jan&ndash;Jun <%= new Date().getFullYear() %></span></h6>
                                                 <p class="text-muted fs-13 mb-3">Summary of first-half partnership activities, including new, renewed, and expired agreements.</p>
                                                 <div class="d-flex gap-2 mt-auto">
                                                     <button class="btn btn-sm btn-danger" onclick="exportMidYearReport('pdf')"><i
@@ -228,7 +228,7 @@
                                                                 data-feather="bar-chart-2" class="text-primary"></i></span>
                                                     </div>
                                                 </div>
-                                                <h6 class="fs-15 fw-semibold">Yearly Output Report</h6>
+                                                <h6 class="fs-15 fw-semibold d-flex align-items-center gap-2">Yearly Output Report <span class="badge bg-primary-subtle text-primary fw-normal">Jan&ndash;Dec <%= new Date().getFullYear() %></span></h6>
                                                 <p class="text-muted fs-13 mb-3">Annual summary of partnership records for the academic/calendar year, suitable for CHED submission.</p>
                                                 <div class="d-flex gap-2 mt-auto">
                                                     <button class="btn btn-sm btn-danger" onclick="exportYearlyReport('pdf')"><i
@@ -909,21 +909,20 @@
             window.open('/api/reports/partnerships/' + format + '?' + q, '_blank');
         }
 
-        // Mid-Year/Yearly Output Report tile cards — the reporting window
-        // always tracks the CURRENT calendar year, computed live from the
-        // browser's clock rather than hardcoded, so the same code keeps
-        // working correctly in every future year.
-        function currentYearDateRange(fromMonthDay, toMonthDay) {
-            var year = new Date().getFullYear();
-            return { dateFrom: year + '-' + fromMonthDay, dateTo: year + '-' + toMonthDay };
-        }
+        // Mid-Year/Yearly Output Report tile cards — no dateFrom/dateTo is
+        // sent at all; the server derives the current-calendar-year window
+        // itself from reportType alone (computeCustomReportData in cirl.js),
+        // so a manipulated query string can never smuggle in a different
+        // year. Computing the range from the browser's clock here used to
+        // look correct but fed straight into the generic Date From/To
+        // filter, which is an OVERLAP filter (any still-active partnership
+        // signed years ago silently "overlaps" every year it stays active) —
+        // that was the actual historical-year-leakage bug; fixed server-side.
         function exportMidYearReport(format) {
-            var range = currentYearDateRange('01-01', '06-30');
-            exportReport(format, { title: 'Mid-Year Output Report', dateFrom: range.dateFrom, dateTo: range.dateTo });
+            exportReport(format, { title: 'Mid-Year Output Report', reportType: 'Mid-Year' });
         }
         function exportYearlyReport(format) {
-            var range = currentYearDateRange('01-01', '12-31');
-            exportReport(format, { title: 'Yearly Output Report', dateFrom: range.dateFrom, dateTo: range.dateTo });
+            exportReport(format, { title: 'Yearly Output Report', reportType: 'Yearly' });
         }
 
         function generateCustomReport(format) {

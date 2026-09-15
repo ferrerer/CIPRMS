@@ -7,25 +7,29 @@
 // route, with a note, uploader identity, and role recorded — never
 // replacing a previous version. Also covers the ownership boundary and the
 // terminal-status upload guard.
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
 const { createTestUser, loginAs, cleanupAll } = require('./helpers');
+const { DOCUMENTS_DIR } = require('../services/documentLibraryService');
 
 // Smallest possible buffer that satisfies verifyMagicBytes' PNG signature
 // check (it only reads the first 8 bytes).
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
 
 let adminAgent, staffAgent, submitterAgent, otherAgent;
-let submitterUser, otherUser, requestId;
+let submitterUser, otherUser, staffUser, requestId;
 let v1FileLink, v2FileLink;
 
 beforeAll(async () => {
   await connectDB();
   adminAgent = request.agent(app);
   await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
+  staffUser = await createTestUser({ role: 'Staff' });
   staffAgent = request.agent(app);
-  await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+  await loginAs(staffAgent, staffUser);
   submitterUser = await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' });
   submitterAgent = request.agent(app);
   await loginAs(submitterAgent, submitterUser);
@@ -42,6 +46,13 @@ beforeAll(async () => {
 afterAll(async () => {
   const db = await connectDB();
   if (requestId) {
+    // Physical files must be unlinked BEFORE the DB records are deleted —
+    // see the matching comment in request-draft-collaboration.test.js.
+    const linked = await db.collection('documents').find({ requestId, requestType: 'document' }).toArray();
+    await Promise.all(linked.map((doc) => {
+      if (!doc.fileLink || !doc.fileLink.startsWith('/uploads/documents/')) return null;
+      return fs.promises.unlink(path.join(DOCUMENTS_DIR, path.basename(doc.fileLink))).catch(() => {});
+    }));
     await db.collection('documents').deleteMany({ requestId, requestType: 'document' });
     await db.collection('documentrequests').deleteOne({ id: requestId });
   }
@@ -69,6 +80,21 @@ test('Staff (reviewer) uploads a draft version with a note — recorded with ful
   expect(typeof docs[0].fileSize).toBe('number');
   expect(docs[0].fileType).toBe('image/png');
   v1FileLink = docs[0].fileLink;
+});
+
+// Document Library attribution fix (2026-09-14 follow-up) — see the matching
+// test in request-draft-collaboration.test.js for the Partnership Request
+// analog and full rationale.
+test('Document Library attribution: Staff\'s reviewer upload above appears in STAFF\'s own library, not the requester\'s', async () => {
+  const db = await connectDB();
+  const archived = await db.collection('documents')
+    .find({ requestType: 'document', requestId }).sort({ id: -1 }).limit(1).toArray();
+  expect(archived.length).toBe(1);
+  expect(archived[0].uploadedByEmail).toBe(staffUser.email); // the actual fix
+  expect(archived[0].uploadedByEmail).not.toBe(submitterUser.email);
+
+  const staffLib = await staffAgent.get('/api/documents');
+  expect(staffLib.body.some(d => d.id === archived[0].id)).toBe(true);
 });
 
 test('The requester (owner) can upload their own revised draft — appended, not replacing the previous version', async () => {

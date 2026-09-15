@@ -292,10 +292,14 @@ function requireUploader(req, res, next) {
  * mutation routes too (Partnerships, Requests, Users) — Administrator and
  * Staff are equals everywhere except: Calendar create/edit/delete (stays
  * requireAdmin — Staff is explicitly view-only there, unchanged by this
- * revision), Google Calendar integration config (requireAdmin — org-wide
- * system configuration), and any operation targeting an Administrator
- * account or granting the Administrator role (explicit in-handler checks
- * in the Users routes — a privilege-escalation guard, not a gap).
+ * revision), plus, as of the 2026-09-14 Staff-Calendar-parity change, Staff
+ * now shares full Calendar create/edit/delete with Administrator too (see
+ * POST/PATCH/DELETE /api/calendarevents below) — the org-wide Google
+ * Calendar integration config (requireAdmin — connecting/disconnecting the
+ * shared account) remains Administrator-only, and any operation targeting
+ * an Administrator account or granting the Administrator role (explicit
+ * in-handler checks in the Users routes — a privilege-escalation guard,
+ * not a gap) is unaffected.
  */
 function requireStaffAccess(req, res, next) {
   const user = req.session && req.session.user;
@@ -1085,14 +1089,26 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
 
       const note = (req.body.note || '').trim().slice(0, 1000);
 
+      // Document Library attribution: a reviewer (Staff/Administrator)
+      // uploading a new version FOR the requester must own that Document
+      // Library entry themselves — not the requester — so it shows up in the
+      // reviewer's own library (Document Library visibility is scoped by
+      // uploadedByEmail; see OWN_SCOPE_ROLES/GET /api/documents). Previously
+      // this always used target.submittedByEmail regardless of who actually
+      // uploaded, so a reviewer's own upload silently never appeared in
+      // their own Document Library. The request's own supportingDocuments
+      // entry below already correctly used actor.email/actor.name for the
+      // request-history record — only this separate Document Library archive
+      // call had the bug. When the requester uploads their own revision
+      // (isOwner), behavior is unchanged (actor IS the requester already).
       const { documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
         documentType: expandDocTypeLabel(target.type),
         institution: target.institution,
         partner: target.institution,
         title: `${target.type || 'Document'} – ${target.institution} (Request #${id})`
       }, {
-        uploadedBy: target.requestedBy || 'Unknown',
-        uploadedByEmail: target.submittedByEmail,
+        uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
+        uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
         requestId: id,
         requestType: 'partnership'
       });
@@ -1528,14 +1544,18 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
 
       const note = (req.body.note || '').trim().slice(0, 1000);
 
+      // Same reviewer-attribution fix as POST /api/requests/:id/documents
+      // above — a reviewer's own Document Library upload must be owned by
+      // the reviewer (actor), not the requester, or it never appears in the
+      // reviewer's own library.
       const { documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
         documentType: expandDocTypeLabel(target.documentType),
         institution: target.institution,
         partner: target.institution,
         title: `${target.documentType || 'Document'} – ${target.institution} (Doc Request #${id})`
       }, {
-        uploadedBy: target.requestedBy || 'Unknown',
-        uploadedByEmail: target.requestedByEmail,
+        uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
+        uploadedByEmail: isReviewer ? actor.email : target.requestedByEmail,
         requestId: id,
         requestType: 'document'
       });
@@ -2257,6 +2277,25 @@ function filterByDateRange(docs, dateFrom, dateTo) {
   });
 }
 
+// Mid-Year/Yearly Output Report ONLY — unlike filterByDateRange() above
+// (deliberately an overlap filter: a partnership whose [start,end] range
+// merely touches the window is included, correct for "what was active during
+// X"), these two reports need "what was actually established/signed during
+// X", so this checks only the partnership's own signing date (`start` — the
+// same authoritative field Target Tracker's computeTargetAccomplishment()
+// already uses for identical "was this partnership established in period Y"
+// semantics). Using the overlap filter here was the bug: any still-active
+// multi-year partnership signed long before the report's window overlaps
+// every year in between and would otherwise leak into every Mid-Year/Yearly
+// report for as long as it stays active.
+function filterByStartDateInRange(docs, from, to) {
+  return docs.filter(d => {
+    const start = new Date(d.start);
+    if (isNaN(start)) return false;
+    return start >= from && start <= to;
+  });
+}
+
 /**
  * Streams a simple paginated table as a landscape PDF — shared by every
  * PDF export route so pagination/header drawing isn't duplicated per report.
@@ -2829,8 +2868,24 @@ async function computeCustomReportData(db, query, user) {
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
-  // Date range filter
-  if (dateFrom || dateTo) {
+  // Mid-Year/Yearly Output Report: strictly the CURRENT calendar year/half-
+  // year, computed server-side from the server's own clock — a client-
+  // supplied dateFrom/dateTo is intentionally ignored entirely for these two
+  // report types (the Reports & Analytics tiles no longer send one at all;
+  // see reports.ejs) so a manipulated query string can never smuggle in a
+  // different year. Every other report type's Date From/To behavior
+  // (filterByDateRange's overlap semantics) is completely unchanged below.
+  let periodRangeLabel = null;
+  if (reportType === 'Mid-Year' || reportType === 'Yearly') {
+    const currentYear = new Date().getFullYear();
+    const rangeStart = new Date(currentYear, 0, 1, 0, 0, 0);
+    const rangeEnd = reportType === 'Mid-Year'
+      ? new Date(currentYear, 5, 30, 23, 59, 59)
+      : new Date(currentYear, 11, 31, 23, 59, 59);
+    docs = filterByStartDateInRange(docs, rangeStart, rangeEnd);
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    periodRangeLabel = { dateFrom: fmt(rangeStart), dateTo: fmt(rangeEnd) };
+  } else if (dateFrom || dateTo) {
     docs = filterByDateRange(docs, dateFrom, dateTo);
   }
 
@@ -2881,6 +2936,20 @@ async function computeCustomReportData(db, query, user) {
     if (typeof custom === 'string') custom = custom.split(',').map(s => s.trim()).filter(Boolean);
     if (Array.isArray(custom) && custom.length > 0) metricGroups = custom;
     else metricGroups = ['Active', 'Inactive', 'Expired'];
+  }
+  // The six "By [Dimension]" grouped reports below previously fell through to
+  // the generic ['Active','Inactive'] default above. That default's
+  // 'Inactive' matcher only counts status === 'Expired'/'Inactive', so an
+  // "Expiring Soon" partnership was included in each group's Total but
+  // matched neither metric column (Active + Inactive < Total). Giving these
+  // report types their own explicit three-way breakdown makes
+  // Active + Expiring Soon + Inactive reconcile to Total for every group,
+  // without touching the shared default relied on by 'Active vs Inactive'.
+  else if ([
+    'By Institution', 'By College / Unit', 'By Country',
+    'By Region', 'By Agreement Type', 'By Nature of Partnership'
+  ].includes(reportType)) {
+    metricGroups = ['Active', 'Expiring Soon', 'Inactive'];
   }
 
   // College / Unit is the one dimension that can be an array (a partnership
@@ -2946,10 +3015,21 @@ async function computeCustomReportData(db, query, user) {
   const generatedDate = now.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   const title = query.title || `${reportType} Report`;
 
+  // Single authoritative period label — reused as-is by both the PDF and
+  // Excel export routes below instead of each recomputing it from raw
+  // req.query (which would go stale for Mid-Year/Yearly now that those two
+  // report types no longer receive a dateFrom/dateTo query param at all).
+  const periodLabel = periodRangeLabel
+    ? `Report Period: ${periodRangeLabel.dateFrom} to ${periodRangeLabel.dateTo}`
+    : (dateFrom || dateTo)
+      ? `Report Period: ${dateFrom || 'earliest'} to ${dateTo || 'present'}`
+      : 'Report Period: All Records';
+
   return {
     title,
     generatedDate,
     generatedBy: (user && user.name) || 'Administrator',
+    periodLabel,
     totalRecords: docs.length,
     isComparison,
     compareBy,
@@ -2977,8 +3057,8 @@ async function computeCustomReportData(db, query, user) {
     filters: {
       reportType,
       category: cat || 'All',
-      dateFrom: dateFrom || 'Earliest',
-      dateTo: dateTo || 'Present',
+      dateFrom: (periodRangeLabel && periodRangeLabel.dateFrom) || dateFrom || 'Earliest',
+      dateTo: (periodRangeLabel && periodRangeLabel.dateTo) || dateTo || 'Present',
       unit: unit || 'All',
       agreementType: agtype || 'All',
       country: country || 'All',
@@ -3008,13 +3088,10 @@ app.get('/api/reports/partnerships/pdf', requireStaffAccess, async (req, res) =>
     const reportData = await computeCustomReportData(db, req.query, req.session.user);
     await logActivity(db, req.session.user, 'VIEW', `Exported Custom Report PDF: ${reportData.title}`);
 
-    const periodLabel = (req.query.dateFrom || req.query.dateTo)
-      ? `Report Period: ${req.query.dateFrom || 'earliest'} to ${req.query.dateTo || 'present'}`
-      : 'Report Period: All Records';
     renderPartnershipReportPdf(res, {
       title: reportData.title,
       docs: reportData.records,
-      periodLabel,
+      periodLabel: reportData.periodLabel,
       generatedBy: reportData.generatedBy,
       customReportData: reportData
     });
@@ -3252,14 +3329,10 @@ app.get('/api/reports/partnerships/excel', requireStaffAccess, async (req, res) 
     const reportData = await computeCustomReportData(db, req.query, req.session.user);
     await logActivity(db, req.session.user, 'VIEW', `Exported Custom Report Excel: ${reportData.title}`);
 
-    const periodLabel = (req.query.dateFrom || req.query.dateTo)
-      ? `Report Period: ${req.query.dateFrom || 'earliest'} to ${req.query.dateTo || 'present'}`
-      : 'Report Period: All Records';
-
     const workbook = buildPartnershipExcel({
       title: reportData.title,
       docs: reportData.records,
-      periodLabel,
+      periodLabel: reportData.periodLabel,
       generatedBy: reportData.generatedBy,
       customReportData: reportData
     });
@@ -4712,11 +4785,16 @@ async function resolveCalendarRecipients(db, recipients) {
 
 // The calendar itself is a shared institutional calendar, viewable by every
 // authenticated role (see GET above, requireAuth) — but only Administrator
-// may create/edit/delete entries (requireAdmin on this route and PATCH/DELETE
-// below). Corrected 2026-07-29 (RBAC matrix audit, docs/SYSTEM_AUDIT_2026-07-16.md):
-// this comment previously said "Administrator/Auth. Personnel", which never
-// matched the actual gate on any of the three routes.
-app.post('/api/calendarevents', requireAdmin, async (req, res) => {
+// or Staff may create/edit/delete entries (requireStaffAccess on this route
+// and PATCH/DELETE below; Auth. Personnel and potential_partner stay
+// view-only). Corrected 2026-07-29 (RBAC matrix audit,
+// docs/SYSTEM_AUDIT_2026-07-16.md): this comment previously said
+// "Administrator/Auth. Personnel", which never matched the actual gate on
+// any of the three routes. Broadened 2026-09-14 from requireAdmin to
+// requireStaffAccess (Administrator OR Staff) so Staff gets full Calendar
+// parity with Administrator, reusing the exact same create/edit/delete path
+// and the same shared Google Calendar integration — no second implementation.
+app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
   try {
     const db = getDb();
     const last = await db.collection('calendarevents').find({}).sort({ id: -1 }).limit(1).toArray();
@@ -4796,7 +4874,7 @@ app.post('/api/calendarevents', requireAdmin, async (req, res) => {
   }
 });
 
-app.patch('/api/calendarevents/:id', requireAdmin, async (req, res) => {
+app.patch('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -4820,7 +4898,7 @@ app.patch('/api/calendarevents/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/calendarevents/:id', requireAdmin, async (req, res) => {
+app.delete('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -4840,10 +4918,14 @@ app.delete('/api/calendarevents/:id', requireAdmin, async (req, res) => {
 // used to create/update/delete calendar events — see
 // services/googleCalendarService.js for the full rationale and
 // docs/SYSTEM_AUDIT_2026-07-16.md for the architecture writeup. All four
-// routes are requireAdmin, matching the existing POST/PATCH/DELETE
-// /api/calendarevents gate: connecting/disconnecting the org's calendar
-// integration is exactly as sensitive as creating events. This is fully
-// independent of the passport-google-oauth20 *login* flow above (which
+// routes below stay requireAdmin — connecting/disconnecting the org's shared
+// Google account is org-wide system configuration, deliberately more
+// sensitive than creating an event, and is intentionally NOT broadened by
+// the 2026-09-14 change that gave Staff the same POST/PATCH/DELETE
+// /api/calendarevents access as Administrator (requireStaffAccess) above:
+// Staff creates/edits/deletes events through the same already-connected
+// account without ever needing — or being able — to (dis)connect it. This is
+// fully independent of the passport-google-oauth20 *login* flow above (which
 // discards its tokens) — it talks to googleapis's own OAuth2Client directly
 // so it can capture and persist a refresh token.
 function getGoogleCalendarCallbackUrl(req) {
@@ -5121,12 +5203,18 @@ app.get('/api/institutions', requireAuth, institutionsLimiter, async (req, res) 
 });
 
 // ── OCR (document upload → field extraction for the Partnership Registry) ────
-// requireAuth (not requireUploader) — Staff's Partnership Request page uses
-// this same OCR pipeline for its auto-fill upload. Safe to
-// open beyond requireUploader's role set because every OCR job is
-// per-uploader ownership-checked (see ocrController.status), unlike the
-// Document Library routes above which stay on requireUploader deliberately.
-app.use('/api/ocr', requireAuth, ocrRoutes);
+// requireUploader (2026-09-14 correction — was requireAuth): OCR is one of
+// the "upload" capabilities, exactly like the Document Library routes above,
+// so it belongs on the same role gate as those rather than the broader
+// "any authenticated role" check. requireUploader already covers every role
+// that legitimately uses this pipeline today (Administrator, Auth.
+// Personnel, potential_partner, and Staff's Partnership Request auto-fill
+// upload), so this is a tightening for explicit, future-proof intent — not a
+// behavior change for any current user — and closes the gap where a future
+// authenticated-but-non-uploading role would otherwise inherit OCR access it
+// was never meant to have. Every OCR job remains additionally per-uploader
+// ownership-checked (see ocrController.status) regardless of role.
+app.use('/api/ocr', requireUploader, ocrRoutes);
 
 // Every file OCR'd is archived here automatically — auth-gated since these
 // are institutional partnership documents, not public assets.
@@ -5140,18 +5228,39 @@ app.use('/api/ocr', requireAuth, ocrRoutes);
 // who uploaded it. Including a reviewer role in the ownership check here
 // made every such file return 403 whenever the requester wasn't the
 // reviewer themselves — i.e. always, since requesters are Auth.
-// Personnel/potential_partner, never Administrator/Staff. Auth.
-// Personnel/potential_partner remain restricted to their own uploads — they
-// are never reviewers, so neither has a legitimate reason to open another
-// user's file.
+// Personnel/potential_partner, never Administrator/Staff.
 const SELF_UPLOAD_ONLY_ROLES = ['Auth. Personnel', 'potential_partner'];
+// 2026-09-14: a reviewer's own POST /api/requests|document-requests/:id/documents
+// upload is now correctly attributed to the reviewer (uploadedByEmail =
+// reviewer's own email — see that route's own comment), so a document
+// attached to a requester's OWN request can legitimately have a DIFFERENT
+// uploadedByEmail than the requester. The requester must still be able to
+// open every file on their own request regardless of who actually uploaded
+// it — this was silently true before only as a side effect of the old
+// (buggy) attribution always matching the requester's email; this explicit
+// request-ownership check is what actually preserves that access now that
+// the attribution bug is fixed, without granting access to any OTHER
+// request's documents.
+async function isOwnerOfLinkedRequest(db, doc, email) {
+  if (!doc || doc.requestId == null || !doc.requestType) return false;
+  if (doc.requestType === 'document') {
+    const target = await db.collection('documentrequests').findOne({ id: doc.requestId });
+    return !!(target && target.requestedByEmail === email);
+  }
+  const target = await db.collection('requests').findOne({ id: doc.requestId });
+  return !!(target && target.submittedByEmail === email);
+}
 app.get('/uploads/documents/:filename', requireUploader, async (req, res) => {
   const filename = path.basename(req.params.filename);
   try {
     const db = getDb();
     const doc = await db.collection('documents').findOne({ fileLink: '/uploads/documents/' + filename });
-    if (SELF_UPLOAD_ONLY_ROLES.includes(req.session.user.role) && (!doc || doc.uploadedByEmail !== req.session.user.email)) {
-      return res.status(403).send('Forbidden');
+    if (SELF_UPLOAD_ONLY_ROLES.includes(req.session.user.role)) {
+      const isUploader = !!doc && doc.uploadedByEmail === req.session.user.email;
+      const ownsLinkedRequest = !isUploader && await isOwnerOfLinkedRequest(db, doc, req.session.user.email);
+      if (!isUploader && !ownsLinkedRequest) {
+        return res.status(403).send('Forbidden');
+      }
     }
     res.sendFile(path.join(__dirname, 'uploads', 'documents', filename), (err) => {
       if (err && !res.headersSent) res.status(404).send('Not found');
@@ -5360,10 +5469,22 @@ async function computeDashboardStats(db) {
   const dashExpired  = allPartnerships.filter(p => p.status === 'Expired').length;
   const dashTotal    = allPartnerships.length;
 
-  // ── Expiring / Expired table rows (up to 6, soonest first) ───────────────
+  // ── Expiring / Expired table rows (up to 6, Expiring Soon prioritized) ───
+  // A plain ascending end-date sort put every already-Expired record (past
+  // end dates) ahead of every still-actionable "Expiring Soon" one (future
+  // end dates), so on any real dataset with 6+ Expired partnerships this
+  // widget silently showed ONLY dead/expired records and hid every partnership
+  // that actually still needs renewal action — the exact opposite of the
+  // card's purpose ("Expiring Partnerships" / View Lifecycle). Sorting by
+  // status priority first (Expiring Soon before Expired), then by end date
+  // ascending within each group, keeps the existing within-group order but
+  // guarantees actionable items are never crowded out by historical ones.
   const expiringRows = allPartnerships
     .filter(p => p.status === 'Expiring Soon' || p.status === 'Expired')
-    .sort((a, b) => new Date(a.end || a.endDate || 0) - new Date(b.end || b.endDate || 0))
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'Expiring Soon' ? -1 : 1;
+      return new Date(a.end || a.endDate || 0) - new Date(b.end || b.endDate || 0);
+    })
     .slice(0, 6);
 
   // ── DSS: High Renewal Priority ────────────────────────────────────────────
