@@ -347,7 +347,7 @@
                                             </div>
                                             <div class="dr-row">
                                                 <div class="dr-label">Contact No.</div>
-                                                <div class="dr-value"><input type="text" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000"></div>
+                                                <div class="dr-value"><input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000"></div>
                                             </div>
                                             <div class="dr-row dr-row-tall">
                                                 <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
@@ -827,6 +827,14 @@
         if (el) el.textContent = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
     }
     setDrDateTimeDisplay();
+
+    // Contact No. — digits and basic phone punctuation only, no letters.
+    var fContactEl = document.getElementById('f-contact');
+    if (fContactEl) {
+        fContactEl.addEventListener('input', function () {
+            this.value = this.value.replace(/[^0-9+()\-\s]/g, '');
+        });
+    }
 
     function submitRequest() {
         const inst = document.getElementById('f-inst').value.trim();
