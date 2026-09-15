@@ -269,11 +269,21 @@ table.table-custom {
 }
 
 /* ── Calendar ─────────────────────────────────────────────── */
-.fc .fc-button-primary {
+/* Prev/Next/Today only — NOT the view-switcher group (Month/Week/
+   Day/List). Those share the same .fc-button-primary class, but
+   Velzon already styles inactive group buttons with a light
+   background + colored text; forcing this dark navy background onto
+   them left the inactive labels almost unreadable (dark text on a
+   dark background). */
+.fc .fc-prev-button,
+.fc .fc-next-button,
+.fc .fc-today-button {
     background-color: #405189 !important;
     border-color: #405189 !important;
 }
-.fc .fc-button-primary:hover {
+.fc .fc-prev-button:hover,
+.fc .fc-next-button:hover,
+.fc .fc-today-button:hover {
     background-color: #364474 !important;
 }
 
