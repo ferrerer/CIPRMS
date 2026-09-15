@@ -999,7 +999,6 @@
         var real = myRequests.filter(function (r) { return r.status !== 'Draft'; });
         var prInProgress = real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length;
         var prApproved = real.filter(function (r) { return r.status === 'Approved'; }).length;
-        var prRejected = real.filter(function (r) { return r.status === 'Rejected'; }).length;
 
         // Document requests use the 6-stage workflow (see DR_WORKFLOW_STATUSES
         // above) rather than PR's Pending/Approved/Rejected — "Approved" and
@@ -1014,12 +1013,10 @@
         var drApproved = myDocRequests.filter(function (r) {
             return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status) >= drApprovedIdx;
         }).length;
-        var drRejected = myDocRequests.filter(function (r) { return (r.canonicalStatus || r.status) === 'Rejected'; }).length;
 
         var total = real.length + myDocRequests.length;
         var inProgress = prInProgress + drInProgress;
         var approved = prApproved + drApproved;
-        var rejected = prRejected + drRejected;
 
         setCount('cnt-total', total);
         setCount('cnt-progress', inProgress);
@@ -1031,9 +1028,8 @@
             '<div class="d-flex justify-content-between mb-1"><span>Approved</span><span>' + approved + ' / ' + total + '</span></div>' +
             '<div class="progress mb-3" style="height:10px"><div class="progress-bar bg-success" style="width:' + pct + '%"></div></div>' +
             '<div class="row g-2 text-center">' +
-                '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0">' + inProgress + '</h5><small class="text-muted">In Progress</small></div></div>' +
-                '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
-                '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-danger">' + rejected + '</h5><small class="text-muted">Rejected</small></div></div>' +
+                '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0">' + inProgress + '</h5><small class="text-muted">In Progress</small></div></div>' +
+                '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
             '</div>';
     }
 
