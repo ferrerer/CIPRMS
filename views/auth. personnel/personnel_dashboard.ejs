@@ -349,42 +349,6 @@
                             </div>
                             <!-- end row -->
 
-                            <!-- Row 4: Lifecycle Alerts -->
-                            <div class="row">
-                                <!-- Expiring Soon Table -->
-                                <div class="col-xl-12">
-                                    <div class="card">
-                                        <div class="card-header align-items-center d-flex">
-                                            <h4 class="card-title mb-0 flex-grow-1"><i
-                                                    class="ri-alarm-warning-line me-2 text-warning"></i>Expiring
-                                                Partnerships</h4>
-                                        </div>
-                                        <div class="card-body">
-                                            <div class="table-responsive table-card align-items-center d-flex">
-                                                <table
-                                                    class="table table-borderless table-hover table-centered align-middle table-nowrap mb-0">
-                                                    <thead class="text-muted bg-light-subtle">
-                                                        <tr>
-                                                            <th>Institution</th>
-                                                            <th>Type</th>
-                                                            <th>Country</th>
-                                                            <th>Expires</th>
-                                                            <th>Status</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="expiring-tbody">
-                                                        <tr>
-                                                            <td colspan="5" class="text-center text-muted py-4">Loading…</td>
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- end row -->
-
                         </div><!-- container-fluid -->
                     </div><!-- page-content -->
 
@@ -417,14 +381,6 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // 2026-09-06: name/country/type are real DB fields once fetched below —
-        // escape before interpolating into innerHTML.
-        function escapeHtml(s) {
-            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-            });
-        }
-
         // ── Type & Status Bar Chart — real data (2026-09-06, was hardcoded) ──
         var typeChart = new ApexCharts(document.getElementById('type-status-chart'), {
             chart: { type: 'bar', height: 300, toolbar: { show: false } },
@@ -469,33 +425,6 @@
                 { name: 'Expired', data: [stats.expired || 0] }
             ]);
         }).catch(function (err) { console.error('Failed to load institution stats:', err); });
-
-        // ── Expiring Partnerships table — real data (2026-09-06, was hardcoded) ──
-        fetch('/api/partnerships').then(function (r) { return r.json(); }).then(function (partnerships) {
-            var rows = (Array.isArray(partnerships) ? partnerships : [])
-                .filter(function (p) { return p.status === 'Expiring Soon' || p.status === 'Expired'; })
-                .sort(function (a, b) { return new Date(a.end || a.endDate || 0) - new Date(b.end || b.endDate || 0); })
-                .slice(0, 6);
-            var tbody = document.getElementById('expiring-tbody');
-            if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No partnerships are currently expiring or expired.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = rows.map(function (p) {
-                var typeBadge = p.type === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary';
-                var statusBadge = p.status === 'Expired' ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning';
-                return '<tr>' +
-                    '<td><span class="fw-medium">' + escapeHtml(p.inst || p.institution || '—') + '</span></td>' +
-                    '<td><span class="badge ' + typeBadge + '">' + escapeHtml(p.type || '—') + '</span></td>' +
-                    '<td>' + escapeHtml(p.country || '—') + '</td>' +
-                    '<td>' + escapeHtml(p.end || p.endDate || '—') + '</td>' +
-                    '<td><span class="badge ' + statusBadge + '">' + escapeHtml(p.status || '—') + '</span></td>' +
-                    '</tr>';
-            }).join('');
-        }).catch(function (err) {
-            console.error('Failed to load expiring partnerships:', err);
-            document.getElementById('expiring-tbody').innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Could not load data.</td></tr>';
-        });
 
         // ── Leaflet Map ─────────────────────────────────────────────
         const map = L.map('partnership-map', { center: [20, 15], zoom: 2, zoomControl: true });
