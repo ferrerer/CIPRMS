@@ -109,17 +109,6 @@
                     </a>
                 </li>
 
-                <!-- Notifications -->
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'notifications') ? 'active' : '' %>"
-                        href="/personnel/notifications">
-                        <i class="ri-notification-3-line"></i>
-                        <span>Notifications</span>
-                        <span class="badge bg-danger rounded-pill" id="sidebar-notif-badge"
-                            style="display:none;margin-left:auto;"></span>
-                    </a>
-                </li>
-
                 <li class="menu-title"><span>Account</span></li>
 
                 <li class="nav-item">
@@ -143,15 +132,3 @@
     <div class="sidebar-background"></div>
 </div>
 <div class="vertical-overlay"></div>
-
-<script>
-    fetch('/api/notifications/unread-count')
-        .then(r => r.json())
-        .then(d => {
-            const badge = document.getElementById('sidebar-notif-badge');
-            if (badge && (d.count || 0) > 0) {
-                badge.textContent = d.count;
-                badge.style.display = '';
-            }
-        }).catch(() => { });
-</script>
