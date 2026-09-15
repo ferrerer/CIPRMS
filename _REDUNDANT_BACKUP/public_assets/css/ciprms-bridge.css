@@ -1,0 +1,17 @@
+/* CIPRMS Custom Theme Overrides */
+
+/* Fix CIPRMS text visibility in sidebar logos for light mode */
+.logo-dark .logo-lg span,
+.logo-light .logo-lg span {
+  color: #405189 !important;
+}
+
+/* Ensure breadcrumb CIPRMS link visible */
+.breadcrumb-item a[href="/dashboard"] {
+  color: #405189 !important;
+}
+
+.breadcrumb-item.active {
+  color: #6c757d !important;
+}
+

@@ -1,0 +1,785 @@
+﻿      // ──────────────────────────────────────────────────────────
+      // DATA (demo — replace with real DB calls later)
+      // ──────────────────────────────────────────────────────────
+      let partnerships = [
+        { id: 1, inst: "Ateneo de Manila University", country: "Philippines", region: "Local", type: "MOA", nature: "Research", cat: "Local", unit: "CCS", coordinator: "Dr. Santos", partnerEmail: "ateneo@admu.edu.ph", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2026, start: "Apr 12, 2021", end: "Apr 12, 2026", status: "Expiring Soon", remarks: "Up for renewal Q2 2026" },
+        { id: 2, inst: "Osaka University", country: "Japan", region: "Asia", type: "MOU", nature: "Student Exchange", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "intl@osaka-u.ac.jp", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2026, start: "May 3, 2022", end: "May 3, 2026", status: "Expiring Soon", remarks: "" },
+        { id: 3, inst: "University of Santo Tomas", country: "Philippines", region: "Local", type: "MOA", nature: "Joint Program", cat: "Local", unit: "CILS", coordinator: "Dr. Santos", partnerEmail: "oir@ust.edu.ph", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2026, start: "Dec 15, 2021", end: "Dec 15, 2026", status: "Active", remarks: "" },
+        { id: 4, inst: "Chonnam National University", country: "South Korea", region: "Asia", type: "MOU", nature: "Research", cat: "International", unit: "CETE", coordinator: "Prof. Reyes", partnerEmail: "global@jnu.ac.kr", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2027, start: "Mar 30, 2022", end: "Mar 30, 2027", status: "Active", remarks: "" },
+        { id: 5, inst: "TESDA Region V", country: "Philippines", region: "Local", type: "MOA", nature: "Training", cat: "Local", unit: "CETE", coordinator: "Admin Rivera", partnerEmail: "regionv@tesda.gov.ph", docLink: "", startYear: 2020, endYear: 2025, start: "Jan 1, 2020", end: "Jan 1, 2025", status: "Expired", remarks: "Needs renewal" },
+        { id: 6, inst: "University of Macau", country: "China", region: "Asia", type: "MOA", nature: "Student Exchange", cat: "International", unit: "CILS", coordinator: "Dr. Santos", partnerEmail: "admo@um.edu.mo", docLink: "https://drive.google.com/", startYear: 2022, endYear: 2027, start: "Jul 22, 2022", end: "Jul 22, 2027", status: "Active", remarks: "" },
+        { id: 7, inst: "De La Salle University", country: "Philippines", region: "Local", type: "MOA", nature: "Faculty Exchange", cat: "Local", unit: "CCS", coordinator: "Admin Rivera", partnerEmail: "iro@dlsu.edu.ph", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Feb 1, 2023", end: "Feb 1, 2028", status: "Active", remarks: "" },
+        { id: 8, inst: "NTU Singapore", country: "Singapore", region: "Asia", type: "MOU", nature: "Research", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "global@ntu.edu.sg", docLink: "", startYear: 2022, endYear: 2025, start: "Aug 10, 2022", end: "Aug 10, 2025", status: "Expired", remarks: "Renewal under review" },
+        { id: 9, inst: "University of Melbourne", country: "Australia", region: "Oceania", type: "MOU", nature: "Research", cat: "International", unit: "CNAS", coordinator: "Dr. Santos", partnerEmail: "partnerships@unimelb.edu.au", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Jun 5, 2023", end: "Jun 5, 2028", status: "Active", remarks: "" },
+        { id: 10, inst: "DOST Region V", country: "Philippines", region: "Local", type: "MOA", nature: "Research", cat: "Local", unit: "CNAS", coordinator: "Admin Rivera", partnerEmail: "regionv@dost.gov.ph", docLink: "", startYear: 2022, endYear: 2026, start: "Nov 15, 2022", end: "Nov 15, 2026", status: "Active", remarks: "" },
+        { id: 11, inst: "Kyoto University", country: "Japan", region: "Asia", type: "MOA", nature: "Research", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "oia@kyoto-u.ac.jp", docLink: "https://drive.google.com/", startYear: 2021, endYear: 2027, start: "Jan 20, 2021", end: "Jan 20, 2027", status: "Active", remarks: "" },
+        { id: 12, inst: "Mapua University", country: "Philippines", region: "Local", type: "MOA", nature: "Joint Program", cat: "Local", unit: "CCS", coordinator: "Dr. Santos", partnerEmail: "iro@mapua.edu.ph", docLink: "https://drive.google.com/", startYear: 2023, endYear: 2028, start: "Mar 1, 2023", end: "Mar 1, 2028", status: "Active", remarks: "" },
+        { id: 13, inst: "Hiroshima University", country: "Japan", region: "Asia", type: "MOA", nature: "Research", cat: "International", unit: "CIRL", coordinator: "Prof. Reyes", partnerEmail: "", docLink: "", startYear: 2026, endYear: 2031, start: "Apr 29, 2026", end: "Apr 29, 2031", status: "Pending Approval", remarks: "Submitted by Auth. Personnel. Awaiting admin activation." },
+      ];
+
+      // ──────────────────────────────────────────────────────────
+      // FILTER & RENDER
+      // ──────────────────────────────────────────────────────────
+      let filtered = [...partnerships];
+
+      function applyFilter() {
+        const q = document.getElementById('reg-search').value.toLowerCase();
+        const typ = document.getElementById('reg-type').value;
+        const cat = document.getElementById('reg-cat').value;
+        const st = document.getElementById('reg-status').value;
+        const reg = document.getElementById('reg-region').value;
+        const unt = document.getElementById('reg-unit').value;
+        const yrs = document.getElementById('reg-yr-signed').value;
+        const yre = document.getElementById('reg-yr-exp').value;
+
+        filtered = partnerships.filter(p =>
+          (!q || p.inst.toLowerCase().includes(q) || p.country.toLowerCase().includes(q)) &&
+          (!typ || p.type === typ) &&
+          (!cat || p.cat === cat) &&
+          (!st || p.status === st) &&
+          (!reg || p.region === reg) &&
+          (!unt || p.unit === unt) &&
+          (!yrs || p.startYear == yrs) &&
+          (!yre || p.endYear == yre)
+        );
+        page = 1;
+        renderTable();
+      }
+
+      function clearFilters() {
+        ['reg-search', 'reg-type', 'reg-cat', 'reg-status', 'reg-region', 'reg-unit', 'reg-yr-signed', 'reg-yr-exp']
+          .forEach(id => {
+            const el = document.getElementById(id);
+            if (el.tagName === 'INPUT') el.value = ''; else el.value = '';
+          });
+        applyFilter();
+      }
+
+      function sbadge(s) {
+        const m = {
+          'Active': 'bg-success-subtle text-success',
+          'Expiring Soon': 'bg-warning-subtle text-warning',
+          'Expired': 'bg-danger-subtle text-danger',
+          'Pending Approval': 'bg-info-subtle text-info'
+        };
+        return `<span class="badge ${m[s]||'bg-secondary-subtle text-secondary'}">${s}</span>`;
+      }
+
+      function renderTable() {
+        document.getElementById('cnt-total').textContent = partnerships.length;
+        document.getElementById('cnt-active').textContent = partnerships.filter(p => p.status === 'Active').length;
+        document.getElementById('cnt-expiring').textContent = partnerships.filter(p => p.status === 'Expiring Soon').length;
+        document.getElementById('cnt-expired').textContent = partnerships.filter(p => p.status === 'Expired').length;
+        document.getElementById('reg-count').textContent = `${filtered.length} of ${partnerships.length} records`;
+        document.getElementById('pg-info').textContent = `${filtered.length} record${filtered.length !== 1 ? 's' : ''} shown`;
+
+        document.getElementById('reg-tbody').innerHTML = filtered.length ? filtered.map((p, i) => `
+    <tr class="item">
+      <td class="text-muted fw-semibold">${i + 1}</td>
+      <td>
+        <div class="fw-semibold inst">${p.inst}</div>
+        ${p.coordinator ? `<div class="text-muted fs-11"><i class="ri-user-line me-1"></i>${p.coordinator}</div>` : ''}
+      </td>
+      <td>
+        <div>${p.country}</div>
+        <div class="text-muted fs-11"><i class="ri-map-pin-line me-1"></i>${p.region}</div>
+      </td>
+      <td><span class="badge bg-primary-subtle text-primary ptype">${p.type}</span></td>
+      <td class="text-muted fs-12 pnature">${p.nature}</td>
+      <td><span class="badge bg-success-subtle text-success punit">${p.unit}</span></td>
+      <td class="text-muted fs-12 pstart">${p.start}</td>
+      <td class="fw-semibold fs-12 pend" style="color:${p.status==='Expired'?'#dc2626':p.status==='Expiring Soon'?'#d97706':'#15803d'}">${p.end}</td>
+      <td class="pstatus">${sbadge(p.status)}</td>
+      <td>
+        <div class="d-flex gap-2">
+          <div class="view">
+            <button class="btn btn-sm btn-info view-item-btn" onclick="openViewModal(${p.id})">View</button>
+          </div>
+          <div class="edit">
+            ${p.status === 'Pending Approval'
+              ? `<button class="btn btn-sm btn-success" onclick="approveRecord(${p.id})">Approve</button>`
+              : p.status === 'Expired' || p.status === 'Expiring Soon'
+                ? `<button class="btn btn-sm btn-success edit-item-btn" onclick="openEditModal(${p.id})">Edit</button>`
+                : `<button class="btn btn-sm btn-success edit-item-btn" onclick="openEditModal(${p.id})">Edit</button>`
+            }
+          </div>
+          ${p.status === 'Expired' || p.status === 'Expiring Soon'
+            ? `<div class="renew"><button class="btn btn-sm btn-warning" onclick="openRenewModal(${p.id})">Renew</button></div>`
+            : ''
+          }
+          <div class="remove">
+            <button class="btn btn-sm btn-danger remove-item-btn" onclick="openDeleteModal(${p.id})">Remove</button>
+          </div>
+        </div>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="10" class="text-center py-4 text-muted">No records found.</td></tr>`;
+
+        if (typeof partnerList !== 'undefined' && partnerList) partnerList.reIndex();
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // MODAL HELPERS
+      // ──────────────────────────────────────────────────────────
+      function openAddModal() {
+        const m = new bootstrap.Modal(document.getElementById('addPartnershipModal'));
+        m.show();
+      }
+
+      function openViewModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        document.getElementById('view-title').textContent = p.inst;
+        document.getElementById('view-body').innerHTML = `
+    <div class="row g-3">
+      <div class="col-sm-6"><div class="text-muted fs-12">Institution</div><div class="fw-semibold">${p.inst}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Country</div><div class="fw-semibold">${p.country}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Region</div><div class="fw-semibold">${p.region}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Type</div><div class="fw-semibold">${p.type}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Nature</div><div class="fw-semibold">${p.nature}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Category</div><div class="fw-semibold">${p.cat}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Start Date</div><div class="fw-semibold">${p.start}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">End Date</div><div class="fw-semibold">${p.end}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Status</div><div>${sbadge(p.status)}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Responsible Unit</div><div class="fw-semibold">${p.unit}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">CIRL Coordinator</div><div class="fw-semibold">${p.coordinator || '—'}</div></div>
+      <div class="col-sm-6"><div class="text-muted fs-12">Partner Email</div><div>${p.partnerEmail ? `<a href="mailto:${p.partnerEmail}">${p.partnerEmail}</a>` : '—'}</div></div>
+      <div class="col-sm-12"><div class="text-muted fs-12">Document Link</div><div>${p.docLink ? `<a href="${p.docLink}" target="_blank">${p.docLink}</a>` : '— Not uploaded'}</div></div>
+      <div class="col-sm-12"><div class="text-muted fs-12">Remarks</div><div>${p.remarks || '—'}</div></div>
+    </div>`;
+        const m = new bootstrap.Modal(document.getElementById('viewPartnershipModal'));
+        m.show();
+      }
+
+
+      function approveRecord(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        if (!confirm(`Approve and activate the partnership with "${p.inst}"?`)) return;
+        p.status = 'Active';
+        filtered = [...partnerships];
+        renderTable();
+        showToast('<i class="ri-checkbox-circle-line"></i> Partnership approved and set to Active!');
+      }
+
+      let deletingId = null;
+      function openDeleteModal(id) {
+        deletingId = id;
+        const m = new bootstrap.Modal(document.getElementById('deleteRecordModal'));
+        m.show();
+      }
+
+      function confirmDelete() {
+        if (!deletingId) return;
+        const idx = partnerships.findIndex(x => x.id === deletingId);
+        if (idx === -1) return;
+        const name = partnerships[idx].inst;
+        partnerships.splice(idx, 1);
+        deletingId = null;
+        bootstrap.Modal.getInstance(document.getElementById('deleteRecordModal'))?.hide();
+        applyFilter();
+        showToast(`"${name}" has been removed from the registry.`);
+      }
+
+      function showToast(msg, color = '#1e3a8a') {
+        let t = document.getElementById('reg-toast');
+        if (!t) { t = document.createElement('div'); t.id = 'reg-toast'; document.body.appendChild(t); }
+        t.style.cssText = `position:fixed;bottom:28px;right:28px;z-index:9999;padding:12px 20px;border-radius:10px;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px rgba(0,0,0,.18);transition:opacity .3s;background:${color};opacity:1;`;
+        t.innerHTML = msg;
+        clearTimeout(t._to); t._to = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).classList.remove('open');
+      }
+
+      // ── OCR PDF Upload ────────────────────────────────────────
+      function handleOcrPdf(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const status = document.getElementById('f-ocr-status');
+        const msg = document.getElementById('f-ocr-msg');
+        status.style.display = 'flex';
+        status.style.alignItems = 'center';
+        status.style.gap = '6px';
+        msg.textContent = `"${file.name}" selected — OCR will be applied on save.`;
+      }
+
+
+      let editingId = null;
+
+      function openEditModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        editingId = id;
+        // Pre-fill fields
+        document.getElementById('e-inst').value = p.inst;
+        document.getElementById('e-country').value = p.country;
+        document.getElementById('e-region').value = p.region;
+        document.getElementById('e-partner-email').value = p.partnerEmail || '';
+        document.getElementById('e-type').value = p.type;
+        document.getElementById('e-nature').value = p.nature;
+        document.getElementById('e-cat').value = p.cat;
+        // Convert "Apr 12, 2021" → "2021-04-12" for date inputs
+        const toISO = s => { const d = new Date(s); return isNaN(d) ? '' : d.toISOString().slice(0, 10); };
+        document.getElementById('e-start').value = toISO(p.start);
+        document.getElementById('e-end').value = toISO(p.end);
+        document.getElementById('e-status').value = p.status;
+        document.getElementById('e-unit').value = p.unit;
+        document.getElementById('e-coordinator').value = p.coordinator || '';
+        document.getElementById('e-doclink').value = p.docLink || '';
+        document.getElementById('e-remarks').value = p.remarks || '';
+        const m = new bootstrap.Modal(document.getElementById('editPartnershipModal'));
+        m.show();
+      }
+
+      function computeEditStatus() {
+        const endVal = document.getElementById('e-end').value;
+        if (!endVal) return;
+        const diff = Math.ceil((new Date(endVal) - new Date()) / 86400000);
+        document.getElementById('e-status').value = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+      }
+
+      function saveEdit() {
+        const inst = document.getElementById('e-inst').value.trim();
+        const end = document.getElementById('e-end').value;
+        if (!inst || !end) { alert('Institution name and End Date are required.'); return; }
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const p = partnerships.find(x => x.id === editingId);
+        if (!p) return;
+        p.inst = inst;
+        p.country = document.getElementById('e-country').value.trim();
+        p.region = document.getElementById('e-region').value;
+        p.partnerEmail = document.getElementById('e-partner-email').value.trim();
+        p.type = document.getElementById('e-type').value;
+        p.nature = document.getElementById('e-nature').value;
+        p.cat = document.getElementById('e-cat').value;
+        p.start = fmtDate(document.getElementById('e-start').value);
+        p.end = fmtDate(end);
+        p.endYear = new Date(end).getFullYear();
+        p.status = document.getElementById('e-status').value;
+        p.unit = document.getElementById('e-unit').value;
+        p.coordinator = document.getElementById('e-coordinator').value.trim();
+        p.docLink = document.getElementById('e-doclink').value.trim();
+        p.remarks = document.getElementById('e-remarks').value.trim();
+        bootstrap.Modal.getInstance(document.getElementById('editPartnershipModal'))?.hide();
+        applyFilter();
+        showToast(`"${p.inst}" updated successfully.`);
+      }
+
+      // ── Renew Modal ───────────────────────────────────────────
+      let renewingId = null;
+
+      function openRenewModal(id) {
+        const p = partnerships.find(x => x.id === id);
+        if (!p) return;
+        renewingId = id;
+        document.getElementById('renew-inst-name').textContent = p.inst;
+        document.getElementById('renew-inst-sub').textContent = `${p.type} · ${p.country} · Previously expired: ${p.end}`;
+        document.getElementById('renew-prev-end').value = p.end;
+        document.getElementById('renew-new-end').value = '';
+        document.getElementById('renew-validity').value = '';
+        document.getElementById('renew-status').value = '';
+        document.getElementById('renew-remarks').value = '';
+        const m = new bootstrap.Modal(document.getElementById('renewPartnershipModal'));
+        m.show();
+      }
+
+      function computeRenewStatus() {
+        const endVal = document.getElementById('renew-new-end').value;
+        if (!endVal) return;
+        const endDate = new Date(endVal);
+        const diff = Math.ceil((endDate - new Date()) / 86400000);
+        document.getElementById('renew-status').value = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+        // Compute validity in years+months from today
+        const now = new Date();
+        const yrs = endDate.getFullYear() - now.getFullYear();
+        const mos = endDate.getMonth() - now.getMonth();
+        const total = yrs * 12 + mos;
+        const y = Math.floor(total / 12), m = total % 12;
+        document.getElementById('renew-validity').value = (y > 0 ? y + ' yr' + (y > 1 ? 's' : '') : '') + (m > 0 ? (y > 0 ? ' ' : '') + m + ' mo' : '') || '< 1 month';
+      }
+
+      function saveRenew() {
+        const newEnd = document.getElementById('renew-new-end').value;
+        if (!newEnd) { alert('Please set a new end date.'); return; }
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const p = partnerships.find(x => x.id === renewingId);
+        if (!p) return;
+        p.end = fmtDate(newEnd);
+        p.endYear = new Date(newEnd).getFullYear();
+        const diff = Math.ceil((new Date(newEnd) - new Date()) / 86400000);
+        p.status = diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active';
+        const rmk = document.getElementById('renew-remarks').value.trim();
+        if (rmk) p.remarks = rmk;
+        bootstrap.Modal.getInstance(document.getElementById('renewPartnershipModal'))?.hide();
+        applyFilter();
+        showToast(`"${p.inst}" renewed — new end date: ${p.end}.`);
+      }
+
+      // ── Toast ─────────────────────────────────────────────────
+      let toastTimer = null;
+      function showToast(msg) {
+        const t = document.getElementById('reg-toast');
+        document.getElementById('reg-toast-msg').textContent = msg;
+        t.style.display = 'flex';
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3500);
+      }
+
+      // close modal-overlay listener no longer needed (Bootstrap handles it)
+
+      // ──────────────────────────────────────────────────────────
+      // AUTO-COMPUTE STATUS FROM END DATE
+      // ──────────────────────────────────────────────────────────
+      function computeStatus() {
+        const endVal = document.getElementById('f-end').value;
+        if (!endVal) return;
+        const today = new Date();
+        const endDate = new Date(endVal);
+        const diff = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+        let status = 'Active';
+        if (diff < 0) status = 'Expired';
+        else if (diff <= 90) status = 'Expiring Soon';
+        document.getElementById('f-status').value = status;
+      }
+
+      // ──────────────────────────────────────────────────────────
+      // SUBMIT (demo)
+      // ──────────────────────────────────────────────────────────
+      function submitPartnership() {
+        const inst = document.getElementById('f-inst').value.trim();
+        const type = document.getElementById('f-type').value;
+        const start = document.getElementById('f-start').value;
+        const end = document.getElementById('f-end').value;
+        const unit = document.getElementById('f-unit').value;
+        const region = document.getElementById('f-region').value;
+
+        // Validation
+        if (!inst) { highlight('f-inst', true); }
+        if (!type) { highlight('f-type', true); }
+        if (!start) { highlight('f-start', true); }
+        if (!end) { highlight('f-end', true); }
+        if (!unit) { highlight('f-unit', true); }
+        if (!inst || !type || !start || !end || !unit) {
+          return;
+        }
+
+        const fmtDate = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const diff = Math.ceil((new Date(end) - new Date()) / 86400000);
+        const status = document.getElementById('f-status').value ||
+          (diff < 0 ? 'Expired' : diff <= 90 ? 'Expiring Soon' : 'Active');
+
+        const newP = {
+          id: partnerships.length + 1,
+          inst,
+          country: document.getElementById('f-country').value.trim() || '—',
+          region: region || '—',
+          type,
+          nature: document.getElementById('f-nature').value || '—',
+          cat: document.getElementById('f-cat').value || 'International',
+          unit,
+          coordinator: document.getElementById('f-coordinator').value.trim(),
+          partnerEmail: document.getElementById('f-partner-email').value.trim(),
+          docLink: document.getElementById('f-doc-link').value.trim(),
+          startYear: new Date(start).getFullYear(),
+          endYear: new Date(end).getFullYear(),
+          start: fmtDate(start),
+          end: fmtDate(end),
+          status,
+          remarks: document.getElementById('f-remarks').value.trim(),
+        };
+
+        partnerships.push(newP);
+        applyFilter();
+        bootstrap.Modal.getInstance(document.getElementById('addPartnershipModal'))?.hide();
+        showToast(`"${newP.inst}" added to the registry.`);
+
+      }
+
+      function highlight(id, on) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.borderColor = on ? '#dc2626' : '';
+        el.addEventListener('input', () => { el.style.borderColor = ''; }, { once: true });
+      }
+
+
+      // ──────────────────────────────────────────────────────────
+      // INSTITUTION AUTOCOMPLETE — Hipolabs Universities API
+      // ──────────────────────────────────────────────────────────
+      const COUNTRY_REGION_MAP = {
+        // Asia
+        'Japan': 'Asia', 'China': 'Asia', 'South Korea': 'Asia', 'Singapore': 'Asia',
+        'Philippines': 'Asia', 'India': 'Asia', 'Thailand': 'Asia', 'Vietnam': 'Asia',
+        'Malaysia': 'Asia', 'Indonesia': 'Asia', 'Taiwan': 'Asia', 'Hong Kong': 'Asia',
+        'Bangladesh': 'Asia', 'Pakistan': 'Asia', 'Sri Lanka': 'Asia', 'Nepal': 'Asia',
+        'Myanmar': 'Asia', 'Cambodia': 'Asia', 'Laos': 'Asia', 'Mongolia': 'Asia',
+        'Macau': 'Asia', 'Brunei': 'Asia',
+        // Europe
+        'United Kingdom': 'Europe', 'Germany': 'Europe', 'France': 'Europe', 'Italy': 'Europe',
+        'Spain': 'Europe', 'Netherlands': 'Europe', 'Sweden': 'Europe', 'Norway': 'Europe',
+        'Denmark': 'Europe', 'Finland': 'Europe', 'Switzerland': 'Europe', 'Austria': 'Europe',
+        'Belgium': 'Europe', 'Portugal': 'Europe', 'Poland': 'Europe', 'Czech Republic': 'Europe',
+        'Hungary': 'Europe', 'Romania': 'Europe', 'Greece': 'Europe', 'Russia': 'Europe',
+        'Turkey': 'Europe', 'Ukraine': 'Europe', 'Ireland': 'Europe',
+        // Americas
+        'United States': 'Americas', 'Canada': 'Americas', 'Brazil': 'Americas',
+        'Mexico': 'Americas', 'Argentina': 'Americas', 'Colombia': 'Americas',
+        'Chile': 'Americas', 'Peru': 'Americas', 'Venezuela': 'Americas', 'Ecuador': 'Americas',
+        'Bolivia': 'Americas', 'Paraguay': 'Americas', 'Uruguay': 'Americas',
+        'Cuba': 'Americas', 'Dominican Republic': 'Americas',
+        // Oceania
+        'Australia': 'Oceania', 'New Zealand': 'Oceania', 'Papua New Guinea': 'Oceania',
+        'Fiji': 'Oceania',
+        // Africa
+        'South Africa': 'Africa', 'Nigeria': 'Africa', 'Kenya': 'Africa', 'Egypt': 'Africa',
+        'Ethiopia': 'Africa', 'Ghana': 'Africa', 'Tanzania': 'Africa', 'Uganda': 'Africa',
+        'Zimbabwe': 'Africa', 'Morocco': 'Africa', 'Tunisia': 'Africa',
+      };
+
+      // ──────────────────────────────────────────────────────────
+      // PHILIPPINE HEIs — Built-in Local Dataset (CHED-registered)
+      // ──────────────────────────────────────────────────────────
+      const PH_INSTITUTIONS = [
+        // SUCs — National
+        { name: 'University of the Philippines System', city: 'Quezon City', region5: false, domain: 'up.edu.ph' },
+        { name: 'University of the Philippines Diliman', city: 'Quezon City', region5: false, domain: 'upd.edu.ph' },
+        { name: 'University of the Philippines Manila', city: 'Manila', region5: false, domain: 'upm.edu.ph' },
+        { name: 'University of the Philippines Los Baños', city: 'Los Baños, Laguna', region5: false, domain: 'uplb.edu.ph' },
+        { name: 'University of the Philippines Visayas', city: 'Miag-ao, Iloilo', region5: false, domain: 'upv.edu.ph' },
+        { name: 'University of the Philippines Mindanao', city: 'Davao City', region5: false, domain: 'upm.edu.ph' },
+        { name: 'University of the Philippines Baguio', city: 'Baguio City', region5: false, domain: 'upb.edu.ph' },
+        { name: 'Polytechnic University of the Philippines', city: 'Manila', region5: false, domain: 'pup.edu.ph' },
+        { name: 'Mindanao State University', city: 'Marawi City', region5: false, domain: 'msuiit.edu.ph' },
+        { name: 'Bicol University', city: 'Legazpi City, Albay', region5: true, domain: 'bicol-u.edu.ph' },
+        { name: 'Partido State University', city: 'Goa, Camarines Sur', region5: true, domain: 'psu.edu.ph' },
+        { name: 'Camarines Norte State College', city: 'Daet, Camarines Norte', region5: true, domain: 'cnsc.edu.ph' },
+        { name: 'Camarines Sur Polytechnic Colleges', city: 'Nabua, Camarines Sur', region5: true, domain: 'cspc.edu.ph' },
+        { name: 'Central Bicol State University of Agriculture', city: 'Pili, Camarines Sur', region5: true, domain: 'cbsua.edu.ph' },
+        { name: 'Sorsogon State University', city: 'Sorsogon City', region5: true, domain: 'sorsogon.edu.ph' },
+        { name: 'Catanduanes State University', city: 'Virac, Catanduanes', region5: true, domain: 'csu.edu.ph' },
+        { name: 'Masbate Colleges', city: 'Masbate City', region5: true, domain: '' },
+        // Metro Manila
+        { name: 'De La Salle University', city: 'Manila', region5: false, domain: 'dlsu.edu.ph' },
+        { name: 'Ateneo de Manila University', city: 'Quezon City', region5: false, domain: 'ateneo.edu' },
+        { name: 'University of Santo Tomas', city: 'Manila', region5: false, domain: 'ust.edu.ph' },
+        { name: 'Far Eastern University', city: 'Manila', region5: false, domain: 'feu.edu.ph' },
+        { name: 'Mapúa University', city: 'Manila', region5: false, domain: 'mapua.edu.ph' },
+        { name: 'Adamson University', city: 'Manila', region5: false, domain: 'adamson.edu.ph' },
+        { name: 'San Beda University', city: 'Manila', region5: false, domain: 'sanbeda.edu.ph' },
+        { name: 'Letran College', city: 'Manila', region5: false, domain: 'letran.edu' },
+        { name: 'Arellano University', city: 'Manila', region5: false, domain: 'arellano.edu.ph' },
+        { name: 'Lyceum of the Philippines University', city: 'Manila', region5: false, domain: 'lpu.edu.ph' },
+        { name: 'National University Philippines', city: 'Manila', region5: false, domain: 'nu.edu.ph' },
+        { name: 'Centro Escolar University', city: 'Manila', region5: false, domain: 'ceu.edu.ph' },
+        { name: 'Philippine Normal University', city: 'Manila', region5: false, domain: 'pnu.edu.ph' },
+        { name: 'Technological University of the Philippines', city: 'Manila', region5: false, domain: 'tup.edu.ph' },
+        { name: 'Manuel L. Quezon University', city: 'Manila', region5: false, domain: 'mlqu.edu.ph' },
+        { name: 'University of the East', city: 'Manila', region5: false, domain: 'ue.edu.ph' },
+        { name: 'University of Manila', city: 'Manila', region5: false, domain: 'um.edu.ph' },
+        { name: 'La Salle College Antipolo', city: 'Antipolo City', region5: false, domain: '' },
+        { name: 'Miriam College', city: 'Quezon City', region5: false, domain: 'mc.edu.ph' },
+        { name: 'Philippine Women\'s University', city: 'Manila', region5: false, domain: 'pwu.edu.ph' },
+        { name: 'St. Scholastica\'s College Manila', city: 'Manila', region5: false, domain: 'ssc.edu.ph' },
+        { name: 'Assumption College', city: 'Makati City', region5: false, domain: 'assumption.edu.ph' },
+        { name: 'Ateneo de Manila Law School', city: 'Rockwell, Makati', region5: false, domain: 'ateneo.edu' },
+        // Luzon
+        { name: 'Saint Louis University Baguio', city: 'Baguio City', region5: false, domain: 'slu.edu.ph' },
+        { name: 'University of Baguio', city: 'Baguio City', region5: false, domain: 'ubaguio.edu' },
+        { name: 'Benguet State University', city: 'La Trinidad, Benguet', region5: false, domain: 'bsu.edu.ph' },
+        { name: 'Don Mariano Marcos Memorial State University', city: 'San Fernando, La Union', region5: false, domain: 'dmmmsu.edu.ph' },
+        { name: 'Batangas State University', city: 'Batangas City', region5: false, domain: 'batstate-u.edu.ph' },
+        { name: 'Laguna State Polytechnic University', city: 'San Pablo City, Laguna', region5: false, domain: 'lspu.edu.ph' },
+        { name: 'Pamantasan ng Lungsod ng Maynila', city: 'Manila', region5: false, domain: 'plm.edu.ph' },
+        { name: 'Bulacan State University', city: 'Malolos, Bulacan', region5: false, domain: 'bulsu.edu.ph' },
+        { name: 'Cavite State University', city: 'Indang, Cavite', region5: false, domain: 'cvsu.edu.ph' },
+        { name: 'Nueva Ecija University of Science and Technology', city: 'Cabanatuan City', region5: false, domain: '' },
+        { name: 'Central Luzon State University', city: 'Science City of Muñoz', region5: false, domain: 'clsu.edu.ph' },
+        { name: 'Pampanga State Agricultural University', city: 'Magalang, Pampanga', region5: false, domain: '' },
+        { name: 'Pangasinan State University', city: 'Lingayen, Pangasinan', region5: false, domain: 'psu.edu.ph' },
+        { name: 'Tarlac Agricultural University', city: 'Camiling, Tarlac', region5: false, domain: '' },
+        { name: 'University of Pangasinan', city: 'Dagupan City', region5: false, domain: 'upang.edu.ph' },
+        { name: 'Holy Angel University', city: 'Angeles City, Pampanga', region5: false, domain: 'hau.edu.ph' },
+        // Visayas
+        { name: 'University of the Visayas', city: 'Cebu City', region5: false, domain: 'uv.edu.ph' },
+        { name: 'University of Cebu', city: 'Cebu City', region5: false, domain: 'uc.edu.ph' },
+        { name: 'Cebu Normal University', city: 'Cebu City', region5: false, domain: 'cnu.edu.ph' },
+        { name: 'Cebu Technological University', city: 'Cebu City', region5: false, domain: 'ctu.edu.ph' },
+        { name: 'University of San Carlos', city: 'Cebu City', region5: false, domain: 'usc.edu.ph' },
+        { name: 'Southwestern University PHINMA', city: 'Cebu City', region5: false, domain: 'swu.edu.ph' },
+        { name: 'West Visayas State University', city: 'Iloilo City', region5: false, domain: 'wvsu.edu.ph' },
+        { name: 'University of San Agustin', city: 'Iloilo City', region5: false, domain: 'usa.edu.ph' },
+        { name: 'Central Philippine University', city: 'Iloilo City', region5: false, domain: 'cpu.edu.ph' },
+        { name: 'Iloilo Science and Technology University', city: 'Iloilo City', region5: false, domain: 'isat-u.edu.ph' },
+        { name: 'Eastern Visayas State University', city: 'Tacloban City', region5: false, domain: 'evsu.edu.ph' },
+        { name: 'Samar State University', city: 'Catbalogan City', region5: false, domain: 'ssu.edu.ph' },
+        { name: 'University of Eastern Philippines', city: 'Catarman, N. Samar', region5: false, domain: 'uep.edu.ph' },
+        // Mindanao
+        { name: 'Ateneo de Davao University', city: 'Davao City', region5: false, domain: 'addu.edu.ph' },
+        { name: 'University of Mindanao', city: 'Davao City', region5: false, domain: 'umindanao.edu.ph' },
+        { name: 'Davao Oriental State University', city: 'Mati City', region5: false, domain: 'dorsu.edu.ph' },
+        { name: 'Mindanao State University – Iligan Institute of Technology', city: 'Iligan City', region5: false, domain: 'msuiit.edu.ph' },
+        { name: 'Xavier University – Ateneo de Cagayan', city: 'Cagayan de Oro City', region5: false, domain: 'xu.edu.ph' },
+        { name: 'Capitol University', city: 'Cagayan de Oro City', region5: false, domain: 'cu.edu.ph' },
+        { name: 'Bukidnon State University', city: 'Malaybalay City', region5: false, domain: 'buksu.edu.ph' },
+        { name: 'University of Southern Mindanao', city: 'Kabacan, Cotabato', region5: false, domain: 'usm.edu.ph' },
+        { name: 'Notre Dame of Marbel University', city: 'Koronadal City', region5: false, domain: 'ndmu.edu.ph' },
+        { name: 'Western Mindanao State University', city: 'Zamboanga City', region5: false, domain: 'wmsu.edu.ph' },
+        { name: 'Zamboanga State College of Marine Sciences and Technology', city: 'Zamboanga City', region5: false, domain: 'zcmst.edu.ph' },
+        // Region V specifics (CSPC context)
+        { name: 'Ateneo de Naga University', city: 'Naga City, Camarines Sur', region5: true, domain: 'adnu.edu.ph' },
+        { name: 'University of Nueva Caceres', city: 'Naga City, Camarines Sur', region5: true, domain: 'unc.edu.ph' },
+        { name: 'Holy Cross of Davao College', city: 'Davao City', region5: false, domain: 'hcdc.edu.ph' },
+        { name: 'Colegio de la Purisima Concepcion', city: 'Roxas City, Capiz', region5: false, domain: '' },
+        { name: 'Saint Joseph\'s Institute of Technology', city: 'Butuan City', region5: false, domain: 'sjit.edu.ph' },
+        { name: 'Columban College', city: 'Olongapo City', region5: false, domain: '' },
+        { name: 'La Consolacion College Manila', city: 'Manila', region5: false, domain: '' },
+        { name: 'Emilio Aguinaldo College', city: 'Manila', region5: false, domain: 'eac.edu.ph' },
+        { name: 'Philippine Christian University', city: 'Manila', region5: false, domain: 'pcu.edu.ph' },
+        { name: 'Southville International School and Colleges', city: 'Las Piñas City', region5: false, domain: 'southville.edu.ph' },
+        { name: 'AMA Computer University', city: 'Quezon City', region5: false, domain: 'amaes.edu.ph' },
+        { name: 'STI College', city: 'Manila', region5: false, domain: 'sti.edu' },
+        { name: 'FEU Institute of Technology', city: 'Manila', region5: false, domain: 'feutech.edu.ph' },
+        { name: 'University of Asia and the Pacific', city: 'Pasig City', region5: false, domain: 'uap.asia' },
+        { name: 'Asian Institute of Management', city: 'Makati City', region5: false, domain: 'aim.edu' },
+        { name: 'Ateneo School of Medicine and Public Health', city: 'Pasig City', region5: false, domain: 'ateneo.edu' },
+        { name: 'UPOU – University of the Philippines Open University', city: 'Los Baños, Laguna', region5: false, domain: 'upou.edu.ph' },
+        { name: 'Philippine Military Academy', city: 'Fort del Pilar, Baguio', region5: false, domain: 'pma.edu.ph' },
+        { name: 'Philippine Merchant Marine Academy', city: 'San Narciso, Zambales', region5: false, domain: 'pmma.edu.ph' },
+        { name: 'Philippine National Police Academy', city: 'Silang, Cavite', region5: false, domain: 'pnpa.edu.ph' },
+        { name: 'TESDA', city: 'Taguig City', region5: false, domain: 'tesda.gov.ph' },
+        { name: 'Technical Education and Skills Development Authority', city: 'Taguig City', region5: false, domain: 'tesda.gov.ph' },
+        // DOST Research Institutes
+        { name: 'Philippine Science High School System', city: 'Quezon City', region5: false, domain: 'pshs.edu.ph' },
+        { name: 'DOST-ASTI (Advanced Science and Technology Institute)', city: 'Quezon City', region5: false, domain: 'asti.dost.gov.ph' },
+        { name: 'Philippine Institute of Volcanology and Seismology', city: 'Quezon City', region5: false, domain: 'phivolcs.dost.gov.ph' },
+      ];
+
+      function searchPHInstitutions(q) {
+        if (!q || q.length < 2) return [];
+        const lower = q.toLowerCase();
+        return PH_INSTITUTIONS
+          .filter(i => i.name.toLowerCase().includes(lower) || i.city.toLowerCase().includes(lower))
+          .slice(0, 8)
+          .map(i => ({
+            name: i.name,
+            country: 'Philippines',
+            domains: i.domain ? [i.domain] : [],
+            city: i.city,
+            'alpha_two_code': 'PH',
+            _isLocal: true,
+          }));
+      }
+
+      function countryToRegion(country) {
+        return COUNTRY_REGION_MAP[country] || 'Local';
+      }
+
+      let acDebounce = null;
+      let acResults = [];
+      let acIndex = -1;
+
+      function instSearch(val) {
+        const dd = document.getElementById('ac-dropdown');
+        const sp = document.getElementById('ac-spinner');
+        acIndex = -1;
+
+        if (!val || val.trim().length < 2) {
+          dd.classList.remove('open');
+          dd.innerHTML = '';
+          return;
+        }
+
+        // ── 1. Show local PH results instantly (no API wait) ───────
+        const localMatches = searchPHInstitutions(val.trim());
+        if (localMatches.length) {
+          acResults = localMatches;
+          dd.innerHTML = renderAcItems(acResults);
+          dd.classList.add('open');
+        }
+
+        // ── 2. Also fetch API results and merge ────────────────────
+        clearTimeout(acDebounce);
+        acDebounce = setTimeout(async () => {
+          sp.style.display = 'block';
+          try {
+            const url = `/api/institutions?name=${encodeURIComponent(val.trim())}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            sp.style.display = 'none';
+
+            // Deduplicate: skip names already in local results
+            const existingNames = new Set(acResults.map(r => r.name.toLowerCase()));
+            const apiResults = data.filter(u => !existingNames.has(u.name.toLowerCase())).slice(0, 10);
+
+            // Merge: local PH first, then foreign API results
+            acResults = [...localMatches, ...apiResults];
+
+            if (!acResults.length) {
+              dd.innerHTML = `<div class="ac-empty"><i class="fa-solid fa-magnifying-glass"></i> No results found for "<strong>${val}</strong>"</div>`;
+              dd.classList.add('open');
+              return;
+            }
+
+            dd.innerHTML = renderAcItems(acResults);
+            dd.classList.add('open');
+          } catch (e) {
+            sp.style.display = 'none';
+            // API failed — local PH results already shown, that's fine
+            if (!acResults.length) {
+              dd.innerHTML = `<div class="ac-empty"><i class="fa-solid fa-wifi-slash"></i> Could not reach API. Enter manually.</div>`;
+              dd.classList.add('open');
+            }
+          }
+        }, 350);
+      }
+
+      function renderAcItems(results) {
+        return results.map((u, i) => {
+          const badge = u._isLocal
+            ? `<span class="ac-country" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">🇵🇭 Local</span>`
+            : `<span class="ac-country"><i class="fa-solid fa-location-dot fa-xs"></i> ${u.country}</span>`;
+          const sub = u._isLocal && u.city
+            ? `<span style="font-size:11px;color:#94a3b8;margin-left:4px;">· ${u.city}</span>`
+            : '';
+          return `<div class="ac-item" data-idx="${i}" onclick="instSelect(${i})">
+        <span class="ac-name">${u.name}${sub}</span>
+        ${badge}
+      </div>`;
+        }).join('');
+      }
+
+      function instSelect(idx) {
+        const u = acResults[idx];
+        if (!u) return;
+        document.getElementById('f-inst').value = u.name;
+        document.getElementById('f-country').value = u.country;
+        // Auto-set Region
+        const regionSel = document.getElementById('f-region');
+        const region = countryToRegion(u.country);
+        for (let i = 0; i < regionSel.options.length; i++) {
+          if (regionSel.options[i].value === region) {
+            regionSel.selectedIndex = i; break;
+          }
+        }
+        // Auto-set Category
+        const catSel = document.getElementById('f-cat');
+        const isLocal = (u.country === 'Philippines');
+        for (let i = 0; i < catSel.options.length; i++) {
+          if (catSel.options[i].value === (isLocal ? 'Local' : 'International')) {
+            catSel.selectedIndex = i; break;
+          }
+        }
+        // Auto-suggest partner email from domain
+        if (u.domains && u.domains.length) {
+          const emailField = document.getElementById('f-partner-email');
+          if (!emailField.value) emailField.value = `partnerships@${u.domains[0]}`;
+        }
+        // Close dropdown
+        const dd = document.getElementById('ac-dropdown');
+        dd.classList.remove('open');
+        dd.innerHTML = '';
+        acResults = [];
+        acIndex = -1;
+      }
+
+      function instKeyNav(e) {
+        const dd = document.getElementById('ac-dropdown');
+        const items = dd.querySelectorAll('.ac-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          acIndex = Math.min(acIndex + 1, items.length - 1);
+          items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+          items[acIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          acIndex = Math.max(acIndex - 1, 0);
+          items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+          items[acIndex]?.scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter' && acIndex >= 0) {
+          e.preventDefault();
+          instSelect(acIndex);
+        } else if (e.key === 'Escape') {
+          dd.classList.remove('open');
+          dd.innerHTML = '';
+          acIndex = -1;
+        }
+      }
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', e => {
+        if (!e.target.closest('.ac-wrapper')) {
+          const dd = document.getElementById('ac-dropdown');
+          if (dd) { dd.classList.remove('open'); dd.innerHTML = ''; }
+          acIndex = -1;
+        }
+      });
+
+      // ── INIT ─────────────────────────────────────────────────
+      var partnerList;
+      document.addEventListener('DOMContentLoaded', function() {
+        renderTable();
+
+        // List.js init — tables-listjs.html customerList pattern
+        partnerList = new List('partnership-list', {
+          valueNames: ['inst', 'ptype', 'pnature', 'punit', 'pstart', 'pend', 'pstatus'],
+          page: 10,
+          pagination: {
+            name: 'reg-pagination',
+            paginationClass: 'listjs-pagination',
+            item: '<li class="page-item"><a class="page-link" href="javascript:void(0);"></a></li>'
+          }
+        });
+
+        // Pagination prev/next control
+        const paginationPrev = document.querySelector('.pagination-prev');
+        const paginationNext = document.querySelector('.pagination-next');
+        if (paginationNext) {
+          paginationNext.addEventListener('click', function() {
+            const current = partnerList.i;
+            const pageSize = partnerList.page;
+            if (current + pageSize <= partnerList.matchingItems.length) {
+              partnerList.show(current + pageSize, pageSize);
+            }
+          });
+        }
+        if (paginationPrev) {
+          paginationPrev.addEventListener('click', function() {
+            const current = partnerList.i;
+            const pageSize = partnerList.page;
+            if (current - pageSize >= 1) {
+              partnerList.show(current - pageSize, pageSize);
+            }
+          });
+        }
+
+        // forms-wizard.html nexttab / previestab button logic
+        document.querySelectorAll('.nexttab').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const nextTabId = this.getAttribute('data-nexttab');
+            const nextTab = document.getElementById(nextTabId);
+            if (nextTab) {
+              const tabInstance = new bootstrap.Tab(nextTab);
+              tabInstance.show();
+            }
+          });
+        });
+        document.querySelectorAll('.previestab').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const prevTabId = this.getAttribute('data-previous');
+            const prevTab = document.getElementById(prevTabId);
+            if (prevTab) {
+              const tabInstance = new bootstrap.Tab(prevTab);
+              tabInstance.show();
+            }
+          });
+        });
+
+        // Reset wizard to step 1 when Add modal is opened
+        document.getElementById('addPartnershipModal').addEventListener('show.bs.modal', function() {
+          const firstTab = document.getElementById('add-step1-tab');
+          if (firstTab) new bootstrap.Tab(firstTab).show();
+          document.getElementById('addPartnershipForm').reset();
+        });
+      });

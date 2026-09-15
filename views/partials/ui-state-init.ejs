@@ -1,0 +1,136 @@
+<script>
+// ── CIPRMS per-user UI state (2026-09-11) ───────────────────────────────────
+// Single source of truth for the UI preferences that must survive normal page
+// navigation: theme (data-bs-theme), sidebar size (data-sidebar-size), and the
+// user's last-known fullscreen preference — scoped PER AUTHENTICATED USER so
+// one person's saved preferences never leak into another person's session on
+// the same browser.
+//
+// Root cause this replaces: Velzon's own app.js already ships a full
+// sessionStorage persistence system for these attributes, but it is only ever
+// WRITTEN by the click handlers on its theme-customizer offcanvas panel — a
+// demo-only piece of markup this app never includes. The plain topbar
+// dark-mode/hamburger/fullscreen buttons only call app.js helpers that flip
+// the attribute (or the real Fullscreen API) on the CURRENT document. Nothing
+// was ever saved, so every fresh page load started from each view's own
+// hardcoded defaults.
+//
+// This file is included ONCE at the very top of <head>, before any CSS or
+// body content, on every page (same include-partial pattern already used for
+// header.ejs/sidebar*.ejs) so the saved theme/sidebar state is applied before
+// first paint — no flash of the wrong theme.
+//
+// Per-user scoping: the server already puts the authenticated user's local
+// `user` (req.session.user, shape { id, name, email, role, unit }) in scope
+// for every authenticated view's render call, and EJS include() shares that
+// scope by default — so this partial can read `user.id` directly with no
+// extra plumbing. The login (`/`) and signup (`/signup`) routes never pass a
+// `user.id` (either no `user` local at all, or `user: null` on re-renders),
+// which is exactly how this file tells "authenticated page" apart from
+// "logged-out page" below.
+(function () {
+    var GLOBAL_LEGACY_KEY = 'ciprmsUiState';
+    var userId = <% if (typeof user !== 'undefined' && user && user.id) { %><%- JSON.stringify(String(user.id)) %><% } else { %>null<% } %>;
+    var STORAGE_KEY = userId ? ('ciprmsUiState_' + userId) : null;
+    var root = document.documentElement;
+
+    function readState() {
+        if (!STORAGE_KEY) return {};
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) return JSON.parse(raw);
+            // First time this user has ever been seen on this browser: seed
+            // their own key from the old global (pre-per-user) key, if one
+            // was ever written, and COMMIT it immediately as this user's own
+            // key. This must be a one-time copy, not a standing read-through
+            // — otherwise a later change to the legacy key (e.g. a different
+            // user toggling before ever logging in themselves) would keep
+            // leaking into this user on every subsequent page load. The
+            // legacy key itself is still never deleted or modified, so it
+            // remains available to seed any OTHER not-yet-migrated user too.
+            var legacy = localStorage.getItem(GLOBAL_LEGACY_KEY);
+            var seeded = legacy ? JSON.parse(legacy) : {};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(seeded));
+            return seeded;
+        } catch (e) { return {}; }
+    }
+
+    function writeState(patch) {
+        if (!STORAGE_KEY) return; // logged-out pages never persist per-user state
+        try {
+            var current = readState();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign(current, patch)));
+        } catch (e) { /* localStorage unavailable (private mode, quota, etc.) — degrade to per-page defaults */ }
+    }
+
+    if (userId) {
+        // Authenticated page: apply this user's saved theme/sidebar state
+        // immediately, before the browser paints anything.
+        var saved = readState();
+        if (saved.theme) root.setAttribute('data-bs-theme', saved.theme);
+        if (saved.sidebarSize) root.setAttribute('data-sidebar-size', saved.sidebarSize);
+    } else {
+        // Logged-out page (login/signup): ALWAYS render Light, regardless of
+        // any previously-logged-in user's saved dark-mode preference on this
+        // browser. Their saved state is left completely untouched in
+        // localStorage — it is simply not applied here.
+        root.setAttribute('data-bs-theme', 'light');
+    }
+
+    // Velzon's own app.js (loaded at the bottom of <body>, after this script)
+    // ALSO restores every data-* attribute from sessionStorage on every page
+    // load — but only ever WRITES that sessionStorage snapshot once, the
+    // first time a tab has none, by copying whatever the <html> attributes
+    // happen to be at that moment. Left alone, that first snapshot freezes:
+    // later toggles change localStorage/the DOM (above/via the observer
+    // below) but never touch sessionStorage, so app.js keeps re-applying the
+    // stale frozen values on every subsequent page, silently overwriting
+    // what this script just set. Refreshing the snapshot here, every time,
+    // right after applying the real state, makes app.js's own restore a
+    // harmless no-op that agrees with us instead of fighting us — no change
+    // to app.js itself required.
+    try {
+        var snapshot = {};
+        Array.from(root.attributes).forEach(function (attr) {
+            snapshot[attr.name] = attr.value;
+            sessionStorage.setItem(attr.name, attr.value);
+        });
+        sessionStorage.setItem('defaultAttribute', JSON.stringify(snapshot));
+    } catch (e) { /* sessionStorage unavailable — app.js falls back to its own defaults, same as before this change */ }
+
+    // Watch the two attributes for any future change — whether from the
+    // existing topbar dark-mode/hamburger buttons (app.js's C()/O()
+    // functions, unchanged) or any other future control — and persist
+    // whatever value they end up at, scoped to the current user only. This
+    // never duplicates app.js's own toggle logic; it only observes the
+    // result. On logged-out pages (userId null) writeState() is a no-op, so
+    // nothing is ever saved there even if this observer somehow fires.
+    document.addEventListener('DOMContentLoaded', function () {
+        var observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (m) {
+                if (m.attributeName === 'data-bs-theme') {
+                    writeState({ theme: root.getAttribute('data-bs-theme') });
+                } else if (m.attributeName === 'data-sidebar-size') {
+                    writeState({ sidebarSize: root.getAttribute('data-sidebar-size') });
+                }
+            });
+        });
+        observer.observe(root, { attributes: true, attributeFilter: ['data-bs-theme', 'data-sidebar-size'] });
+
+        // Fullscreen: there is no separate "app-level" expanded layout in
+        // this app — the topbar button toggles ONLY the real Browser
+        // Fullscreen API (plus a purely cosmetic icon-swap class). Browsers
+        // require a user gesture to call requestFullscreen(), so an actual
+        // fullscreen session can never be silently re-entered on page load —
+        // that is a browser security restriction, not something this app can
+        // work around, and attempting to fake it would be a redesign outside
+        // this fix's scope. What CAN be made per-user consistent is the
+        // user's last-known fullscreen *preference*, so it's captured here
+        // for completeness (and available to any future control) without
+        // ever being auto-applied on load.
+        document.addEventListener('fullscreenchange', function () {
+            writeState({ fullscreen: !!document.fullscreenElement });
+        });
+    });
+})();
+</script>
