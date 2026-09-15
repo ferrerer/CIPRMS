@@ -274,12 +274,18 @@ table.table-custom {
    Velzon already styles inactive group buttons with a light
    background + colored text; forcing this dark navy background onto
    them left the inactive labels almost unreadable (dark text on a
-   dark background). */
+   dark background). Explicit color:#fff because Prev/Next sit inside
+   their own .fc-button-group, which Velzon styles with a muted blue
+   icon color (var(--vz-secondary)) meant to pair with a light
+   background — against our forced navy it was low-contrast blue-on-
+   blue. Today isn't grouped so it already inherited white text, but
+   set it explicitly too so all three stay in sync. */
 .fc .fc-prev-button,
 .fc .fc-next-button,
 .fc .fc-today-button {
     background-color: #405189 !important;
     border-color: #405189 !important;
+    color: #fff !important;
 }
 .fc .fc-prev-button:hover,
 .fc .fc-next-button:hover,
