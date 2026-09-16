@@ -93,11 +93,18 @@ describe('Finding #2 — XSS: Dashboard DSS insight strings (server-rendered)', 
     adminAgent = request.agent(app);
     await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
 
-    // Expiring within 90 days so it drives insightRenewal + the Expiring/Expired table.
-    const end = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    // 2026-09-19: this fixture used to be Expiring Soon so it would render
+    // via the dashboard's old "Expiring Partnerships" table (now replaced by
+    // "Active Partnerships" — see below). Made Active instead, with an
+    // artificially far-future `start` so it deterministically ranks in the
+    // new widget's top 6 regardless of whatever real production data also
+    // exists, keeping this a reliable, non-flaky rendering surface for the
+    // escaping check.
+    const start = new Date(Date.now() + 200 * 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const end = new Date(Date.now() + 203 * 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const res = await adminAgent.post('/api/partnerships').send({
       inst: XSS_INST, country: 'jesttest <img src=x onerror=alert(2)> Land', type: 'MOA',
-      unit: 'CCS', start: 'Jan 1, 2020', end, status: 'Expiring Soon'
+      unit: 'CCS', start, end, status: 'Active'
     });
     expect(res.status).toBe(200);
     partnershipId = res.body.partnership.id;
@@ -116,61 +123,152 @@ describe('Finding #2 — XSS: Dashboard DSS insight strings (server-rendered)', 
   });
 });
 
-// Health-check regression (found via the test above intermittently failing as
-// real Expired data grew): computeDashboardStats()'s "Expiring / Expired"
-// table used to sort strictly by end date ascending, with no regard for
-// status — since every Expired partnership's end date is necessarily in the
-// past (and therefore always "sooner" than any still-Expiring-Soon
-// partnership's future end date), 6+ Expired records silently crowded every
-// actionable Expiring Soon partnership out of the fixed 6-row widget. Fixed
-// by sorting Expiring Soon ahead of Expired first, end date ascending within
-// each group second. This test creates its own 6 Expired + 1 Expiring Soon
-// records so it reproduces the defect deterministically, independent of
-// however much real Expired data exists in the shared database.
-describe('Dashboard "Expiring Partnerships" widget: Expiring Soon must not be crowded out by Expired', () => {
-  let adminAgent;
+// 2026-09-19: the dashboard widget formerly named "Expiring Partnerships"
+// (Expiring Soon + Expired, with a sort-priority fix so Expiring Soon was
+// never crowded out by Expired — see prior git history) was replaced with
+// "Active Partnerships": Expiring/Expired must never appear here at all now,
+// and the widget shows up to 6 currently-Active partnerships instead,
+// preferring the most recently started ones. These tests cover that
+// replacement, independent of however much real data already exists in the
+// shared database.
+describe('Dashboard "Active Partnerships" widget (replaced "Expiring Partnerships")', () => {
+  let adminAgent, staffAgent;
   const createdIds = [];
+  // An artificial near-future "start" so these fixtures deterministically
+  // rank at the very top of the "most recently started" sort regardless of
+  // whatever real production data also exists.
+  const veryRecentStart = new Date(Date.now() + 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const futureEnd = new Date(Date.now() + 3 * 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const soonEnd = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const pastEnd = new Date(Date.now() - 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   beforeAll(async () => {
     adminAgent = request.agent(app);
     await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
+    staffAgent = request.agent(app);
+    await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
 
-    // Six long-Expired partnerships — enough alone to fill the widget's 6-row
-    // cap under the old buggy sort.
-    for (let i = 0; i < 6; i++) {
-      const res = await adminAgent.post('/api/partnerships').send({
-        inst: `jesttest Crowd-Out Expired ${i}`, country: 'Testland', type: 'MOA',
-        unit: 'CCS', start: 'Jan 1, 2010', end: `Jan ${i + 1}, 2015`, status: 'Expired'
-      });
+    async function create(overrides) {
+      const res = await adminAgent.post('/api/partnerships').send(Object.assign({
+        country: 'Testland', type: 'MOA', unit: 'CCS', start: veryRecentStart, end: futureEnd, status: 'Active'
+      }, overrides));
       createdIds.push(res.body.partnership.id);
+      return res.body.partnership.id;
     }
 
-    // One Expiring Soon partnership — the actionable record the widget must
-    // still surface even with 6 Expired records already competing for slots.
-    const soonEnd = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const soonRes = await adminAgent.post('/api/partnerships').send({
-      inst: 'jesttest Crowd-Out Expiring Soon', country: 'Testland', type: 'MOA',
-      unit: 'CCS', start: 'Jan 1, 2020', end: soonEnd, status: 'Expiring Soon'
-    });
-    createdIds.push(soonRes.body.partnership.id);
+    // A genuinely Expiring Soon record and a genuinely Expired record —
+    // neither must ever appear in the Active Partnerships widget.
+    await create({ inst: 'jesttest Active-Widget Expiring Soon', end: soonEnd, status: 'Expiring Soon' });
+    await create({ inst: 'jesttest Active-Widget Expired', end: pastEnd, status: 'Expired' });
+
+    // A record whose STORED status is stale ('Expired') but whose real end
+    // date is far in the future — the authoritative, live-recomputed status
+    // is Active, so this MUST appear (proves status is derived from the end
+    // date via computeStatusFromEnd, not string-matched from the stored field).
+    await create({ inst: 'jesttest Active-Widget Stale-Expired-Stored', end: futureEnd, status: 'Expired' });
+
+    // The inverse: STORED status says 'Active' but the end date is in the
+    // past — authoritative recomputation makes this Expired, so it must NOT
+    // appear as an "Active" row.
+    await create({ inst: 'jesttest Active-Widget Stale-Active-Stored', end: pastEnd, status: 'Active' });
   });
 
   afterAll(async () => {
     await db.collection('partnerships').deleteMany({ id: { $in: createdIds } });
   });
 
-  test('the Expiring Soon record still appears in the dashboard widget despite 6 competing Expired records', async () => {
+  test('the widget title is "Active Partnerships", not "Expiring Partnerships"', async () => {
     const res = await adminAgent.get('/dashboard');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('jesttest Crowd-Out Expiring Soon');
+    expect(res.text).toContain('id="active-tbody"');
+    // Checks the old widget's actual rendered markup (icon class + tbody id)
+    // rather than the bare phrase "Expiring Partnerships" — an explanatory
+    // HTML comment on the new widget legitimately mentions that old name for
+    // context, which would make a plain text-phrase assertion a false
+    // failure against harmless comment text, not real visible markup.
+    expect(res.text).not.toContain('ri-alarm-warning-line');
+    expect(res.text).not.toContain('id="expiring-tbody"');
   });
 
-  test('Staff dashboard (same computeDashboardStats(), shared template) shows the same fix', async () => {
-    const staffAgent = request.agent(app);
-    await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+  test('a genuinely Expiring Soon or Expired record never appears in this widget', async () => {
+    const res = await adminAgent.get('/dashboard');
+    expect(res.text).not.toContain('jesttest Active-Widget Expiring Soon');
+    expect(res.text).not.toContain('jesttest Active-Widget Expired');
+  });
+
+  test('status is the authoritative, live-recomputed value from the end date — never the stale stored field', async () => {
+    const res = await adminAgent.get('/dashboard');
+    // Stored 'Expired' but really still active (future end date) → must show.
+    expect(res.text).toContain('jesttest Active-Widget Stale-Expired-Stored');
+    // Stored 'Active' but really expired (past end date) → must NOT show.
+    expect(res.text).not.toContain('jesttest Active-Widget Stale-Active-Stored');
+  });
+
+  test('no "Expiring Soon" or "Expired" status badge appears anywhere in the widget', async () => {
+    const res = await adminAgent.get('/dashboard');
+    const start = res.text.indexOf('id="active-tbody"');
+    expect(start).toBeGreaterThan(-1);
+    const widgetSection = res.text.slice(start, start + 4000);
+    expect(widgetSection).not.toMatch(/Expiring\s+Soon/);
+    expect(widgetSection).not.toContain('>Expired<');
+  });
+
+  test('Staff dashboard (same computeDashboardStats(), shared template) shows the same Active-only behavior', async () => {
     const res = await staffAgent.get('/staff/dashboard');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('jesttest Crowd-Out Expiring Soon');
+    expect(res.text).toContain('jesttest Active-Widget Stale-Expired-Stored');
+    expect(res.text).not.toContain('jesttest Active-Widget Expiring Soon');
+    expect(res.text).not.toContain('jesttest Active-Widget Expired');
+  });
+});
+
+// Cap enforcement: at most 6 Active partnerships are ever shown, preferring
+// the most recently started ones — isolated in its own describe block with
+// its own fixtures so the exact ranking is deterministic and doesn't compete
+// with the fixtures in the block above.
+describe('Dashboard "Active Partnerships" widget: capped at 6, most-recently-started first', () => {
+  let adminAgent;
+  const createdIds = [];
+  const futureEnd = new Date(Date.now() + 3 * 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // 8 distinct, deliberately far-future start dates (so these fixtures rank
+  // at the very top of the sort, ahead of any real production data) spaced a
+  // year apart — index 0 is the MOST recent (highest year offset).
+  const labels = [];
+
+  beforeAll(async () => {
+    adminAgent = request.agent(app);
+    await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
+
+    for (let i = 0; i < 8; i++) {
+      // The widget sorts by start date DESCENDING (largest/most-future value
+      // first) — so Rank0 gets the LARGEST offset (+107 years, sorts first,
+      // "most recently started") and Rank7 gets the SMALLEST (+100 years,
+      // sorts last among these 8, "oldest" of the set).
+      const start = new Date(Date.now() + (107 - i) * 365 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const inst = `jesttest Active-Cap Rank${i}`;
+      labels.push(inst);
+      const res = await adminAgent.post('/api/partnerships').send({
+        inst, country: 'Testland', type: 'MOA', unit: 'CCS', start, end: futureEnd, status: 'Active'
+      });
+      createdIds.push(res.body.partnership.id);
+    }
+  });
+
+  afterAll(async () => {
+    await db.collection('partnerships').deleteMany({ id: { $in: createdIds } });
+  });
+
+  test('with 8 competing Active fixtures, only the 6 most recently started appear', async () => {
+    const res = await adminAgent.get('/dashboard');
+    expect(res.status).toBe(200);
+    // Rank7 and Rank6 have the two OLDEST start dates among these fixtures —
+    // they must be pushed out by the cap.
+    expect(res.text).not.toContain('jesttest Active-Cap Rank7');
+    expect(res.text).not.toContain('jesttest Active-Cap Rank6');
+    // The 6 most recent (Rank5 down to Rank0) must all appear.
+    for (let i = 0; i <= 5; i++) {
+      expect(res.text).toContain(`jesttest Active-Cap Rank${i}`);
+    }
   });
 });
 

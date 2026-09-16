@@ -2184,6 +2184,7 @@ app.get('/api/partnerships/stats', requireAuth, async (req, res) => {
     const byRegion = {};
     const byUnit = {};
     const byInstitutionCounts = {};
+    const byCountryCounts = {};
     all.forEach(p => {
       byType[p.type] = (byType[p.type] || 0) + 1;
       byRegion[p.region] = (byRegion[p.region] || 0) + 1;
@@ -2193,6 +2194,13 @@ app.get('/api/partnerships/stats', requireAuth, async (req, res) => {
       const units = Array.isArray(p.unit) ? p.unit : (p.unit ? [p.unit] : []);
       units.forEach(u => { byUnit[u] = (byUnit[u] || 0) + 1; });
       if (p.inst) byInstitutionCounts[p.inst] = (byInstitutionCounts[p.inst] || 0) + 1;
+      // A blank/whitespace-only country is excluded entirely — same
+      // "skip rather than fabricate a bucket" handling byInstitution already
+      // uses for a missing `inst` — so the Dashboard's "Partnership by
+      // Country" widget's percentages are always of records that actually
+      // name a country, never silently diluted by an "Unspecified" slice.
+      const country = (typeof p.country === 'string' ? p.country : '').trim();
+      if (country) byCountryCounts[country] = (byCountryCounts[country] || 0) + 1;
     });
     // Top 8 institutions by count — an institution-by-institution breakdown can
     // have far more distinct values than the small, fixed set of CSPC units, so
@@ -2200,7 +2208,15 @@ app.get('/api/partnerships/stats', requireAuth, async (req, res) => {
     const byInstitution = Object.fromEntries(
       Object.entries(byInstitutionCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
     );
-    res.json({ total, active, expiring, expired, byType, byRegion, byUnit, byInstitution });
+    // byCountry is intentionally NOT capped (unlike byInstitution above) — the
+    // Dashboard's "Partnership by Country" widget shows a percentage
+    // distribution, which is only meaningful if it accounts for every country
+    // on record; a small set of distinct countries is expected here anyway
+    // (unlike the much larger, uncapped set of partner institutions).
+    const byCountry = Object.fromEntries(
+      Object.entries(byCountryCounts).sort((a, b) => b[1] - a[1])
+    );
+    res.json({ total, active, expiring, expired, byType, byRegion, byUnit, byInstitution, byCountry });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2716,6 +2732,98 @@ function renderPartnershipReportPdf(res, { title, docs, periodLabel, generatedBy
 
   drawLetterhead();
 
+  // Grouped reports (Group By / legacy "By [Dimension]" reportTypes, e.g. the
+  // "Partnership by Country" fixed tile) render the SAME comparisonData
+  // computed by computeCustomReportData — never a second, PDF-only
+  // calculation — as a Group/Count/% table instead of the flat per-record
+  // list below, exactly mirroring what Preview already shows for this same
+  // report data.
+  if (customReportData && customReportData.isComparison) {
+    const rows = customReportData.comparisonData || [];
+    const metrics = customReportData.metrics || [];
+    const colWidth = contentWidth / metrics.length;
+
+    function drawGroupedHeader() {
+      const y = doc.y;
+      doc.rect(left, y, contentWidth, 18).fillAndStroke('#0a58ca', '#0a58ca');
+      doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#fff');
+      metrics.forEach((label, i) => {
+        doc.text(label, left + i * colWidth + 4, y + 5, { width: colWidth - 8, lineBreak: false });
+      });
+      doc.fillColor('#000');
+      doc.y = y + 18;
+    }
+
+    function ensureGroupedSpace(neededHeight) {
+      if (doc.y + neededHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        doc.y = doc.page.margins.top;
+        drawGroupedHeader();
+      }
+    }
+
+    drawGroupedHeader();
+    doc.font('Helvetica').fontSize(8.5);
+    if (!rows.length) {
+      ensureGroupedSpace(16);
+      doc.font('Helvetica-Oblique').fillColor('#888')
+        .text('No records found matching the selected filters.', left + 6, doc.y + 3, { width: contentWidth - 12 });
+      doc.fillColor('#000');
+      doc.y += 16;
+    } else {
+      rows.forEach((row, idx) => {
+        ensureGroupedSpace(16);
+        const y = doc.y;
+        if (idx % 2 === 1) doc.rect(left, y, contentWidth, 16).fillAndStroke('#f5f7fa', '#f5f7fa');
+        doc.strokeColor('#e3e6eb').rect(left, y, contentWidth, 16).stroke();
+        metrics.forEach((label, i) => {
+          // `group` (the dimension value, e.g. a country name) can be an
+          // array for College/Unit's multi-unit case — join for display.
+          const raw = Array.isArray(row[label]) ? row[label].join(', ') : row[label];
+          const val = String(raw == null || raw === '' ? '—' : raw);
+          doc.fillColor('#000').text(val, left + i * colWidth + 4, y + 4, { width: colWidth - 8, lineBreak: false, ellipsis: true });
+        });
+        doc.strokeColor('#000');
+        doc.y = y + 16;
+      });
+    }
+    doc.moveDown(0.8);
+    doc.font('Helvetica').fontSize(8.5).fillColor('#444')
+      .text(`Total Partnerships in Report: ${customReportData.totalRecords}`, left, doc.y, { width: contentWidth, align: 'center' });
+    doc.fillColor('#000');
+
+    ensureGroupedSpace(90);
+    doc.moveDown(1.2);
+    const sigColW2 = contentWidth / 2;
+    const sigTop2 = doc.y;
+    [
+      { label: 'Prepared by:', name: generatedBy },
+      { label: 'Noted by:', name: '' }
+    ].forEach((col, i) => {
+      const x = left + i * sigColW2;
+      doc.font('Helvetica').fontSize(8.5).fillColor('#000').text(col.label, x, sigTop2, { width: sigColW2 - 20 });
+      doc.font('Helvetica-Bold').fontSize(10).text(col.name || ' ', x, sigTop2 + 32, { width: sigColW2 - 20, align: 'center' });
+      doc.moveTo(x, sigTop2 + 48).lineTo(x + sigColW2 - 20, sigTop2 + 48).stroke();
+      doc.font('Helvetica').fontSize(7.5).fillColor('#666')
+        .text('Name / Signature over Printed Name', x, sigTop2 + 51, { width: sigColW2 - 20, align: 'center' });
+    });
+    doc.fillColor('#000');
+
+    const range2 = doc.bufferedPageRange();
+    const savedBM2 = doc.page.margins.bottom;
+    for (let i = range2.start; i < range2.start + range2.count; i++) {
+      doc.switchToPage(i);
+      doc.page.margins.bottom = 0;
+      const footerY = doc.page.height - savedBM2 + 10;
+      doc.font('Helvetica').fontSize(7.5).fillColor('#888')
+        .text('CIPRMS — CSPC Center for International Relations and Linkages', left, footerY, { width: contentWidth / 2, lineBreak: false })
+        .text(`Page ${i - range2.start + 1} of ${range2.count}`, left + contentWidth / 2, footerY, { width: contentWidth / 2, align: 'right', lineBreak: false });
+      doc.page.margins.bottom = savedBM2;
+    }
+    doc.end();
+    return;
+  }
+
   const groups = groupPartnershipDocs(docs);
   drawColumnHeader();
 
@@ -2845,6 +2953,17 @@ async function computeCustomReportData(db, query, user) {
   const country = query.country || '';
   const inst = query.inst || '';
   const compareByInput = query.compareBy || 'Country';
+  // The Custom Report Builder's "Group By" dropdown (cr-groupby in
+  // reports.ejs) — independent of `reportType`/`compareByInput` above, which
+  // predate it and only ever drove the legacy, UI-unreachable "By Country"/
+  // "Active vs Inactive"/etc. reportType values. `groupBy` lets any regular
+  // report (e.g. "Active Partnerships", any status/date/unit filter) ALSO be
+  // grouped by a dimension without hijacking the Report Type field to do it.
+  const groupByInput = typeof query.groupBy === 'string' ? query.groupBy : '';
+  const GROUPBY_FIELD_TO_LABEL = {
+    country: 'Country', inst: 'Institution', unit: 'College / Unit', region: 'Region',
+    type: 'Agreement Type', nature: 'Nature of Partnership', cat: 'Category'
+  };
 
   // Build DB filter
   const filter = {};
@@ -2911,12 +3030,15 @@ async function computeCustomReportData(db, query, user) {
     });
   }
 
-  // Determine comparison mode and compareBy key
+  // Determine comparison mode and compareBy key. `groupBy` (Custom Report
+  // Builder's Group By dropdown) triggers the same grouped-table computation
+  // as the legacy "By [Dimension]" reportType values, independent of
+  // whichever reportType/status is actually selected.
   const isComparison = [
     'Active vs Inactive', 'Active vs Expired', 'Active vs Expiring Soon',
     'Renewed vs Non-Renewed', 'Custom Comparison', 'By Institution',
     'By College / Unit', 'By Country', 'By Region', 'By Agreement Type', 'By Nature of Partnership'
-  ].includes(reportType);
+  ].includes(reportType) || !!GROUPBY_FIELD_TO_LABEL[groupByInput];
 
   let compareBy = compareByInput;
   if (reportType === 'By Institution') compareBy = 'Institution';
@@ -2925,6 +3047,7 @@ async function computeCustomReportData(db, query, user) {
   else if (reportType === 'By Region') compareBy = 'Region';
   else if (reportType === 'By Agreement Type') compareBy = 'Agreement Type';
   else if (reportType === 'By Nature of Partnership') compareBy = 'Nature of Partnership';
+  else if (GROUPBY_FIELD_TO_LABEL[groupByInput]) compareBy = GROUPBY_FIELD_TO_LABEL[groupByInput];
 
   // Determine metric groups for comparison
   let metricGroups = ['Active', 'Inactive'];
@@ -2948,15 +3071,25 @@ async function computeCustomReportData(db, query, user) {
   else if ([
     'By Institution', 'By College / Unit', 'By Country',
     'By Region', 'By Agreement Type', 'By Nature of Partnership'
-  ].includes(reportType)) {
+  ].includes(reportType) || !!GROUPBY_FIELD_TO_LABEL[groupByInput]) {
     metricGroups = ['Active', 'Expiring Soon', 'Inactive'];
   }
 
   // College / Unit is the one dimension that can be an array (a partnership
   // may have multiple responsible units) — every other dimension is always a
   // plain string, so this returns an array only for that one key.
+  // A malformed country value (e.g. whitespace-only, "   ") is truthy in JS
+  // and would otherwise form its own confusing blank-looking group instead of
+  // safely folding into "Unspecified" alongside a genuinely missing country —
+  // trimming here never merges two differently-spelled real country names
+  // (Philippines/philipines stay distinct, per the no-silent-normalization
+  // requirement), it only catches pure whitespace.
+  function normalizeCountryGroupVal(rawCountry) {
+    const c = (typeof rawCountry === 'string' ? rawCountry : '').trim();
+    return c || 'Unspecified';
+  }
   function getGroupVal(p, key) {
-    if (key === 'Country') return p.country || 'Unspecified';
+    if (key === 'Country') return normalizeCountryGroupVal(p.country);
     if (key === 'Institution') return p.inst || 'Unspecified';
     if (key === 'College / Unit') {
       if (Array.isArray(p.unit)) return p.unit.length ? p.unit : 'Unspecified';
@@ -2967,7 +3100,7 @@ async function computeCustomReportData(db, query, user) {
     if (key === 'Nature of Partnership') return p.nature || 'Unspecified';
     if (key === 'Category') return p.cat || 'Unspecified';
     if (key === 'Year') return p.startYear ? String(p.startYear) : (p.start ? String(new Date(p.start).getFullYear()) : 'Unspecified');
-    return p.country || 'Unspecified';
+    return normalizeCountryGroupVal(p.country);
   }
 
   const groupsMap = {};
@@ -2979,7 +3112,16 @@ async function computeCustomReportData(db, query, user) {
     const gVals = Array.isArray(gVal) ? gVal : [gVal];
     gVals.forEach(v => {
       if (!groupsMap[v]) {
+        // `group` is the canonical key existing tests/consumers already read
+        // (res.body.comparisonData[i].group). `[compareBy]` is an alias to
+        // the SAME value (e.g. row.Country === row.group when compareBy is
+        // "Country") — every renderer that iterates the `metrics` array
+        // (Preview's grouped table, the PDF/Excel grouped table) looks up
+        // each column generically via row[metricName], and metrics[0] is
+        // always compareBy itself; without this alias that first column
+        // read row[compareBy], which never existed, and rendered blank.
         groupsMap[v] = { group: v, Total: 0 };
+        groupsMap[v][compareBy] = v;
         metricGroups.forEach(m => groupsMap[v][m] = 0);
       }
       groupsMap[v].Total += 1;
@@ -3000,10 +3142,21 @@ async function computeCustomReportData(db, query, user) {
 
   const comparisonData = Object.values(groupsMap).sort((a, b) => b.Total - a.Total);
   const primaryMetric = metricGroups[0];
+  // `${primaryMetric} %` (e.g. "Active %") is a PER-GROUP status ratio —
+  // what fraction of THIS group's own records are Active — and predates this
+  // change. `% of Total` is a different, additive metric: this group's share
+  // of every record in the whole filtered report dataset (docs.length), the
+  // actual "Country Percentage = country count / total partnerships in the
+  // report" the Reports & Analytics Country distribution feature needs.
+  // Computed from `docs.length` (the exact same filtered population Preview/
+  // PDF/Excel all already share via this one function), so it always reflects
+  // the report's active filters, and every row's percentage sums to ~100%.
   comparisonData.forEach(row => {
     const cnt = row[primaryMetric] || 0;
     const pct = row.Total > 0 ? ((cnt / row.Total) * 100).toFixed(1) : '0.0';
     row[`${primaryMetric} %`] = `${pct}%`;
+    const distPct = docs.length > 0 ? ((row.Total / docs.length) * 100).toFixed(1) : '0.0';
+    row['% of Total'] = `${distPct}%`;
   });
 
   const totalActive = docs.filter(p => p.status === 'Active').length;
@@ -3035,7 +3188,8 @@ async function computeCustomReportData(db, query, user) {
     compareBy,
     metricGroups,
     primaryMetric,
-    metrics: [compareBy, ...metricGroups, 'Total', `${primaryMetric} %`],
+    metrics: [compareBy, ...metricGroups, 'Total', `${primaryMetric} %`, '% of Total'],
+    groupBy: groupByInput || null,
     comparisonData,
     summary: {
       activeCount: totalActive,
@@ -3063,7 +3217,8 @@ async function computeCustomReportData(db, query, user) {
       agreementType: agtype || 'All',
       country: country || 'All',
       status: effectiveStatusFilter || 'All',
-      compareBy
+      compareBy,
+      groupBy: GROUPBY_FIELD_TO_LABEL[groupByInput] || 'None'
     },
     records: docs
   };
@@ -3151,9 +3306,20 @@ function buildPartnershipExcel({ title, docs, periodLabel, generatedBy, customRe
     pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } }
   });
 
-  const colCount = INSTITUTIONAL_LIST_EXCEL_COLUMNS.length;
+  // Grouped reports (Custom Report Builder's Group By, or a legacy "By
+  // [Dimension]" reportType, e.g. the "Partnership by Country" fixed tile)
+  // get a Group/Count/% table instead of the flat institutional-list table —
+  // computed up front so the letterhead's merged banner width matches
+  // whichever column count this export actually uses.
+  const isGrouped = !!(customReportData && customReportData.isComparison);
+  const metrics = isGrouped ? (customReportData.metrics || []) : [];
+  const groupedRows = isGrouped ? (customReportData.comparisonData || []) : [];
+  const colCount = isGrouped ? Math.max(metrics.length, 1) : INSTITUTIONAL_LIST_EXCEL_COLUMNS.length;
+  const effectiveColCount = colCount;
   const lastCol = excelColLetter(colCount);
-  sheet1.columns = INSTITUTIONAL_LIST_EXCEL_COLUMNS.map(c => ({ key: c.key, width: c.width }));
+  sheet1.columns = isGrouped
+    ? metrics.map((m, i) => ({ key: 'm' + i, width: 20 }))
+    : INSTITUTIONAL_LIST_EXCEL_COLUMNS.map(c => ({ key: c.key, width: c.width }));
 
   function mergedRow(sheet, text, { bold = false, size = 11, color = 'FF000000', height = 18, align = 'center', endCol = lastCol } = {}) {
     const row = sheet.addRow([]);
@@ -3196,61 +3362,107 @@ function buildPartnershipExcel({ title, docs, periodLabel, generatedBy, customRe
     sheet1.addRow([]);
   }
 
-  const groups = groupPartnershipDocs(docs);
+  // (isGrouped/metrics/groupedRows/effectiveColCount computed above, before
+  // the letterhead, so the merged title banner's width already matches.)
+  let headerRowNumber;
 
-  const headerRow = sheet1.addRow(INSTITUTIONAL_LIST_EXCEL_COLUMNS.map(c => c.header));
-  headerRow.height = 20;
-  headerRow.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A58CA' } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-    cell.border = CELL_BORDERS;
-  });
-  const headerRowNumber = headerRow.number;
+  if (isGrouped) {
+    const headerRow = sheet1.addRow(metrics);
+    headerRow.height = 20;
+    headerRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A58CA' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = CELL_BORDERS;
+    });
+    headerRowNumber = headerRow.number;
 
-  let rowIndex = 0;
-  groups.forEach(group => {
-    if (group.label) {
-      const gRow = mergedRow(sheet1, `${group.label} (${group.docs.length})`, { bold: true, size: 10, color: 'FF0A3D91', align: 'left', height: 16 });
-      gRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBE6FB' } };
-    }
-    group.docs.forEach(p => {
-      const rowValues = INSTITUTIONAL_LIST_EXCEL_COLUMNS.reduce((acc, c) => {
-        acc[c.key] = c.key === 'no' ? (rowIndex + 1) : p[c.key];
-        return acc;
-      }, {});
-      const row = sheet1.addRow(rowValues);
-      const fill = rowIndex % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
-      row.eachCell({ includeEmpty: true }, cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
-        cell.border = CELL_BORDERS;
-        cell.alignment = { vertical: 'middle' };
+    if (!groupedRows.length) {
+      const emptyRow = sheet1.addRow(['No records found matching the selected filters.']);
+      sheet1.mergeCells(emptyRow.number, 1, emptyRow.number, effectiveColCount);
+      emptyRow.getCell(1).font = { italic: true, color: { argb: 'FF888888' } };
+      emptyRow.getCell(1).alignment = { horizontal: 'center' };
+    } else {
+      groupedRows.forEach((row, idx) => {
+        const values = metrics.map(m => {
+          const raw = Array.isArray(row[m]) ? row[m].join(', ') : row[m];
+          return (raw == null || raw === '') ? '—' : raw;
+        });
+        const excelRow = sheet1.addRow(values);
+        const fill = idx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
+        excelRow.eachCell({ includeEmpty: true }, cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+          cell.border = CELL_BORDERS;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
       });
-      row.getCell('no').alignment = { vertical: 'middle', horizontal: 'center' };
-      rowIndex++;
-    });
-  });
+    }
 
-  sheet1.columns.forEach((col, i) => {
-    const header = INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].header;
-    let max = header.length;
-    docs.forEach(p => {
-      const v = INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].key === 'no' ? null : p[INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].key];
-      if (v != null) max = Math.max(max, String(v).length);
+    sheet1.columns.forEach((col, i) => {
+      let max = String(metrics[i]).length;
+      groupedRows.forEach(row => {
+        const v = row[metrics[i]];
+        if (v != null) max = Math.max(max, String(v).length);
+      });
+      col.width = Math.min(Math.max(max + 2, 14), 40);
     });
-    col.width = Math.min(Math.max(max + 2, INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].width), 45);
-  });
+  } else {
+    const groups = groupPartnershipDocs(docs);
+
+    const headerRow = sheet1.addRow(INSTITUTIONAL_LIST_EXCEL_COLUMNS.map(c => c.header));
+    headerRow.height = 20;
+    headerRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A58CA' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = CELL_BORDERS;
+    });
+    headerRowNumber = headerRow.number;
+
+    let rowIndex = 0;
+    groups.forEach(group => {
+      if (group.label) {
+        const gRow = mergedRow(sheet1, `${group.label} (${group.docs.length})`, { bold: true, size: 10, color: 'FF0A3D91', align: 'left', height: 16 });
+        gRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBE6FB' } };
+      }
+      group.docs.forEach(p => {
+        const rowValues = INSTITUTIONAL_LIST_EXCEL_COLUMNS.reduce((acc, c) => {
+          acc[c.key] = c.key === 'no' ? (rowIndex + 1) : p[c.key];
+          return acc;
+        }, {});
+        const row = sheet1.addRow(rowValues);
+        const fill = rowIndex % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+          cell.border = CELL_BORDERS;
+          cell.alignment = { vertical: 'middle' };
+        });
+        row.getCell('no').alignment = { vertical: 'middle', horizontal: 'center' };
+        rowIndex++;
+      });
+    });
+
+    sheet1.columns.forEach((col, i) => {
+      const header = INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].header;
+      let max = header.length;
+      docs.forEach(p => {
+        const v = INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].key === 'no' ? null : p[INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].key];
+        if (v != null) max = Math.max(max, String(v).length);
+      });
+      col.width = Math.min(Math.max(max + 2, INSTITUTIONAL_LIST_EXCEL_COLUMNS[i].width), 45);
+    });
+  }
 
   sheet1.addRow([]);
   const sigRow = sheet1.addRow([]);
   sigRow.height = 16;
-  const half = Math.max(1, Math.floor(colCount / 2));
+  const half = Math.max(1, Math.floor(effectiveColCount / 2));
   const sigCols = [
     { label: 'Prepared by:', name: generatedBy, start: 1 },
     { label: 'Noted by:', name: '', start: half + 1 }
   ];
   sigCols.forEach(sc => {
-    const end = Math.min(sc.start + half - 1, colCount);
+    const end = Math.min(sc.start + half - 1, effectiveColCount);
     if (end > sc.start) sheet1.mergeCells(sigRow.number, sc.start, sigRow.number, end);
     const cell = sigRow.getCell(sc.start);
     cell.value = sc.label;
@@ -3259,7 +3471,7 @@ function buildPartnershipExcel({ title, docs, periodLabel, generatedBy, customRe
   const sigNameRow = sheet1.addRow([]);
   sigNameRow.height = 16;
   sigCols.forEach(sc => {
-    const end = Math.min(sc.start + half - 1, colCount);
+    const end = Math.min(sc.start + half - 1, effectiveColCount);
     if (end > sc.start) sheet1.mergeCells(sigNameRow.number, sc.start, sigNameRow.number, end);
     const cell = sigNameRow.getCell(sc.start);
     cell.value = sc.name || ' ';
@@ -4034,6 +4246,380 @@ app.get('/api/reports/comparison/excel', requireStaffAccess, async (req, res) =>
   } catch (err) {
     console.error('❌ Comparison Report Excel error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+    else if (!res.writableEnded) res.end();
+  }
+});
+
+// ── Multi-Configuration Comparison (2026-09-18) ──────────────────────────────
+// The original Compare workflow above (computeComparisonReport) is hardcoded
+// to exactly two groups (Group A / Group B) — kept fully intact above for
+// backward compatibility (its own dedicated routes/tests are untouched). This
+// section adds N-way comparison (2 to MAX_COMPARISON_CONFIGS configurations)
+// as an ADDITIVE capability, not a parallel reporting system: each
+// configuration is executed through the exact same computeCustomReportData()
+// pipeline a single Custom Report Builder report already uses — same filter
+// building, same status/date-range semantics, same Country/Unit/etc.
+// handling — so no comparison-specific filter logic is duplicated per
+// configuration. Configurations are a plain array, iterated over; there is no
+// report1/report2-style hardcoding anywhere in this section.
+const MAX_COMPARISON_CONFIGS = 5;
+
+/**
+ * Runs an array of independent report configurations (each the same shape
+ * buildReportQueryParams() sends for a single Custom Report Builder report)
+ * through computeCustomReportData(), then derives each configuration's share
+ * of the combined total. Configurations never share state — each is passed
+ * to computeCustomReportData as its own isolated object.
+ */
+async function computeMultiComparisonReport(db, configs, user) {
+  if (!Array.isArray(configs) || configs.length === 0) {
+    throw Object.assign(new Error('At least one comparison configuration is required.'), { status: 400 });
+  }
+  if (configs.length > MAX_COMPARISON_CONFIGS) {
+    throw Object.assign(new Error(`A maximum of ${MAX_COMPARISON_CONFIGS} comparison configurations is supported.`), { status: 400 });
+  }
+
+  const results = await Promise.all(configs.map(async (config, idx) => {
+    const safeConfig = (config && typeof config === 'object' && !Array.isArray(config)) ? config : {};
+    const label = (typeof safeConfig.label === 'string' && safeConfig.label.trim()) || `Comparison ${idx + 1}`;
+    const reportResult = await computeCustomReportData(db, safeConfig, user);
+    return {
+      id: idx,
+      label,
+      filters: reportResult.filters,
+      count: reportResult.totalRecords,
+      records: reportResult.records
+    };
+  }));
+
+  const grandTotal = results.reduce((sum, r) => sum + r.count, 0);
+  results.forEach(r => {
+    r.percentage = grandTotal > 0 ? Number(((r.count / grandTotal) * 100).toFixed(1)) : 0;
+  });
+
+  return {
+    title: 'Multi-Configuration Comparison Report',
+    generatedBy: (user && user.name) || 'Administrator',
+    generatedDate: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    grandTotal,
+    results
+  };
+}
+
+/**
+ * Parses the `configs` query param (a JSON-encoded array, matching the
+ * simple window.open(...) GET-request pattern every other report export in
+ * this file already uses) into a safe array of plain-object configurations.
+ * Never trusts the parsed shape — a non-array, or a non-object entry, is
+ * normalized away rather than allowed to reach computeCustomReportData's
+ * query destructuring.
+ */
+function parseComparisonConfigs(req) {
+  let raw = req.query.configs;
+  if (typeof raw !== 'string' || !raw) {
+    const err = new Error('A configs array is required.');
+    err.status = 400;
+    throw err;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    const err = new Error('Invalid comparison configuration payload — configs must be valid JSON.');
+    err.status = 400;
+    throw err;
+  }
+  if (!Array.isArray(parsed)) {
+    const err = new Error('configs must be an array of comparison configurations.');
+    err.status = 400;
+    throw err;
+  }
+  return parsed.map(c => (c && typeof c === 'object' && !Array.isArray(c)) ? c : {});
+}
+
+// Distinct, cycling color per comparison slot — used by both the multi PDF
+// and the frontend chart so a given comparison's color is visually
+// consistent-looking across the feature, without hardcoding exactly two.
+const MULTI_COMPARISON_COLORS = ['#0a3d91', '#991B1B', '#0ab39c', '#b45309', '#6d28d9'];
+
+function renderMultiComparisonReportPdf(res, { title, results, periodLabel, generatedBy }) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(title)}.pdf"`);
+
+  const doc = new PDFDocument({ margin: 36, size: 'A4', layout: 'landscape', bufferPages: true });
+  doc.on('error', (err) => {
+    console.error('❌ Multi-comparison PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate comparison PDF.' });
+    else if (!res.writableEnded) res.end();
+  });
+  res.on('error', (err) => console.error('❌ Multi-comparison PDF response stream error:', err));
+  doc.pipe(res);
+
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const contentWidth = right - left;
+  const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  const cspcLogoPath = path.join(__dirname, 'public', 'images', 'cspc.PNG');
+  const top = doc.page.margins.top;
+  doc.y = top;
+  try { doc.image(cspcLogoPath, left, top, { width: 48, height: 48 }); } catch (e) { /* optional */ }
+  const cX = left + 48 + 8;
+  const cW = contentWidth - 56;
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text('CAMARINES SUR POLYTECHNIC COLLEGES', cX, top, { width: cW, align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(9.5).text('CENTER FOR INTERNATIONAL RELATIONS AND LINKAGES', cX, doc.y, { width: cW, align: 'center' });
+  doc.y = Math.max(doc.y, top + 48) + 6;
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).lineWidth(2.5).strokeColor('#0a58ca').stroke();
+  doc.lineWidth(1).strokeColor('#000');
+  doc.moveDown(0.6);
+
+  doc.font('Helvetica-Bold').fontSize(14).fillColor('#000').text(title.toUpperCase(), left, doc.y, { width: contentWidth, align: 'center' });
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(8.5).fillColor('#444')
+    .text(periodLabel || 'Report Period: All Records', left, doc.y, { width: contentWidth, align: 'center' })
+    .text(`Generated ${now} by ${generatedBy}`, left, doc.y, { width: contentWidth, align: 'center' });
+  doc.fillColor('#000');
+  doc.moveDown(0.8);
+
+  // ── Summary table: Comparison | Partnerships | Percentage — one row per
+  // configuration, iterated dynamically (no fixed "Group A/Group B" columns).
+  const summaryColW = [contentWidth * 0.5, contentWidth * 0.25, contentWidth * 0.25];
+  const summaryHeaders = ['Comparison', 'Partnerships', 'Percentage'];
+  const sumHeadY = doc.y;
+  doc.rect(left, sumHeadY, contentWidth, 18).fillAndStroke('#0a58ca', '#0a58ca');
+  doc.font('Helvetica-Bold').fontSize(9).fillColor('#fff');
+  let sx = left;
+  summaryHeaders.forEach((h, i) => { doc.text(h, sx + 4, sumHeadY + 5, { width: summaryColW[i] - 8 }); sx += summaryColW[i]; });
+  doc.fillColor('#000');
+  doc.y = sumHeadY + 18;
+
+  results.forEach((r, idx) => {
+    const rowY = doc.y;
+    const fill = idx % 2 === 1 ? '#F5F7FA' : '#FFFFFF';
+    doc.rect(left, rowY, contentWidth, 18).fill(fill).stroke('#ddd');
+    const color = MULTI_COMPARISON_COLORS[idx % MULTI_COMPARISON_COLORS.length];
+    let rx = left;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(color).text(r.label, rx + 4, rowY + 4, { width: summaryColW[0] - 8, lineBreak: false, ellipsis: true });
+    rx += summaryColW[0];
+    doc.font('Helvetica').fillColor('#000').text(String(r.count), rx + 4, rowY + 4, { width: summaryColW[1] - 8 });
+    rx += summaryColW[1];
+    doc.text(`${r.percentage}%`, rx + 4, rowY + 4, { width: summaryColW[2] - 8 });
+    doc.strokeColor('#000');
+    doc.y = rowY + 18;
+  });
+  doc.moveDown(0.8);
+
+  // ── Per-comparison record tables — one section per configuration.
+  const COL_DEFS = [
+    { key: 'inst', label: 'Institution', width: 175 },
+    { key: 'country', label: 'Country', width: 80 },
+    { key: 'type', label: 'Type', width: 45 },
+    { key: 'unit', label: 'Unit', width: 60 },
+    { key: 'start', label: 'Start', width: 75 },
+    { key: 'end', label: 'End', width: 75 },
+    { key: 'status', label: 'Status', width: 85 }
+  ];
+
+  results.forEach((r, idx) => {
+    const color = MULTI_COMPARISON_COLORS[idx % MULTI_COMPARISON_COLORS.length];
+    if (doc.y + 60 > doc.page.height - doc.page.margins.bottom) { doc.addPage(); doc.y = doc.page.margins.top; }
+    const shY = doc.y;
+    doc.rect(left, shY, contentWidth, 18).fillAndStroke(color, color);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#fff')
+      .text(`${r.label} (${r.records.length} record${r.records.length !== 1 ? 's' : ''})`, left + 6, shY + 5, { width: contentWidth - 12 });
+    doc.fillColor('#000');
+    doc.y = shY + 18;
+
+    if (!r.records.length) {
+      const emY = doc.y;
+      doc.rect(left, emY, contentWidth, 16).stroke();
+      doc.font('Helvetica').fontSize(8.5).fillColor('#888').text('No records found for this configuration.', left + 4, emY + 4, { width: contentWidth - 8 });
+      doc.fillColor('#000');
+      doc.y = emY + 16;
+      doc.moveDown(0.4);
+      return;
+    }
+
+    const chY = doc.y;
+    doc.rect(left, chY, contentWidth, 16).fillAndStroke('#1a56c4', '#1a56c4');
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#fff');
+    let cx = left;
+    COL_DEFS.forEach(col => { doc.text(col.label, cx + 3, chY + 4, { width: col.width - 6, lineBreak: false }); cx += col.width; });
+    doc.fillColor('#000');
+    doc.y = chY + 16;
+
+    r.records.forEach((p, ridx) => {
+      if (doc.y + 16 > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        doc.y = doc.page.margins.top;
+        const chY2 = doc.y;
+        doc.rect(left, chY2, contentWidth, 16).fillAndStroke('#1a56c4', '#1a56c4');
+        doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#fff');
+        let cx2 = left;
+        COL_DEFS.forEach(col => { doc.text(col.label, cx2 + 3, chY2 + 4, { width: col.width - 6, lineBreak: false }); cx2 += col.width; });
+        doc.fillColor('#000');
+        doc.y = chY2 + 16;
+      }
+      const rowY = doc.y;
+      const fill = ridx % 2 === 0 ? '#FFFFFF' : '#F5F7FA';
+      doc.rect(left, rowY, contentWidth, 16).fill(fill).stroke('#ddd');
+      doc.font('Helvetica').fontSize(7.5).fillColor('#222');
+      let rx = left;
+      COL_DEFS.forEach(col => {
+        const raw = Array.isArray(p[col.key]) ? p[col.key].join(', ') : p[col.key];
+        doc.text(String(raw == null || raw === '' ? '—' : raw), rx + 3, rowY + 4, { width: col.width - 6, lineBreak: false, ellipsis: true });
+        rx += col.width;
+      });
+      doc.strokeColor('#000');
+      doc.y = rowY + 16;
+    });
+    doc.moveDown(0.6);
+  });
+
+  const range = doc.bufferedPageRange();
+  const savedBM = doc.page.margins.bottom;
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    doc.page.margins.bottom = 0;
+    const footerY = doc.page.height - savedBM + 10;
+    doc.font('Helvetica').fontSize(7.5).fillColor('#888')
+      .text('CIPRMS — CSPC Center for International Relations and Linkages', left, footerY, { width: contentWidth / 2, lineBreak: false })
+      .text(`Page ${i - range.start + 1} of ${range.count}`, left + contentWidth / 2, footerY, { width: contentWidth / 2, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = savedBM;
+  }
+  doc.end();
+}
+
+function buildMultiComparisonExcel({ title, results, periodLabel, generatedBy }) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'CIPRMS';
+  workbook.created = new Date();
+
+  const summarySheet = workbook.addWorksheet('Comparison Summary');
+  const mergedRow = (sheet, text, { bold = false, size = 11, color = 'FF000000', height = 18, endCol = 'C' } = {}) => {
+    const row = sheet.addRow([]);
+    row.height = height;
+    sheet.mergeCells(`A${row.number}:${endCol}${row.number}`);
+    const cell = row.getCell(1);
+    cell.value = text;
+    cell.font = { bold, size, color: { argb: color } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    return row;
+  };
+  mergedRow(summarySheet, 'CAMARINES SUR POLYTECHNIC COLLEGES', { bold: true, size: 13 });
+  mergedRow(summarySheet, 'CENTER FOR INTERNATIONAL RELATIONS AND LINKAGES', { bold: true, size: 11, color: 'FF0A3D91' });
+  mergedRow(summarySheet, title.toUpperCase(), { bold: true, size: 14, color: 'FF0A58CA', height: 22 });
+  mergedRow(summarySheet, periodLabel || 'Report Period: All Records', { size: 9.5, color: 'FF444444' });
+  const generatedRow = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  mergedRow(summarySheet, `Generated ${generatedRow} by ${generatedBy}`, { size: 9.5, color: 'FF444444' });
+  summarySheet.addRow([]);
+
+  const headerRow = summarySheet.addRow(['Comparison', 'Partnerships', 'Percentage']);
+  headerRow.height = 20;
+  headerRow.eachCell(cell => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A58CA' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = CELL_BORDERS;
+  });
+  results.forEach((r, idx) => {
+    const row = summarySheet.addRow([r.label, r.count, `${r.percentage}%`]);
+    const fill = idx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
+    row.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      cell.border = CELL_BORDERS;
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+  });
+  summarySheet.addRow([]);
+  summarySheet.getColumn(1).width = 30;
+  summarySheet.getColumn(2).width = 16;
+  summarySheet.getColumn(3).width = 16;
+
+  // One dedicated records sheet per comparison configuration — iterated,
+  // never hand-written per index, so a 3rd/4th/5th configuration gets a
+  // sheet exactly like the 1st and 2nd.
+  results.forEach((r, idx) => {
+    const safeName = `Cfg ${idx + 1} Records`.slice(0, 31);
+    const sheet = workbook.addWorksheet(safeName);
+    sheet.columns = PARTNERSHIP_FULL_EXCEL_COLUMNS.map(c => ({ key: c.key, width: c.width }));
+    mergedRow(sheet, `${r.label} — ${r.count} record${r.count !== 1 ? 's' : ''}`, { bold: true, size: 12, color: 'FF0A3D91', endCol: excelColLetter(PARTNERSHIP_FULL_EXCEL_COLUMNS.length) });
+    sheet.addRow([]);
+    const hRow = sheet.addRow(PARTNERSHIP_FULL_EXCEL_COLUMNS.map(c => c.header));
+    hRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0A58CA' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = CELL_BORDERS;
+    });
+    r.records.forEach((p, ridx) => {
+      const rowValues = PARTNERSHIP_FULL_EXCEL_COLUMNS.reduce((acc, c) => {
+        acc[c.key] = Array.isArray(p[c.key]) ? p[c.key].join(', ') : p[c.key];
+        return acc;
+      }, {});
+      const row = sheet.addRow(rowValues);
+      const fill = ridx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
+      row.eachCell({ includeEmpty: true }, cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+        cell.border = CELL_BORDERS;
+        cell.alignment = { vertical: 'middle' };
+      });
+    });
+  });
+
+  return workbook;
+}
+
+app.get('/api/reports/comparison/multi/preview', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const configs = parseComparisonConfigs(req);
+    const data = await computeMultiComparisonReport(db, configs, req.session.user);
+    await logActivity(db, req.session.user, 'VIEW', `Generated multi-comparison report (${data.results.length} configurations)`);
+    res.json({
+      title: data.title,
+      generatedBy: data.generatedBy,
+      generatedDate: data.generatedDate,
+      grandTotal: data.grandTotal,
+      results: data.results.map(r => ({
+        id: r.id, label: r.label, filters: r.filters, count: r.count, percentage: r.percentage,
+        records: r.records.slice(0, 100)
+      }))
+    });
+  } catch (err) {
+    console.error('❌ Multi-comparison preview error:', err);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.get('/api/reports/comparison/multi/pdf', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const configs = parseComparisonConfigs(req);
+    const data = await computeMultiComparisonReport(db, configs, req.session.user);
+    await logActivity(db, req.session.user, 'VIEW', `Exported multi-comparison report PDF (${data.results.length} configurations)`);
+    renderMultiComparisonReportPdf(res, data);
+  } catch (err) {
+    console.error('❌ Multi-comparison PDF export error:', err);
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
+    else if (!res.writableEnded) res.end();
+  }
+});
+
+app.get('/api/reports/comparison/multi/excel', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const configs = parseComparisonConfigs(req);
+    const data = await computeMultiComparisonReport(db, configs, req.session.user);
+    await logActivity(db, req.session.user, 'VIEW', `Exported multi-comparison report Excel (${data.results.length} configurations)`);
+    const workbook = buildMultiComparisonExcel(data);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename(data.title)}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('❌ Multi-comparison Excel export error:', err);
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5469,22 +6055,28 @@ async function computeDashboardStats(db) {
   const dashExpired  = allPartnerships.filter(p => p.status === 'Expired').length;
   const dashTotal    = allPartnerships.length;
 
-  // ── Expiring / Expired table rows (up to 6, Expiring Soon prioritized) ───
-  // A plain ascending end-date sort put every already-Expired record (past
-  // end dates) ahead of every still-actionable "Expiring Soon" one (future
-  // end dates), so on any real dataset with 6+ Expired partnerships this
-  // widget silently showed ONLY dead/expired records and hid every partnership
-  // that actually still needs renewal action — the exact opposite of the
-  // card's purpose ("Expiring Partnerships" / View Lifecycle). Sorting by
-  // status priority first (Expiring Soon before Expired), then by end date
-  // ascending within each group, keeps the existing within-group order but
-  // guarantees actionable items are never crowded out by historical ones.
-  const expiringRows = allPartnerships
-    .filter(p => p.status === 'Expiring Soon' || p.status === 'Expired')
-    .sort((a, b) => {
-      if (a.status !== b.status) return a.status === 'Expiring Soon' ? -1 : 1;
-      return new Date(a.end || a.endDate || 0) - new Date(b.end || b.endDate || 0);
-    })
+  // ── Active Partnerships table rows (up to 6, most recently started) ─────
+  // 2026-09-19: this widget was "Expiring Partnerships" (Expiring Soon +
+  // Expired, prioritized so Expiring Soon was never crowded out by Expired —
+  // see git history for that fix). Replaced with an Active-only view per
+  // request; Expiring/Expired records must never appear here.
+  //
+  // Status is recomputed live via computeStatusFromEnd() — the same
+  // authoritative, date-derived status check the Reports & Analytics engine
+  // and /api/partnerships/stats already use — rather than trusted from the
+  // stored `status` field, which is only refreshed by the hourly lifecycle
+  // job and can be stale by up to an hour. This is a read-only computation
+  // for display purposes only: it never writes back to the partnership
+  // record, so it cannot desync a record from the real lifecycle job.
+  //
+  // "Most relevant/recent" is the partnership's own authoritative `start`
+  // date (the "Date of Signing" field used throughout Reports & Analytics
+  // and the Target Tracker) sorted descending — the most recently signed
+  // Active partnerships surface first, exactly mirroring how "recent" is
+  // already defined everywhere else in this codebase.
+  const activePartnerships = allPartnerships
+    .filter(p => computeStatusFromEnd(p.end) === 'Active')
+    .sort((a, b) => new Date(b.start || b.startDate || 0) - new Date(a.start || a.startDate || 0))
     .slice(0, 6);
 
   // ── DSS: High Renewal Priority ────────────────────────────────────────────
@@ -5519,7 +6111,7 @@ async function computeDashboardStats(db) {
     insightOptimization = 'No expired partnerships currently require review.';
   }
 
-  return { dashActive, dashExpiring, dashExpired, dashTotal, expiringRows, insightRenewal, insightExpansion, insightOptimization };
+  return { dashActive, dashExpiring, dashExpired, dashTotal, activePartnerships, insightRenewal, insightExpansion, insightOptimization };
 }
 
 app.get('/dashboard', requireAdmin, async (req, res) => {
@@ -5538,7 +6130,7 @@ app.get('/dashboard', requireAdmin, async (req, res) => {
       activePage: 'dashboard',
       user: req.session.user,
       dashActive: 0, dashExpiring: 0, dashExpired: 0, dashTotal: 0,
-      expiringRows: [],
+      activePartnerships: [],
       insightRenewal: 'Could not load renewal data.',
       insightExpansion: 'Could not load expansion data.',
       insightOptimization: 'Could not load optimization data.'
@@ -5716,7 +6308,7 @@ app.get('/staff/dashboard', requireStaffAccess, async (req, res) => {
       sidebarPartial: 'sidebar_staff',
       user: req.session.user,
       dashActive: 0, dashExpiring: 0, dashExpired: 0, dashTotal: 0,
-      expiringRows: [],
+      activePartnerships: [],
       insightRenewal: 'Could not load renewal data.',
       insightExpansion: 'Could not load expansion data.',
       insightOptimization: 'Could not load optimization data.'

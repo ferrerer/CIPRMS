@@ -278,11 +278,11 @@
                                     </div>
                                 </div>
 
-                                <!-- By Institution Chart -->
+                                <!-- By Country Chart -->
                                 <div class="col-xl-4">
                                     <div class="card card-height-100">
                                         <div class="card-header align-items-center d-flex">
-                                            <h4 class="card-title mb-0 flex-grow-1">Partnerships by Institution</h4>
+                                            <h4 class="card-title mb-0 flex-grow-1">Partnership by Country</h4>
                                             <div class="flex-shrink-0">
                                                 <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
                                                     class="btn btn-soft-info btn-sm material-shadow-none">View
@@ -290,7 +290,7 @@
                                             </div>
                                         </div>
                                         <div class="card-body">
-                                            <div id="institution-chart" class="apex-charts" dir="ltr"></div>
+                                            <div id="country-chart" class="apex-charts" dir="ltr"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -367,15 +367,18 @@
 
                             <!-- Row 4: Lifecycle Alerts -->
                             <div class="row">
-                                <!-- Expiring Soon Table -->
+                                <!-- Active Partnerships Table (replaced the "Expiring Partnerships"
+                                     Expiring Soon/Expired table, 2026-09-19 — Lifecycle Monitoring
+                                     already covers Expiring/Expired in full detail; this dashboard
+                                     widget now surfaces currently Active partnerships instead) -->
                                 <div class="col-xl-12">
                                     <div class="card">
                                         <div class="card-header align-items-center d-flex">
                                             <h4 class="card-title mb-0 flex-grow-1"><i
-                                                    class="ri-alarm-warning-line me-2 text-warning"></i>Expiring
+                                                    class="ri-checkbox-circle-line me-2 text-success"></i>Active
                                                 Partnerships</h4>
                                             <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
-                                                class="btn btn-soft-warning btn-sm material-shadow-none">View
+                                                class="btn btn-soft-success btn-sm material-shadow-none">View
                                                 Lifecycle</a>
                                         </div>
                                         <div class="card-body">
@@ -391,14 +394,14 @@
                                                             <th>Status</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody id="expiring-tbody">
-                                                        <% if (!expiringRows || expiringRows.length===0) { %>
+                                                    <tbody id="active-tbody">
+                                                        <% if (!activePartnerships || activePartnerships.length===0) { %>
                                                             <tr>
                                                                 <td colspan="5" class="text-center text-muted py-4"><i
-                                                                        class="ri-checkbox-circle-line me-1 text-success"></i>No
-                                                                    expiring or expired partnerships.</td>
+                                                                        class="ri-information-line me-1 text-muted"></i>No
+                                                                    active partnerships.</td>
                                                             </tr>
-                                                            <% } else { expiringRows.forEach(function(p) { var d=new
+                                                            <% } else { activePartnerships.forEach(function(p) { var d=new
                                                                 Date(p.end || p.endDate); var fmtDate=isNaN(d) ? (p.end
                                                                 || p.endDate || '—' ) :
                                                                 d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -411,13 +414,8 @@
                                                                                 p.type || '—' %></span></td>
                                                                     <td><%= p.country || '—' %></td>
                                                                     <td><%= fmtDate %></td>
-                                                                    <td>
-                                                                        <% if (p.status==='Expired' ) { %><span
-                                                                                class="badge bg-danger-subtle text-danger">Expired</span>
-                                                                            <% } else { %><span
-                                                                                    class="badge bg-warning-subtle text-warning">Expiring
-                                                                                    Soon</span>
-                                                                                <% } %>
+                                                                    <td><span
+                                                                            class="badge bg-success-subtle text-success">Active</span>
                                                                     </td>
                                                                 </tr>
                                                                 <% }); } %>
@@ -593,17 +591,144 @@
             });
             typeChart.render();
 
-            const instEntries = Object.entries(stats.byInstitution || {}).sort((a, b) => b[1] - a[1]);
-            var institutionChart = new ApexCharts(document.getElementById('institution-chart'), {
-                chart: { type: 'bar', height: 300, toolbar: { show: false } },
+            // byCountry (unlike byInstitution) is never capped server-side —
+            // see /api/partnerships/stats in cirl.js — so countryTotal here is
+            // the exact sum of every bar shown, and each bar's own percentage
+            // of that total always adds up to ~100% across the whole chart.
+            // Records with a blank/missing country are already excluded
+            // server-side, so they can't silently skew this percentage.
+            const countryEntries = Object.entries(stats.byCountry || {}).sort((a, b) => b[1] - a[1]);
+            // Percentage is always computed against the FULL country
+            // population (countryEntries/countryTotal, every country on
+            // record) — never recomputed against just the displayed subset
+            // below — so limiting what's shown can never change what each
+            // shown country's percentage actually means.
+            const countryTotal = countryEntries.reduce((sum, e) => sum + e[1], 0);
+            function countryPct(count) { return countryTotal ? (count / countryTotal * 100) : 0; }
+            // 2026-09-19: capped to the Top 8 by count (already sorted
+            // descending above) — an uncapped country list could run past 20
+            // distinct values on a real deployment, overcrowding this card.
+            // This slice happens AFTER sorting/aggregation and is display-only:
+            // countryEntries/countryTotal above (and therefore every shown
+            // country's percentage) still reflect every country on record,
+            // exactly as before. Countries beyond the top 8 are simply never
+            // rendered — no data is altered, no name is hardcoded.
+            const COUNTRY_CHART_MAX_ENTRIES = 8;
+            const displayedCountryEntries = countryEntries.slice(0, COUNTRY_CHART_MAX_ENTRIES);
+            // Height now scales with what's actually SHOWN (≤8 rows), not the
+            // full, potentially much longer country list — previously this
+            // scaled with countryEntries.length, so the card kept growing
+            // taller as more countries existed even though only 8 are ever
+            // displayed.
+            const countryChartHeight = Math.max(300, displayedCountryEntries.length * 26);
+
+            // Country names have no fixed length, and this label is an SVG
+            // <text> node (the axis-label column ApexCharts renders for a
+            // horizontal bar chart) — CSS text-overflow/white-space/overflow
+            // only apply to HTML block/inline-block boxes, not SVG text, so
+            // they cannot truncate this the way they would a normal HTML
+            // label. A long name (e.g. "United States of America") would
+            // otherwise render past the label column, pushing/overlapping
+            // the "(43.6%)" suffix and widening the card past its bounds.
+            // This reimplements the same "truncate + ellipsis" behavior
+            // text-overflow:ellipsis gives HTML elements, applied only to the
+            // country-name portion — the "(pct%)" suffix is built afterward
+            // and is therefore never itself cut off.
+            var COUNTRY_LABEL_MAX_CHARS = 17;
+            function truncateCountryName(name) {
+                var s = String(name == null ? '' : name);
+                return s.length > COUNTRY_LABEL_MAX_CHARS
+                    ? s.slice(0, COUNTRY_LABEL_MAX_CHARS).replace(/\s+$/, '') + '...'
+                    : s;
+            }
+
+            // Full (untruncated) label per entry, keyed by the truncated
+            // label actually rendered — used below to restore the complete
+            // country name as a native hover tooltip, without touching
+            // stats.byCountry (the underlying count/percentage data) at all.
+            var countryAxisLabels = [];
+            var fullLabelByTruncated = {};
+            displayedCountryEntries.forEach(function (entry) {
+                var country = entry[0], count = entry[1];
+                var pctStr = countryPct(count).toFixed(1) + '%';
+                var truncated = truncateCountryName(country) + ' (' + pctStr + ')';
+                var full = country + ' (' + pctStr + ')';
+                countryAxisLabels.push(truncated);
+                fullLabelByTruncated[truncated] = full;
+            });
+
+            // Restores the full country name as a native SVG <title> (a
+            // real browser tooltip on hover) on each truncated axis label —
+            // only added when that row was actually truncated. ApexCharts
+            // doesn't expose a hook to attach per-label tooltips directly in
+            // its options, so this reaches into the rendered chart's own DOM
+            // via chart.events.mounted/updated, which fire once the axis
+            // label <text> elements actually exist.
+            function restoreFullCountryNameTooltips() {
+                var textEls = document.querySelectorAll('#country-chart .apexcharts-yaxis-texts-g text');
+                textEls.forEach(function (el, i) {
+                    var truncatedLabel = countryAxisLabels[i];
+                    var fullLabel = truncatedLabel && fullLabelByTruncated[truncatedLabel];
+                    if (!fullLabel || fullLabel === truncatedLabel) return; // not truncated — nothing to add
+                    var existingTitle = el.querySelector('title');
+                    if (existingTitle) existingTitle.remove();
+                    var titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                    titleEl.textContent = fullLabel;
+                    el.appendChild(titleEl);
+                });
+            }
+
+            // The percentage is folded into the axis label itself (e.g.
+            // "Philippines (43.6%)") rather than appended to the bar's own
+            // data label. A first attempt put "<count> (<pct>%)" on the data
+            // label the same way the count-only label already works on the
+            // sibling College/Unit chart below — but ApexCharts renders a bar
+            // data label in white, assuming it always sits inside a filled
+            // bar; once the label text is longer than a short/low-count bar
+            // (true for nearly every country here once a percentage is
+            // added), the label overflows onto the card's white background
+            // and the white-on-white remainder is simply invisible. The axis
+            // label has no such failure mode — it's always plain dark text
+            // in its own fixed column, at any bar length — so it's the only
+            // place a percentage is guaranteed legible for every country, not
+            // just the largest one or two.
+            var countryChart = new ApexCharts(document.getElementById('country-chart'), {
+                chart: {
+                    type: 'bar', height: countryChartHeight, toolbar: { show: false },
+                    events: { mounted: restoreFullCountryNameTooltips, updated: restoreFullCountryNameTooltips }
+                },
                 plotOptions: { bar: { horizontal: true, borderRadius: 4 } },
                 dataLabels: { enabled: true },
-                series: [{ name: 'Partnerships', data: instEntries.map(e => e[1]) }],
-                xaxis: { categories: instEntries.map(e => e[0]) },
+                series: [{ name: 'Partnerships', data: displayedCountryEntries.map(e => e[1]) }],
+                // ApexCharts applies its OWN default axis-label max-width/
+                // ellipsis behavior on top of whatever string it's given —
+                // confirmed live: even a label already pre-truncated to a
+                // safe length by truncateCountryName() above was getting
+                // RE-truncated by ApexCharts' own default width budget,
+                // cutting straight into the "(43.6%)" suffix, since it has
+                // no idea part of the string is a percentage that must
+                // survive intact. `labels.trim: false` disables that second,
+                // uncontrolled truncation pass — ours is the only one that
+                // ever runs — and `maxWidth: 260` gives it enough room for
+                // the longest label this chart can now produce
+                // (17-char name + "..." + " (100.0%)") with margin to spare.
+                xaxis: { categories: countryAxisLabels, labels: { maxWidth: 260, trim: false } },
+                yaxis: { labels: { maxWidth: 260, trim: false } },
                 colors: ['#0ab39c'],
+                tooltip: {
+                    y: {
+                        // The tooltip that appears on hovering a BAR already
+                        // exists — extended here to also carry the full,
+                        // untruncated country name, so the complete name is
+                        // reachable via hover regardless of whether the user
+                        // is over the axis label text or the bar itself.
+                        title: { formatter: function (seriesName, opts) { return fullLabelByTruncated[countryAxisLabels[opts.dataPointIndex]] || countryAxisLabels[opts.dataPointIndex]; } },
+                        formatter: (val) => val + ' partnerships'
+                    }
+                },
                 grid: { borderColor: '#f1f1f1' }
             });
-            institutionChart.render();
+            countryChart.render();
 
             const unitEntries = Object.entries(stats.byUnit || {}).sort((a, b) => b[1] - a[1]);
             var collegeChart = new ApexCharts(document.getElementById('college-chart'), {
@@ -627,7 +752,7 @@
             .then(stats => { renderCharts(stats); })
             .catch(err => {
                 console.error('Stats API failed:', err);
-                renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {} });
+                renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
             });
 
         // 2. Partnerships list → map + top countries only

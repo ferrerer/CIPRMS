@@ -844,9 +844,15 @@ describe('Custom Report Builder field removal (Region, Nature, Institution) / re
     expect(html).not.toMatch(/id="cr-region"/);
     expect(html).not.toMatch(/id="cr-nature"/);
     expect(html).not.toMatch(/id="cr-inst"/);
-    // The Compare-By dimension picker legitimately keeps these as valid
-    // comparison dimensions — only the Builder's own filter fields are gone.
-    expect(html).toMatch(/id="cmp-field"/);
+    // 2026-09-18: the old single-dimension "Compare By"/"Compare Against"
+    // picker (#cmp-field/#cmp-value) was replaced by the multi-configuration
+    // comparison builder — each configuration gets its own dynamically
+    // generated filter panel (cmpcfg-{id}-*), so there is no longer a single
+    // static #cmp-field element to assert on. The Builder's own filter
+    // fields (cr-unit present, cr-region/cr-nature/cr-inst absent) are
+    // unaffected by that change and still verified above.
+    expect(html).toMatch(/id="cmp-configs-list"/);
+    expect(html).toMatch(/addComparisonConfig/);
   });
 
   test('Custom Report preview metadata echoes Unit but still omits Region/Nature/Institution, even if a legacy request sends them', async () => {
@@ -1556,5 +1562,449 @@ describe('Empty result set — Preview/Excel/Comparison must never crash or sile
     expect(res.status).toBe(200);
     expect(res.body.totalA).toBe(0);
     expect(res.body.groupARecords).toEqual([]);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// "Partnership by Country" fixed tile + Custom Report Builder Group By
+// (replaces the old "Compliance / Audit Report" tile, 2026-09-18) — Country
+// percentage distribution, computed by the SAME computeCustomReportData()
+// every other Custom Report Builder report already uses (via the new
+// `groupBy` param, which maps onto the pre-existing isComparison/compareBy
+// grouped-table machinery — see cirl.js).
+// ══════════════════════════════════════════════════════════════════════════
+describe('Partnership by Country — Group By dimension (Custom Report Builder)', () => {
+  let ids = [];
+  const TAG = 'JesttestCountryGroup';
+
+  afterEach(async () => {
+    if (ids.length) {
+      const db = await connectDB();
+      await db.collection('partnerships').deleteMany({ id: { $in: ids } });
+      ids = [];
+    }
+  });
+
+  async function makeFixture(overrides) {
+    const res = await agent.post('/api/partnerships').send(Object.assign({
+      inst: `${TAG} Institution`, region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: 'CCS', start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active', remarks: 'jesttest'
+    }, overrides));
+    ids.push(res.body.partnership.id);
+    return res.body.partnership;
+  }
+
+  test('1. Country grouping returns correct counts per country', async () => {
+    await makeFixture({ country: `${TAG} Philippines` });
+    await makeFixture({ country: `${TAG} Philippines` });
+    await makeFixture({ country: `${TAG} Japan` });
+
+    const res = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.isComparison).toBe(true);
+    expect(res.body.compareBy).toBe('Country');
+    const ph = res.body.comparisonData.find(r => r.group === `${TAG} Philippines`);
+    const jp = res.body.comparisonData.find(r => r.group === `${TAG} Japan`);
+    expect(ph.Total).toBe(2);
+    expect(jp.Total).toBe(1);
+  });
+
+  test('2 & 3. Percentages are calculated correctly, from the FILTERED report population (not the whole DB)', async () => {
+    await makeFixture({ country: `${TAG} Percentia A` });
+    await makeFixture({ country: `${TAG} Percentia A` });
+    await makeFixture({ country: `${TAG} Percentia B` });
+    await makeFixture({ country: `${TAG} Percentia B` });
+    await makeFixture({ country: `${TAG} Percentia B` });
+    await makeFixture({ country: `${TAG} Percentia B` });
+
+    const res = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totalRecords).toBe(6);
+    const a = res.body.comparisonData.find(r => r.group === `${TAG} Percentia A`);
+    const b = res.body.comparisonData.find(r => r.group === `${TAG} Percentia B`);
+    expect(a['% of Total']).toBe('33.3%');
+    expect(b['% of Total']).toBe('66.7%');
+
+    // Percentages must be relative to the FILTERED dataset, not the whole DB:
+    // narrowing to Percentia A alone must make it exactly 100% of that report.
+    const narrowed = await agent.get(`/api/reports/custom/preview?groupBy=country&country=${encodeURIComponent(TAG + ' Percentia A')}`);
+    expect(narrowed.body.comparisonData).toHaveLength(1);
+    expect(narrowed.body.comparisonData[0]['% of Total']).toBe('100.0%');
+  });
+
+  test('4. Multiple countries all appear in the breakdown, sorted by count descending', async () => {
+    await makeFixture({ country: `${TAG} Multi A` });
+    await makeFixture({ country: `${TAG} Multi B` });
+    await makeFixture({ country: `${TAG} Multi B` });
+    await makeFixture({ country: `${TAG} Multi C` });
+    await makeFixture({ country: `${TAG} Multi C` });
+    await makeFixture({ country: `${TAG} Multi C` });
+
+    const res = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    const groups = res.body.comparisonData.map(r => r.group);
+    expect(groups).toEqual([`${TAG} Multi C`, `${TAG} Multi B`, `${TAG} Multi A`]);
+  });
+
+  test('5. Missing/blank country values do not crash the report — folded into "Unspecified", never a crash or a stray blank group', async () => {
+    await makeFixture({ country: undefined });
+    await makeFixture({ country: '   ' });
+    await makeFixture({ country: `${TAG} RealCountry` });
+
+    const res = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.comparisonData.find(r => r.group === '')).toBeUndefined();
+    expect(res.body.comparisonData.find(r => r.group === '   ')).toBeUndefined();
+    const unspecified = res.body.comparisonData.find(r => r.group === 'Unspecified');
+    expect(unspecified.Total).toBe(2);
+    const real = res.body.comparisonData.find(r => r.group === `${TAG} RealCountry`);
+    expect(real.Total).toBe(1);
+  });
+
+  test('6. Preview response includes Country + Count + Percentage for every row (metrics array + row values)', async () => {
+    await makeFixture({ country: `${TAG} PreviewCheck` });
+    const res = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    expect(res.body.metrics).toEqual(expect.arrayContaining(['Country', 'Total', '% of Total']));
+    const row = res.body.comparisonData.find(r => r.group === `${TAG} PreviewCheck`);
+    expect(row.Total).toBe(1);
+    expect(row['% of Total']).toBe('100.0%');
+  });
+
+  test('7. PDF export succeeds for a Country-grouped report (same computeCustomReportData result as Preview)', async () => {
+    await makeFixture({ country: `${TAG} PdfCheck` });
+    const res = await agent.get(`/api/reports/partnerships/pdf?groupBy=country&inst=${encodeURIComponent(TAG)}&title=Partnership%20by%20Country`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.body.slice(0, 4).toString()).toBe('%PDF');
+  });
+
+  test('8. Excel export renders the EXACT same Country/Total/% of Total values Preview computed (not a second calculation)', async () => {
+    await makeFixture({ country: `${TAG} ExcelA` });
+    await makeFixture({ country: `${TAG} ExcelA` });
+    await makeFixture({ country: `${TAG} ExcelB` });
+
+    const previewRes = await agent.get(`/api/reports/custom/preview?groupBy=country&inst=${encodeURIComponent(TAG)}`);
+    const excelRes = await agent.get(`/api/reports/partnerships/excel?groupBy=country&inst=${encodeURIComponent(TAG)}&title=Partnership%20by%20Country`)
+      .buffer(true).parse((res2, cb) => {
+        const chunks = [];
+        res2.on('data', c => chunks.push(c));
+        res2.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(excelRes.status).toBe(200);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    const sheet = workbook.worksheets[0];
+
+    // Locate the metrics header row (its cells are exactly
+    // customReportData.metrics, e.g. ['Country','Active',...,'Total','% of
+    // Total']) by finding the row whose first cell literally reads
+    // "Country", then read data rows using THAT row's own column mapping —
+    // never a hardcoded column index, which is fragile against metricGroups
+    // changing shape.
+    let colIndex = {};
+    let dataRows = [];
+    sheet.eachRow(row => {
+      const firstCell = row.getCell(1).value;
+      if (firstCell === 'Country' && !dataRows.length && !Object.keys(colIndex).length) {
+        row.eachCell((cell, colNumber) => { colIndex[cell.value] = colNumber; });
+      } else if (colIndex.Country && (row.getCell(colIndex.Country).value === `${TAG} ExcelA` || row.getCell(colIndex.Country).value === `${TAG} ExcelB`)) {
+        dataRows.push(row);
+      }
+    });
+    expect(colIndex.Country).toBeTruthy();
+    expect(colIndex.Total).toBeTruthy();
+    expect(colIndex['% of Total']).toBeTruthy();
+
+    const foundRows = {};
+    dataRows.forEach(row => {
+      const country = row.getCell(colIndex.Country).value;
+      foundRows[country] = { total: row.getCell(colIndex.Total).value, pct: row.getCell(colIndex['% of Total']).value };
+    });
+    const previewA = previewRes.body.comparisonData.find(r => r.group === `${TAG} ExcelA`);
+    const previewB = previewRes.body.comparisonData.find(r => r.group === `${TAG} ExcelB`);
+    expect(foundRows[`${TAG} ExcelA`].total).toBe(previewA.Total);
+    expect(foundRows[`${TAG} ExcelA`].pct).toBe(previewA['% of Total']);
+    expect(foundRows[`${TAG} ExcelB`].total).toBe(previewB.Total);
+    expect(foundRows[`${TAG} ExcelB`].pct).toBe(previewB['% of Total']);
+  });
+
+  test('RBAC: Auth. Personnel and potential_partner cannot reach Group By reports; Administrator and Staff can', async () => {
+    const staffAgent = request.agent(app);
+    await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+    const personnelAgent = request.agent(app);
+    await loginAs(personnelAgent, await createTestUser({ role: 'Auth. Personnel' }));
+    const partnerAgent = request.agent(app);
+    await loginAs(partnerAgent, await createTestUser({ role: 'potential_partner' }));
+
+    expect((await agent.get('/api/reports/custom/preview?groupBy=country')).status).toBe(200);
+    expect((await staffAgent.get('/api/reports/custom/preview?groupBy=country')).status).toBe(200);
+    expect((await personnelAgent.get('/api/reports/custom/preview?groupBy=country')).status).toBe(302);
+    expect((await partnerAgent.get('/api/reports/custom/preview?groupBy=country')).status).toBe(302);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Multi-Configuration Comparison (2026-09-18) — /api/reports/comparison/multi/*
+// The pre-existing two-group /api/reports/comparison/* engine (tested at
+// length above) is completely untouched; these are NEW, additive routes.
+// ══════════════════════════════════════════════════════════════════════════
+describe('Multi-Configuration Comparison (/api/reports/comparison/multi/*)', () => {
+  let ids = [];
+  const TAG = 'JesttestMultiCmp';
+
+  afterEach(async () => {
+    if (ids.length) {
+      const db = await connectDB();
+      await db.collection('partnerships').deleteMany({ id: { $in: ids } });
+      ids = [];
+    }
+  });
+
+  async function makeFixture(overrides) {
+    const res = await agent.post('/api/partnerships').send(Object.assign({
+      inst: `${TAG} Institution`, region: 'Asia', type: 'MOA', nature: 'Research',
+      unit: 'CCS', start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active', remarks: 'jesttest'
+    }, overrides));
+    ids.push(res.body.partnership.id);
+    return res.body.partnership;
+  }
+
+  test('9. Two configurations (the original workflow\'s shape) still work through the new endpoint', async () => {
+    await makeFixture({ country: `${TAG} A` });
+    await makeFixture({ country: `${TAG} B` });
+    const configs = [
+      { label: 'Config A', country: `${TAG} A` },
+      { label: 'Config B', country: `${TAG} B` }
+    ];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(2);
+    expect(res.body.results[0].count).toBe(1);
+    expect(res.body.results[1].count).toBe(1);
+    expect(res.body.results[0].percentage).toBe(50);
+    expect(res.body.results[1].percentage).toBe(50);
+  });
+
+  test('10. Three configurations work, each with correct independent counts and percentages', async () => {
+    await makeFixture({ country: `${TAG} C1` });
+    await makeFixture({ country: `${TAG} C2` });
+    await makeFixture({ country: `${TAG} C2` });
+    await makeFixture({ country: `${TAG} C3` });
+    const configs = [
+      { label: 'C1', country: `${TAG} C1` },
+      { label: 'C2', country: `${TAG} C2` },
+      { label: 'C3', country: `${TAG} C3` }
+    ];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(3);
+    expect(res.body.results.map(r => r.count)).toEqual([1, 2, 1]);
+    expect(res.body.results.map(r => r.percentage)).toEqual([25, 50, 25]);
+  });
+
+  test('11. Five configurations (the supported maximum) work; a sixth is rejected', async () => {
+    const configs5 = [1, 2, 3, 4, 5].map(n => ({ label: 'Cfg ' + n, country: `${TAG} Five${n}` }));
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs5)));
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(5);
+
+    const configs6 = configs5.concat([{ label: 'Cfg 6', country: `${TAG} Six` }]);
+    const overRes = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs6)));
+    expect(overRes.status).toBe(400);
+    expect(overRes.body.error).toMatch(/maximum of 5/i);
+  });
+
+  test('12 & 13. Add/Remove Comparison at the API level: the configs array length directly controls how many results come back', async () => {
+    const two = [{ label: 'X' }, { label: 'Y' }];
+    const twoRes = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(two)));
+    expect(twoRes.body.results).toHaveLength(2);
+
+    const three = two.concat([{ label: 'Z' }]); // simulates "Add Comparison"
+    const threeRes = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(three)));
+    expect(threeRes.body.results).toHaveLength(3);
+
+    const backToTwo = three.slice(0, 2); // simulates "Remove Comparison"
+    const removedRes = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(backToTwo)));
+    expect(removedRes.body.results).toHaveLength(2);
+  });
+
+  test('14. Each comparison configuration keeps fully independent filters — never merged across configs', async () => {
+    await makeFixture({ country: `${TAG} Philippines`, start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active' });
+    await makeFixture({ country: `${TAG} Japan`, start: 'Jan 1, 2020', end: 'Jan 1, 2022', status: 'Expired' });
+    await makeFixture({ country: `${TAG} Thailand`, start: 'Jan 1, 2026', end: 'Jan 1, 2030', status: 'Active' });
+
+    const configs = [
+      { label: 'Comparison 1', country: `${TAG} Philippines`, status: 'Active' },
+      { label: 'Comparison 2', country: `${TAG} Japan`, status: 'Expired' },
+      { label: 'Comparison 3', country: `${TAG} Thailand`, status: 'Active' }
+    ];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.status).toBe(200);
+    const [c1, c2, c3] = res.body.results;
+    // Each config's own record set must ONLY reflect its OWN filters — a
+    // Japan/Expired config must never pick up the Philippines/Active record
+    // or vice versa (which merged/shared filter state would cause).
+    expect(c1.count).toBe(1);
+    expect(c1.records.every(p => p.country === `${TAG} Philippines` && p.status === 'Active')).toBe(true);
+    expect(c2.count).toBe(1);
+    expect(c2.records.every(p => p.country === `${TAG} Japan` && p.status === 'Expired')).toBe(true);
+    expect(c3.count).toBe(1);
+    expect(c3.records.every(p => p.country === `${TAG} Thailand` && p.status === 'Active')).toBe(true);
+  });
+
+  test('15. Comparison result clearly identifies which result belongs to which configuration (labels + stable ids, in submitted order)', async () => {
+    await makeFixture({ country: `${TAG} Alpha` });
+    await makeFixture({ country: `${TAG} Beta` });
+    const configs = [
+      { label: 'Current Year', country: `${TAG} Alpha` },
+      { label: 'Previous Year', country: `${TAG} Beta` }
+    ];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.body.results[0].label).toBe('Current Year');
+    expect(res.body.results[0].id).toBe(0);
+    expect(res.body.results[1].label).toBe('Previous Year');
+    expect(res.body.results[1].id).toBe(1);
+  });
+
+  test('16. "Total Compared" never appears anywhere in the multi-comparison preview JSON, PDF, or Excel', async () => {
+    await makeFixture({ country: `${TAG} NoTotalCompared` });
+    const configs = [{ label: 'A', country: `${TAG} NoTotalCompared` }, { label: 'B' }];
+    const qs = 'configs=' + encodeURIComponent(JSON.stringify(configs));
+
+    const previewRes = await agent.get('/api/reports/comparison/multi/preview?' + qs);
+    expect(JSON.stringify(previewRes.body)).not.toMatch(/Total Compared/i);
+
+    const pdfRes = await agent.get('/api/reports/comparison/multi/pdf?' + qs);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.text || pdfRes.body.toString('latin1')).not.toMatch(/Total Compared/i);
+
+    const excelRes = await agent.get('/api/reports/comparison/multi/excel?' + qs)
+      .buffer(true).parse((res2, cb) => {
+        const chunks = [];
+        res2.on('data', c => chunks.push(c));
+        res2.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    let foundTotalCompared = false;
+    workbook.worksheets.forEach(sheet => {
+      sheet.eachRow(row => {
+        row.eachCell(cell => {
+          if (typeof cell.value === 'string' && /Total Compared/i.test(cell.value)) foundTotalCompared = true;
+        });
+      });
+    });
+    expect(foundTotalCompared).toBe(false);
+  });
+
+  test('17. Legitimate per-configuration totals/counts remain fully intact (not removed alongside "Total Compared")', async () => {
+    await makeFixture({ country: `${TAG} LegitTotal` });
+    const configs = [{ label: 'Legit', country: `${TAG} LegitTotal` }, { label: 'Empty', country: 'NoSuchCountryZZZ' }];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.body.results[0].count).toBe(1);
+    expect(res.body.results[0].percentage).toBe(100);
+    expect(res.body.results[1].count).toBe(0);
+    expect(res.body.results[1].percentage).toBe(0);
+  });
+
+  test('18. Empty comparison results are handled correctly: a config matching zero records never crashes, and an empty configs array is rejected with a clear error', async () => {
+    const configs = [{ label: 'Zero', country: 'NoSuchCountryZZZ' }, { label: 'AlsoZero', country: 'AnotherFakeCountryZZZ' }];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.status).toBe(200);
+    expect(res.body.results[0].count).toBe(0);
+    expect(res.body.results[0].percentage).toBe(0);
+    expect(res.body.results[1].count).toBe(0);
+
+    const emptyRes = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify([])));
+    expect(emptyRes.status).toBe(400);
+    expect(emptyRes.body.error).toMatch(/at least one/i);
+  });
+
+  test('19. The pre-existing two-way /api/reports/comparison/* engine is completely unaffected by the new multi routes', async () => {
+    const res = await agent.get('/api/reports/comparison/preview?compType=Active%20vs%20Inactive');
+    expect(res.status).toBe(200);
+    expect(res.body.groupA).toBe('Active');
+    expect(res.body.groupB).toBe('Inactive');
+    expect(typeof res.body.totalBoth).toBe('number');
+  });
+
+  test('PDF/Excel export succeed for a 4-configuration comparison', async () => {
+    await makeFixture({ country: `${TAG} Pdf1` });
+    await makeFixture({ country: `${TAG} Pdf2` });
+    const configs = [
+      { label: 'One', country: `${TAG} Pdf1` }, { label: 'Two', country: `${TAG} Pdf2` },
+      { label: 'Three' }, { label: 'Four' }
+    ];
+    const qs = 'configs=' + encodeURIComponent(JSON.stringify(configs));
+
+    const pdfRes = await agent.get('/api/reports/comparison/multi/pdf?' + qs);
+    expect(pdfRes.status).toBe(200);
+    expect(pdfRes.headers['content-type']).toBe('application/pdf');
+    expect(pdfRes.body.slice(0, 4).toString()).toBe('%PDF');
+
+    const excelRes = await agent.get('/api/reports/comparison/multi/excel?' + qs)
+      .buffer(true).parse((res2, cb) => {
+        const chunks = [];
+        res2.on('data', c => chunks.push(c));
+        res2.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(excelRes.status).toBe(200);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(excelRes.body);
+    // 1 summary sheet + 1 records sheet per configuration (4) = 5 sheets.
+    expect(workbook.worksheets.length).toBe(5);
+    expect(workbook.worksheets[0].name).toBe('Comparison Summary');
+  });
+
+  test('20 & 21. RBAC — Administrator and Staff can both reach every multi-comparison route', async () => {
+    const staffAgent = request.agent(app);
+    await loginAs(staffAgent, await createTestUser({ role: 'Staff' }));
+    const configs = [{ label: 'A' }, { label: 'B' }];
+    const qs = 'configs=' + encodeURIComponent(JSON.stringify(configs));
+
+    const adminPreview = await agent.get('/api/reports/comparison/multi/preview?' + qs);
+    expect(adminPreview.status).toBe(200);
+    const staffPreview = await staffAgent.get('/api/reports/comparison/multi/preview?' + qs);
+    expect(staffPreview.status).toBe(200);
+
+    const staffPdf = await staffAgent.get('/api/reports/comparison/multi/pdf?' + qs);
+    expect(staffPdf.status).toBe(200);
+    const staffExcel = await staffAgent.get('/api/reports/comparison/multi/excel?' + qs);
+    expect(staffExcel.status).toBe(200);
+  });
+
+  test('22. Existing restricted roles (Auth. Personnel, potential_partner) remain forbidden from every multi-comparison route', async () => {
+    const personnelAgent = request.agent(app);
+    await loginAs(personnelAgent, await createTestUser({ role: 'Auth. Personnel' }));
+    const partnerAgent = request.agent(app);
+    await loginAs(partnerAgent, await createTestUser({ role: 'potential_partner' }));
+    const configs = [{ label: 'A' }, { label: 'B' }];
+    const qs = 'configs=' + encodeURIComponent(JSON.stringify(configs));
+
+    expect((await personnelAgent.get('/api/reports/comparison/multi/preview?' + qs)).status).toBe(302);
+    expect((await partnerAgent.get('/api/reports/comparison/multi/preview?' + qs)).status).toBe(302);
+    expect((await personnelAgent.get('/api/reports/comparison/multi/pdf?' + qs)).status).toBe(302);
+    expect((await partnerAgent.get('/api/reports/comparison/multi/excel?' + qs)).status).toBe(302);
+
+    const unauthRes = await request(app).get('/api/reports/comparison/multi/preview?' + qs);
+    expect(unauthRes.status).toBe(302);
+  });
+
+  test('Malformed configs payload (invalid JSON / non-array) is rejected with a clear 400, never a crash', async () => {
+    const badJson = await agent.get('/api/reports/comparison/multi/preview?configs=not-json');
+    expect(badJson.status).toBe(400);
+
+    const notArray = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify({ foo: 'bar' })));
+    expect(notArray.status).toBe(400);
+
+    const missing = await agent.get('/api/reports/comparison/multi/preview');
+    expect(missing.status).toBe(400);
+  });
+
+  test('A non-object entry in the configs array is normalized away rather than reaching the query engine unsafely', async () => {
+    const configs = ['not-an-object', { label: 'RealConfig' }, 42, null];
+    const res = await agent.get('/api/reports/comparison/multi/preview?configs=' + encodeURIComponent(JSON.stringify(configs)));
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(4);
+    expect(res.body.results[1].label).toBe('RealConfig');
   });
 });
