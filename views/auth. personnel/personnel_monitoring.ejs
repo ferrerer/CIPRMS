@@ -39,7 +39,7 @@
                      the matching section below. -->
                 <div class="row">
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate" style="cursor:pointer" onclick="scrollToCard('my-pr-requests-card')" role="button" title="Go to your requests">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToTotal()" role="button" title="Go to your requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -108,7 +108,7 @@
                 <!-- My Partnership Requests (includes Renewal requests, distinguished by Request Type) -->
                 <div class="row">
                     <div class="col-xl-12">
-                        <div class="card" id="my-pr-requests-card">
+                        <div class="card">
                             <div class="card-header d-flex align-items-center">
                                 <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-list-3-line me-2"></i>My Partnership Requests</h4>
                                 <a href="/personnel/requests" class="btn btn-soft-primary btn-sm"><i class="ri-add-line me-1"></i>New Request</a>
@@ -1034,16 +1034,11 @@
             '</div>';
     }
 
-    // Stat cards are clickable: Total jumps to the requests section, In
-    // Progress/Approved jump to and highlight the matching rows across
-    // BOTH the Partnership and Document request tables (same "In
-    // Progress"/"Approved" definitions as renderCombinedRequestStats
-    // above), and Documents on File jumps to the verification table.
-    function scrollToCard(id) {
-        var el = document.getElementById(id);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
+    // Stat cards are clickable: each one jumps to and highlights the
+    // matching rows across BOTH the Partnership and Document request
+    // tables (Total/In Progress/Approved use the same status definitions
+    // as renderCombinedRequestStats above), or the Document Verification
+    // table for Documents on File.
     function highlightRows(rows) {
         if (!rows.length) return false;
         rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1063,6 +1058,12 @@
             if (el) rows.push(el);
         });
         return highlightRows(rows);
+    }
+
+    function goToTotal() {
+        var prIds = myRequests.filter(function (r) { return r.status !== 'Draft'; }).map(function (r) { return r.id; });
+        var drIds = myDocRequests.map(function (r) { return r.id; });
+        if (!highlightRequestRows(prIds, drIds)) showToast('No requests yet.', '#405189');
     }
 
     function goToInProgress() {
