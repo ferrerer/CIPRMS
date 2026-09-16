@@ -35,10 +35,11 @@
                 </div>
                 <p class="text-muted mb-3"><i class="ri-shield-check-line me-1"></i>This page tracks only your own submitted requests, documents, and partnership record.</p>
 
-                <!-- Stat Cards -->
+                <!-- Stat Cards — each one jumps to (and, where relevant, highlights)
+                     the matching section below. -->
                 <div class="row">
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate">
+                        <div class="card card-animate" style="cursor:pointer" onclick="scrollToCard('my-pr-requests-card')" role="button" title="Go to your requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -54,7 +55,7 @@
                         </div>
                     </div>
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToInProgress()" role="button" title="Go to your in-progress requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -70,7 +71,7 @@
                         </div>
                     </div>
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToApproved()" role="button" title="Go to your approved requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -86,7 +87,7 @@
                         </div>
                     </div>
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate">
+                        <div class="card card-animate" style="cursor:pointer" onclick="scrollToCard('doc-verification-card')" role="button" title="Go to Document Verification Status">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -107,7 +108,7 @@
                 <!-- My Partnership Requests (includes Renewal requests, distinguished by Request Type) -->
                 <div class="row">
                     <div class="col-xl-12">
-                        <div class="card">
+                        <div class="card" id="my-pr-requests-card">
                             <div class="card-header d-flex align-items-center">
                                 <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-list-3-line me-2"></i>My Partnership Requests</h4>
                                 <a href="/personnel/requests" class="btn btn-soft-primary btn-sm"><i class="ri-add-line me-1"></i>New Request</a>
@@ -173,7 +174,7 @@
 
                     <!-- Document Verification Status -->
                     <div class="col-xl-6">
-                        <div class="card">
+                        <div class="card" id="doc-verification-card">
                             <div class="card-header"><h4 class="card-title mb-0"><i class="ri-file-shield-2-line me-2"></i>Document Verification Status</h4></div>
                             <div class="card-body">
                                 <div class="table-responsive">
@@ -1031,6 +1032,56 @@
                 '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0">' + inProgress + '</h5><small class="text-muted">In Progress</small></div></div>' +
                 '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
             '</div>';
+    }
+
+    // Stat cards are clickable: Total jumps to the requests section, In
+    // Progress/Approved jump to and highlight the matching rows across
+    // BOTH the Partnership and Document request tables (same "In
+    // Progress"/"Approved" definitions as renderCombinedRequestStats
+    // above), and Documents on File jumps to the verification table.
+    function scrollToCard(id) {
+        var el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function highlightRequestRows(prIds, drIds) {
+        var rows = [];
+        prIds.forEach(function (id) {
+            var el = document.querySelector('#pr-monitor-body tr[data-pr-id="' + id + '"]');
+            if (el) rows.push(el);
+        });
+        drIds.forEach(function (id) {
+            var el = document.querySelector('#dr-monitor-body tr[data-dr-id="' + id + '"]');
+            if (el) rows.push(el);
+        });
+        if (!rows.length) return false;
+        rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rows.forEach(function (el) { el.classList.add('table-warning'); });
+        setTimeout(function () { rows.forEach(function (el) { el.classList.remove('table-warning'); }); }, 3000);
+        return true;
+    }
+
+    function goToInProgress() {
+        var prIds = myRequests
+            .filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; })
+            .map(function (r) { return r.id; });
+        var drApprovedIdx = DR_WORKFLOW_STATUSES.indexOf('Approved');
+        var drIds = myDocRequests
+            .filter(function (r) {
+                var idx = DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status);
+                return idx > -1 && idx < drApprovedIdx;
+            })
+            .map(function (r) { return r.id; });
+        if (!highlightRequestRows(prIds, drIds)) showToast('No in-progress requests right now.', '#405189');
+    }
+
+    function goToApproved() {
+        var prIds = myRequests.filter(function (r) { return r.status === 'Approved'; }).map(function (r) { return r.id; });
+        var drApprovedIdx = DR_WORKFLOW_STATUSES.indexOf('Approved');
+        var drIds = myDocRequests
+            .filter(function (r) { return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status) >= drApprovedIdx; })
+            .map(function (r) { return r.id; });
+        if (!highlightRequestRows(prIds, drIds)) showToast('No approved requests yet.', '#405189');
     }
 
     function loadPRRequests() {
