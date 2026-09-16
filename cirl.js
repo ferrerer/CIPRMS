@@ -801,7 +801,7 @@ app.post('/api/requests', requireRequester, async (req, res) => {
       const reviewers = await db.collection('users')
         .find({ role: { $in: REQUEST_REVIEWER_ROLES } })
         .toArray();
-      await notifyUsers(db, reviewers.map(u => u.email), {
+      await notifyReviewers(db, reviewers, {
         module: 'request',
         tag: isRenewal ? 'Renewal Request' : 'Partnership Request',
         icon: isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
@@ -809,9 +809,8 @@ app.post('/api/requests', requireRequester, async (req, res) => {
         title: isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
         desc: isRenewal
           ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
-          : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`,
-        link: '/partnership-requests?open=pr&id=' + nextId
-      });
+          : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
+      }, role => prLinkForRole(role, nextId));
 
       // Give the submitter their own copy in the Document Library — skipped
       // when an OCR attachment already exists, since that upload was already
@@ -1132,15 +1131,14 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
         });
       } else if (isOwner) {
         const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
-        await notifyUsers(db, reviewers.map(u => u.email), {
+        await notifyReviewers(db, reviewers, {
           module: 'request',
           tag: target.isRenewal ? 'Renewal Request' : 'Partnership Request',
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `Revised draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their request (${target.institution}).${note ? ' Note: ' + note : ''}`,
-          link: prLinkForRole('Administrator', id)
-        });
+          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their request (${target.institution}).${note ? ' Note: ' + note : ''}`
+        }, role => prLinkForRole(role, id));
       }
 
       res.json({ success: true, documentId, fileLink, request: updated });
@@ -1285,15 +1283,14 @@ app.post('/api/document-requests', requireRequester, async (req, res) => {
       `Document request submitted: ${entry.documentType} for ${entry.institution} by ${entry.requestedBy}`);
 
     const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
-    await notifyUsers(db, reviewers.map(u => u.email), {
+    await notifyReviewers(db, reviewers, {
       module: 'request',
       tag: 'Document Request',
       icon: 'ri-file-shield-2-line',
       color: 'secondary',
       title: `New document request submitted: ${entry.institution}`,
-      desc: `${entry.requestedBy} requested a ${entry.documentType} document for ${entry.institution}.`,
-      link: '/partnership-requests?open=dr&id=' + nextId
-    });
+      desc: `${entry.requestedBy} requested a ${entry.documentType} document for ${entry.institution}.`
+    }, role => drLinkForRole(role, nextId));
 
     // Document Requests never have an upload step of their own, so this is
     // the only copy of the submission that ever lands in the requester's
@@ -1582,15 +1579,14 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
         });
       } else if (isOwner) {
         const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
-        await notifyUsers(db, reviewers.map(u => u.email), {
+        await notifyReviewers(db, reviewers, {
           module: 'request',
           tag: 'Document Request',
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `Revised draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their document request (${target.institution}).${note ? ' Note: ' + note : ''}`,
-          link: '/partnership-requests?open=dr&id=' + id
-        });
+          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their document request (${target.institution}).${note ? ' Note: ' + note : ''}`
+        }, role => drLinkForRole(role, id));
       }
 
       res.json({ success: true, documentId, fileLink, request: updated });
@@ -4372,6 +4368,24 @@ async function notifyUsers(db, emails, payload) {
   await db.collection('notifications').insertMany(docs);
 }
 
+// Reviewer broadcasts (REQUEST_REVIEWER_ROLES = Administrator + Staff) can't
+// share one `link` — Administrator's review queue is /partnership-requests,
+// but Staff's is /staff/requests, a different route the Administrator-shaped
+// link 403s on. Groups the mixed reviewer list by role and sends one
+// notifyUsers batch per role, each with that role's own resolved link
+// (via prLinkForRole/drLinkForRole).
+async function notifyReviewers(db, reviewers, payloadBase, linkForRole) {
+  const emailsByRole = new Map();
+  for (const u of reviewers) {
+    if (!u.email) continue;
+    if (!emailsByRole.has(u.role)) emailsByRole.set(u.role, []);
+    emailsByRole.get(u.role).push(u.email);
+  }
+  for (const [role, emails] of emailsByRole) {
+    await notifyUsers(db, emails, { ...payloadBase, link: linkForRole(role) });
+  }
+}
+
 // documentLibraryService.shortDocType() classifies by matching words like
 // "agreement"/"understanding" in a free-form OCR guess — short codes like
 // "MOA"/"MOU" don't contain those words, so this expands them to a
@@ -4404,9 +4418,11 @@ function prLinkForRole(role, id) {
   // unique with respect to each other.
   if (role === 'potential_partner') return '/partner/monitoring?type=pr&id=' + id;
   // Staff can no longer submit new Partnership Requests (2026-08-27) but may
-  // still have historical ones from before that change — those are tracked
-  // read-only on the shared Requests page, same as everyone else's own-scoped view.
-  if (role === 'Staff') return '/staff/requests?id=' + id;
+  // still have historical ones from before that change, and also reviews
+  // everyone else's (REQUEST_REVIEWER_ROLES) — both land on the same
+  // Administrator-shaped review page at a Staff-scoped route, so it needs
+  // the same open=pr deep-link param or the modal never opens.
+  if (role === 'Staff') return '/staff/requests?open=pr&id=' + id;
   // Auth. Personnel's tracking moved from the Requests page onto its own
   // Monitoring page (2026-07-25), matching the potential_partner convention
   // above — the Requests page now only holds the submission forms.
@@ -4420,8 +4436,11 @@ function prLinkForRole(role, id) {
 function drLinkForRole(role, id) {
   if (role === 'Administrator') return '/partnership-requests?open=dr&id=' + id;
   if (role === 'potential_partner') return '/partner/monitoring?type=dr&id=' + id;
+  // Staff never submits Document Requests (requireRequester excludes Staff)
+  // but does review them as a REQUEST_REVIEWER_ROLES member, same
+  // Staff-scoped review route as prLinkForRole's Staff branch above.
+  if (role === 'Staff') return '/staff/requests?open=dr&id=' + id;
   // Auth. Personnel is the only other role that submits Document Requests
-  // (requireRequester excludes Staff, same conservative scope View-Only had)
   // — tracking lives on their Monitoring page (2026-07-25), matching the
   // potential_partner convention above.
   return '/personnel/monitoring?type=dr&id=' + id;
