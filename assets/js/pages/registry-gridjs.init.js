@@ -291,7 +291,110 @@ function selectInstitution(i) {
   if (dropdown) { dropdown.innerHTML = ''; dropdown.style.display = 'none'; }
   instResults = [];
   instActiveIndex = -1;
+  scheduleLocationPreview(instPrefix);
 }
+
+// ── Automatic map location (preview) ─────────────────────────────────────────
+// Shows what location a save would produce — exact / approximate / unresolved —
+// via POST /api/geocode/preview (the same resolver the save itself uses). It is
+// only ever triggered on COMMIT (an institution picked from the list, or the
+// institution/country field left with a changed value), never per keystroke:
+// the geocoding provider's usage policy forbids autocomplete-style querying.
+// A slow or failed preview never blocks anything — saving always works, and the
+// server works out the location again at save time.
+var locPreviewSeq = { f: 0, e: 0 };      // discards out-of-order responses
+var locPreviewTimer = { f: null, e: null };
+var LOCATION_KEYS = ['lat', 'lng', 'locationSource', 'locationPrecision', 'locationStatus', 'countryCode', 'locationResolvedName', 'locationResolvedAt'];
+// Same pattern as OUR_INSTITUTION_RE in services/extractionService.js (CSPC's own names).
+var OUR_INSTITUTION_RE_CLIENT = /camarines sur polytechnic colleges|\bcspc\b|center for international relations|\bcirl\b/i;
+var LOC_REASON_TEXT = {
+  'own-institution': "CSPC's own name can't be placed as a partner",
+  'no-confident-match': 'The institution could not be matched confidently in this country',
+  'provider-unavailable': 'The location service is unavailable right now',
+  'geocoder-disabled': 'Institution-level lookup is turned off',
+  'no-institution': 'No institution name yet',
+  'country-unrecognized': 'This country is not recognized for mapping',
+  'no-country': 'Enter a country to place this partnership on the map',
+  'error': 'The location could not be determined'
+};
+
+function locStatusHtml(d, willUpdate) {
+  var lead = willUpdate ? 'On save: ' : '';
+  var why = LOC_REASON_TEXT[d.reason] ? escapeHtml(LOC_REASON_TEXT[d.reason]) : '';
+  if (d.status === 'resolved') {
+    return lead + '<span class="badge bg-success-subtle text-success"><i class="ri-map-pin-2-fill me-1"></i>Exact location</span> '
+      + '<span>' + escapeHtml(d.resolvedName || '') + '</span>';
+  }
+  if (d.status === 'approximate') {
+    return lead + '<span class="badge bg-warning-subtle text-warning"><i class="ri-map-pin-line me-1"></i>Approximate &mdash; country level</span> '
+      + (why ? '<span>' + why + '. </span>' : '') + '<span>Shown as a dashed marker on the map.</span>';
+  }
+  var html = lead + '<span class="badge bg-secondary-subtle text-secondary"><i class="ri-map-pin-line me-1"></i>Not on map</span> '
+    + (why ? '<span>' + why + '. </span>' : '') + '<span>You can still save this partnership.</span>';
+  if (d.suggestion) {
+    html += ' <button type="button" class="btn btn-link btn-sm p-0 align-baseline loc-suggest" data-country="'
+      + escapeHtml(d.suggestion) + '">Did you mean &ldquo;' + escapeHtml(d.suggestion) + '&rdquo;?</button>';
+  }
+  return html;
+}
+
+function requestLocationPreview(prefix) {
+  var el = document.getElementById(prefix + '-location-status');
+  var instEl = document.getElementById(prefix + '-inst');
+  var countryEl = document.getElementById(prefix + '-country');
+  if (!el || !instEl || !countryEl) return;
+  var inst = instEl.value.trim(), country = countryEl.value.trim();
+  var seq = ++locPreviewSeq[prefix];
+  if (!inst && !country) { el.innerHTML = ''; return; }
+  if (!country) { el.innerHTML = '<span>' + escapeHtml(LOC_REASON_TEXT['no-country']) + '.</span>'; return; }
+  el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Finding map location&hellip;';
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort(); }, 9000);
+  fetch('/api/geocode/preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ institution: inst, country: country }), signal: ctrl.signal
+  })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (d) { if (seq === locPreviewSeq[prefix]) el.innerHTML = locStatusHtml(d, prefix === 'e'); })
+    .catch(function () {
+      if (seq === locPreviewSeq[prefix]) el.innerHTML = 'The map location will be worked out when you save. You can still save.';
+    })
+    .then(function () { clearTimeout(timer); });
+}
+
+function scheduleLocationPreview(prefix) {
+  clearTimeout(locPreviewTimer[prefix]);
+  // The institution/country just changed, so whatever result is on screen no
+  // longer describes it — replace it at once rather than showing a stale
+  // outcome for the debounce interval.
+  var el = document.getElementById(prefix + '-location-status');
+  if (el) el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span>Finding map location&hellip;';
+  locPreviewTimer[prefix] = setTimeout(function () { requestLocationPreview(prefix); }, 400);
+}
+
+function describeStoredLocation(p) {
+  if (p.locationStatus === 'resolved') return 'Map location: exact &mdash; ' + escapeHtml(p.locationResolvedName || '');
+  if (p.locationStatus === 'approximate') return 'Map location: approximate (country level).';
+  if (p.locationStatus === 'unresolved') return 'No map location yet. It is looked up again if you change the institution or country.';
+  if (typeof p.lat === 'number' && typeof p.lng === 'number') return 'Map location on file.';
+  return 'No map location on file. It is looked up if you change the institution or country.';
+}
+
+function locationNote(p) {
+  if (!p || !p.locationStatus) return '';
+  if (p.locationStatus === 'resolved') return ' Map location: exact.';
+  if (p.locationStatus === 'approximate') return ' Map location: approximate (country level).';
+  return ' Not placed on the map (location unresolved).';
+}
+
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest && e.target.closest('.loc-suggest');
+  if (!btn) return;
+  var status = btn.closest('[id$="-location-status"]');
+  var prefix = status ? status.id.charAt(0) : 'f';
+  var countryEl = document.getElementById(prefix + '-country');
+  if (countryEl) { countryEl.value = btn.getAttribute('data-country') || ''; scheduleLocationPreview(prefix); }
+});
 
 function instKeyNav(event, prefix) {
   prefix = prefix || 'f';
@@ -359,7 +462,11 @@ fetch('/api/partnerships')
         end:          p.end   || '',
         status:       p.status || '',
         remarks:      p.remarks || '',
-        days:         computeDays(p.end)
+        days:         computeDays(p.end),
+        // Server-controlled map-location fields (never sent back by the forms).
+        lat: p.lat, lng: p.lng, locationSource: p.locationSource, locationPrecision: p.locationPrecision,
+        locationStatus: p.locationStatus, countryCode: p.countryCode,
+        locationResolvedName: p.locationResolvedName, locationResolvedAt: p.locationResolvedAt
       };
     });
     filtered = partnerships.slice();
@@ -605,6 +712,8 @@ function openEditModal(id){
   document.getElementById('e-end').value=toISO(p.end); document.getElementById('e-status').value=p.status;
   eUnitCombo.setValues(p.unit); document.getElementById('e-coordinator').value=p.coordinator||'';
   document.getElementById('e-doclink').value=p.docLink||''; document.getElementById('e-remarks').value=p.remarks||'';
+  locPreviewSeq.e++; clearTimeout(locPreviewTimer.e);
+  document.getElementById('e-location-status').innerHTML=describeStoredLocation(p);
   new bootstrap.Modal(document.getElementById('editPartnershipModal')).show();
 }
 function computeEditStatus(){var v=document.getElementById('e-end').value;if(!v)return;var d=Math.ceil((new Date(v)-new Date())/86400000);document.getElementById('e-status').value=d<0?'Expired':d<=90?'Expiring Soon':'Active';}
@@ -629,9 +738,14 @@ function saveEdit(){
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.success){
+        var locBefore=p.locationResolvedAt;
         Object.assign(p,updates); p.days=computeDays(p.end);
+        // The server re-evaluates the map location when the institution or
+        // country changed — take its result (unset fields come back absent).
+        if(data.partnership) LOCATION_KEYS.forEach(function(k){p[k]=data.partnership[k];});
+        var locChanged=data.partnership&&data.partnership.locationResolvedAt!==locBefore;
         bootstrap.Modal.getInstance(document.getElementById('editPartnershipModal'))?.hide();
-        applyFilter();showToast('"'+inst+'" updated successfully.');
+        applyFilter();showToast('"'+inst+'" updated successfully.'+(locChanged?locationNote(data.partnership):''));
       }
     }).catch(function(e){console.error(e);showToast('Error updating partnership.');});
 }
@@ -809,7 +923,16 @@ function applyOcrToForm() {
     filled.push(id);
   }
 
-  set('f-inst', r.institution);
+  // Partner vs CSPC (2026-09-19, automatic map location): the extractor reports
+  // `institution` as CSPC's OWN side of the agreement whenever it can tell
+  // (OUR_INSTITUTION_RE in services/extractionService.js) and `partner` as the
+  // counterparty. This form's "Institution Name" — and the map location worked
+  // out from it — is the PARTNER, so when OCR identified both and `institution`
+  // is CSPC, use the counterparty. In every other case behavior is unchanged
+  // (and a CSPC-only name is never pinned to CSPC's campus: the server treats
+  // it as a country-level location).
+  var useCounterparty = !!(r.partner && r.institution && OUR_INSTITUTION_RE_CLIENT.test(r.institution));
+  set('f-inst', useCounterparty ? r.partner : r.institution);
   set('f-partner-email', r.email);
   set('f-country', r.country);
   set('f-region', r.region);
@@ -840,7 +963,8 @@ function applyOcrToForm() {
   // Fields with no dedicated input on this form are folded into Remarks so
   // nothing extracted gets silently discarded \u2014 the user can trim/edit freely.
   var extras = [];
-  if (r.partner) extras.push('Partner: ' + r.partner);
+  if (useCounterparty) extras.push('CSPC party: ' + r.institution);
+  else if (r.partner) extras.push('Partner: ' + r.partner);
   if (r.title) extras.push('Title: ' + r.title);
   if (r.duration) extras.push('Duration: ' + r.duration);
   if (r.address) extras.push('Address: ' + r.address);
@@ -857,6 +981,7 @@ function applyOcrToForm() {
 
   var firstTab = document.getElementById('add-step1-tab');
   if (firstTab) new bootstrap.Tab(firstTab).show();
+  scheduleLocationPreview('f');
   showToast('Suggested values applied \u2014 please review every field before saving.');
 }
 
@@ -931,6 +1056,7 @@ function applyRequestToForm(r) {
 
   var firstTab = document.getElementById('add-step1-tab');
   if (firstTab) new bootstrap.Tab(firstTab).show();
+  scheduleLocationPreview('f');
 }
 
 // Runs once on page load. Reuses the existing /api/requests endpoint (already
@@ -1019,7 +1145,7 @@ function submitPartnership(){
         bootstrap.Modal.getInstance(document.getElementById('addPartnershipModal'))?.hide();
         showToast(data.alreadyConverted
           ? '"'+inst+'" was already converted to a Registry partnership.'
-          : '"'+inst+'" added to the registry.');
+          : '"'+inst+'" added to the registry.'+locationNote(data.partnership));
       } else {
         showToast(data.error||'Error saving partnership. Please try again.');
       }
@@ -1035,12 +1161,22 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.previestab').forEach(function(btn){
     btn.addEventListener('click',function(){var t=document.getElementById(this.getAttribute('data-previous'));if(t)new bootstrap.Tab(t).show();});
   });
+  // Map-location preview fires when the institution/country field is LEFT with
+  // a changed value (`change`), never on each keystroke — see the block above.
+  ['f','e'].forEach(function(prefix){
+    ['inst','country'].forEach(function(k){
+      var el=document.getElementById(prefix+'-'+k);
+      if(el) el.addEventListener('change',function(){scheduleLocationPreview(prefix);});
+    });
+  });
   var addModal=document.getElementById('addPartnershipModal');
   if(addModal) addModal.addEventListener('show.bs.modal',function(){
     var ft=document.getElementById('add-step1-tab');if(ft)new bootstrap.Tab(ft).show();
     document.getElementById('addPartnershipForm').reset();
     fUnitCombo.clear();
     fNatureCombo.clear();
+    locPreviewSeq.f++; clearTimeout(locPreviewTimer.f);
+    var fLoc=document.getElementById('f-location-status'); if(fLoc) fLoc.innerHTML='';
     dismissOcrResult();
     ocrShow('ocr-progress-wrap', false);
     hideFromRequestBanner();

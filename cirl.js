@@ -16,6 +16,7 @@ const { connectDB, getDb } = require('./db');
 const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
+const geocoding = require('./services/geocodingService');
 const uploadAvatar = require('./middleware/avatarUploadMiddleware');
 const uploadDoc = require('./middleware/uploadMiddleware');
 const verifyMagicBytes = require('./middleware/verifyMagicBytes');
@@ -109,6 +110,20 @@ const signupLimiter = makeRateLimiter(
   })
 );
 const institutionsLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
+// Map-location preview (Add/Edit Partnership form). Its own instance, and a
+// per-minute window rather than makeRateLimiter's 10-per-15-minutes: one
+// person adding a few partnerships legitimately triggers several previews,
+// while the geocoding service itself already caps outbound provider traffic
+// at 1 request/second and caches repeats.
+const geocodePreviewLimiter = process.env.NODE_ENV === 'test'
+  ? (req, res, next) => next()
+  : rateLimit({
+    windowMs: 60 * 1000,
+    limit: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many location lookups. Please wait a minute and try again.' }
+  });
 const adminPasswordLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
 const personnelPasswordLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
 const partnerPasswordLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
@@ -2131,9 +2146,19 @@ app.post('/api/partnerships', requireStaffAccess, async (req, res) => {
       }
     }
 
+    // Map location (2026-09-19): resolved from the PARTNER institution +
+    // country, server-side, after the duplicate-conversion check above so an
+    // already-converted request never triggers a lookup. Never throws and is
+    // time-bounded — a geocoding problem degrades to a country-level or
+    // unresolved location, it can never fail or stall the save. Clients cannot
+    // supply lat/lng/location* themselves (not in PARTNERSHIP_FIELDS).
+    const location = geocoding.buildLocationUpdate(
+      await geocoding.resolveLocation({ institution: fields.inst, country: fields.country })
+    );
+
     const last = await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
-    const entry = { id: nextId, ...fields };
+    const entry = { id: nextId, ...fields, ...location.set };
     if (sourceRequest) entry.sourceRequestId = sourceRequest.id;
     await db.collection('partnerships').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `Partnership added: ${entry.inst || 'Record #' + nextId} (${entry.type || ''})`);
@@ -2181,7 +2206,20 @@ app.patch('/api/partnerships/:id', requireStaffAccess, async (req, res) => {
     }
 
     const db = getDb();
-    await db.collection('partnerships').updateOne({ id }, { $set: fields });
+    const existing = await db.collection('partnerships').findOne({ id });
+    if (!existing) return res.status(404).json({ error: 'Not found.' });
+
+    // Re-evaluate the map location ONLY when the institution or country
+    // actually changed (see resolveForUpdate) — so an edit never leaves
+    // coordinates that belong to the previous institution/country, while any
+    // other edit leaves the record's existing location (legacy included)
+    // exactly as it was.
+    const location = await geocoding.resolveForUpdate(existing, fields);
+    const update = { $set: { ...fields, ...(location ? location.set : {}) } };
+    if (location && location.unset.length) {
+      update.$unset = Object.fromEntries(location.unset.map(k => [k, '']));
+    }
+    await db.collection('partnerships').updateOne({ id }, update);
     const updated = await db.collection('partnerships').findOne({ id });
     if (!updated) return res.status(404).json({ error: 'Not found.' });
     await logActivity(db, req.session.user, 'EDIT', `Partnership updated: ${updated.inst || 'Record #' + id} (${updated.type || ''})`);
@@ -2189,6 +2227,21 @@ app.patch('/api/partnerships/:id', requireStaffAccess, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Map-location preview for the Add/Edit Partnership form: tells the person
+// what location a save would produce (exact / approximate / unresolved)
+// BEFORE they save. Read-only — writes nothing to partnerships — and uses the
+// exact same resolver (and cache) as the save itself, so the preview and the
+// saved result agree. Administrator + Staff only, like the routes it serves.
+// Callers must invoke this on commit (institution picked / field left), not
+// per keystroke — the provider's usage policy forbids autocomplete-style use.
+app.post('/api/geocode/preview', requireStaffAccess, geocodePreviewLimiter, async (req, res) => {
+  const body = req.body || {};
+  const institution = typeof body.institution === 'string' ? body.institution.trim().slice(0, 200) : '';
+  const country = typeof body.country === 'string' ? body.country.trim().slice(0, 100) : '';
+  const location = await geocoding.resolveLocation({ institution, country });
+  res.json(geocoding.toPublicLocation(location));
 });
 
 app.delete('/api/partnerships/:id', requireStaffAccess, async (req, res) => {

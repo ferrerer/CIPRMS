@@ -514,6 +514,11 @@
                     <option>South America</option><option>Antarctica</option><option>Europe</option><option>Oceania</option>
                   </select>
                 </div>
+                <div class="col-lg-12 mb-3">
+                  <!-- Automatic map location — filled in by requestLocationPreview()
+                       (registry-gridjs.init.js) once the institution/country is set. -->
+                  <div class="fs-12 text-muted" id="f-location-status" aria-live="polite"></div>
+                </div>
                 <div class="col-lg-6 mb-3">
                   <label class="form-label" for="f-partner-email">Partner Contact Email</label>
                   <input type="email" class="form-control" id="f-partner-email" placeholder="contact@institution.edu">
@@ -685,6 +690,9 @@
               <option>Asia</option><option>Africa</option><option>North America</option>
               <option>South America</option><option>Antarctica</option><option>Europe</option><option>Oceania</option>
             </select>
+          </div>
+          <div class="col-lg-12 mb-3">
+            <div class="fs-12 text-muted" id="e-location-status" aria-live="polite"></div>
           </div>
           <div class="col-lg-6 mb-3">
             <label class="form-label" for="e-partner-email">Partner Contact Email</label>

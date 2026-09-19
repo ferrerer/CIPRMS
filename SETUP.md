@@ -113,3 +113,22 @@ The `<html>` tag on every page has Velzon data attributes you can change:
 | `data-topbar`     | `light`, `dark`                | `light`    |
 | `data-sidebar-size` | `lg`, `sm`, `sm-hover`       | `lg`       |
 | `data-theme-colors` | `default`, `teal`, `cyan`, `purple`, `green`, `pink` | `default` |
+
+---
+
+## Automatic partnership map location (optional configuration)
+
+When Administrator/Staff add or edit a partnership, the server works out its
+map location from the **partner institution + country** using OpenStreetMap
+**Nominatim** — no API key is needed. Every setting below is optional:
+
+| Environment variable   | Purpose | Default |
+|------------------------|---------|---------|
+| `GEOCODER_PROVIDER`    | `nominatim`, or `none` to turn institution-level lookup off (country-level fallback only) | `nominatim` (`none` under `NODE_ENV=test`) |
+| `GEOCODER_USER_AGENT`  | Identifying User-Agent sent to Nominatim (its usage policy requires one — add a contact URL/email of your own) | `CIPRMS-CSPC-CIRL/1.0 (...)` |
+| `GEOCODER_BASE_URL`    | Point at a self-hosted or compatible Nominatim instance | `https://nominatim.openstreetmap.org` |
+
+The public service allows at most 1 request/second (enforced in
+`services/geocodingService.js`) and requires results to be cached (stored in
+the `geocodecache` collection). Lookups happen when a form field is committed,
+never per keystroke.

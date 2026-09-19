@@ -343,9 +343,14 @@
                                             </div>
                                         </div>
                                         <div class="card-body p-0">
-                                            <div id="partnership-map" style="height:360px;border-radius:0 0 8px 8px;">
+                                            <div id="partnership-map" style="height:360px;">
                                             </div>
                                         </div>
+                                        <!-- Filled by renderMap(): how many partnerships are on the map,
+                                             which are approximate (country level), and how many have no
+                                             resolved location (never given an invented marker). -->
+                                        <div id="map-coverage-note" class="px-3 py-2 border-top fs-12 text-muted"
+                                            style="display:none;" aria-live="polite"></div>
                                     </div>
                                 </div>
                                  <!-- Top Partner Countries -->
@@ -488,20 +493,127 @@
             return L.divIcon({ className: '', html: svg, iconSize: [26, 32], iconAnchor: [13, 30], popupAnchor: [0, -28] });
         }
 
-        function renderMap(partnerships) {
-            // Only records that actually carry coordinates get a marker — no invented locations.
-            partnerships.filter(p => typeof p.lat === 'number' && typeof p.lng === 'number').forEach(function (p) {
-                const key = statusKey(p.status);
-                const popup = `<div style="font-family:Inter,sans-serif;min-width:180px;">
-        <div style="font-weight:700;font-size:13px;color:#0d1b3e;margin-bottom:4px;">${p.inst}</div>
-        <div style="font-size:11.5px;color:#64748b;margin-bottom:6px;">${p.country || ''}</div>
-        <div style="display:flex;gap:6px;">
-            <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e8f0fe;color:#405189;">${p.type || ''}</span>
-            <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:${STATUS_RING[key]};color:${STATUS_COLOR[key]};">${STATUS_LABEL[key]}</span>
-        </div>
-    </div>`;
-                L.marker([p.lat, p.lng], { icon: makeIcon(key) }).addTo(map).bindPopup(popup, { maxWidth: 240 });
+        // Institution/country/type come from user input, OCR, or a third-party list —
+        // always escaped before going into popup HTML.
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
             });
+        }
+
+        // Approximate (country-level) locations get a dashed, semi-transparent ring so
+        // they can never be mistaken for an exact institution location.
+        function makeApproxIcon(key) {
+            const c = STATUS_COLOR[key];
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="32" viewBox="0 0 26 32">
+        <ellipse cx="13" cy="30" rx="5" ry="2.5" fill="rgba(0,0,0,.12)"/>
+        <circle cx="13" cy="13" r="12" fill="#ffffff" fill-opacity="0.65" stroke="${c}" stroke-width="2.5" stroke-dasharray="4 3"/>
+        <circle cx="13" cy="13" r="4" fill="${c}" fill-opacity="0.55"/>
+    </svg>`;
+            return L.divIcon({ className: '', html: svg, iconSize: [26, 32], iconAnchor: [13, 30], popupAnchor: [0, -28] });
+        }
+
+        // One marker for several partnerships sharing the same coordinates: a numbered
+        // circle, colored by the worst status among its members.
+        function makeGroupIcon(count, key, approx) {
+            const c = STATUS_COLOR[key], r = STATUS_RING[key];
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+        <circle cx="17" cy="17" r="15" fill="${approx ? '#ffffff' : r}" fill-opacity="${approx ? '0.75' : '1'}" stroke="${c}" stroke-width="3"${approx ? ' stroke-dasharray="5 3"' : ''}/>
+        <text x="17" y="22" text-anchor="middle" font-family="Inter,sans-serif" font-size="14" font-weight="700" fill="#0d1b3e">${count}</text>
+    </svg>`;
+            return L.divIcon({ className: '', html: svg, iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18] });
+        }
+
+        const STATUS_RANK = { active: 1, expiring: 2, expired: 3 };
+
+        // A record is placed on the map only with valid numeric coordinates that are not
+        // flagged unresolved — never an invented location.
+        function hasMapLocation(p) {
+            return typeof p.lat === 'number' && typeof p.lng === 'number'
+                && isFinite(p.lat) && isFinite(p.lng)
+                && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180
+                && p.locationStatus !== 'unresolved';
+        }
+        // Country-level fallback points. Legacy records (no location metadata) are exact.
+        function isApproximate(p) {
+            return p.locationPrecision === 'country' || p.locationStatus === 'approximate';
+        }
+
+        function badgesHtml(p, key) {
+            return `<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:#e8f0fe;color:#405189;">${esc(p.type || '')}</span>
+            <span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px;background:${STATUS_RING[key]};color:${STATUS_COLOR[key]};">${STATUS_LABEL[key]}</span>`;
+        }
+        const APPROX_NOTE = `<div style="font-size:10.5px;color:#b45309;margin-bottom:6px;">Approximate location (country level)</div>`;
+
+        function singlePopupHtml(p, approx) {
+            const key = statusKey(p.status);
+            return `<div style="font-family:Inter,sans-serif;min-width:180px;">
+        <div style="font-weight:700;font-size:13px;color:#0d1b3e;margin-bottom:4px;">${esc(p.inst || p.institution || 'Partner Institution')}</div>
+        <div style="font-size:11.5px;color:#64748b;margin-bottom:6px;">${esc(p.country || '')}</div>
+        ${approx ? APPROX_NOTE : ''}
+        <div style="display:flex;gap:6px;">${badgesHtml(p, key)}</div>
+    </div>`;
+        }
+
+        function groupPopupHtml(items, approx) {
+            const rows = items.map(function (p) {
+                const key = statusKey(p.status);
+                return `<div style="border-top:1px solid #e9ebec;padding:6px 0;">
+            <div style="font-weight:700;font-size:12.5px;color:#0d1b3e;">${esc(p.inst || p.institution || 'Partner Institution')}</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px;">${esc(p.country || '')}</div>
+            <div style="display:flex;gap:6px;">${badgesHtml(p, key)}</div>
+        </div>`;
+            }).join('');
+            return `<div style="font-family:Inter,sans-serif;min-width:220px;">
+        <div style="font-weight:700;font-size:13px;color:#0d1b3e;margin-bottom:4px;">${items.length} partnerships at this location</div>
+        ${approx ? APPROX_NOTE : ''}
+        <div style="max-height:190px;overflow-y:auto;">${rows}</div>
+    </div>`;
+        }
+
+        function renderMap(partnerships) {
+            // Group by identical coordinates (exact and approximate kept apart) so several
+            // partnerships in one place become ONE marker whose popup lists them all,
+            // instead of markers stacked on top of each other.
+            const groups = new Map();
+            let unmapped = 0, approxCount = 0, onMap = 0;
+            partnerships.forEach(function (p) {
+                if (!hasMapLocation(p)) { unmapped++; return; }
+                const approx = isApproximate(p);
+                onMap++;
+                if (approx) approxCount++;
+                const gk = p.lat.toFixed(5) + ',' + p.lng.toFixed(5) + (approx ? '~' : '');
+                if (!groups.has(gk)) groups.set(gk, { lat: p.lat, lng: p.lng, approx: approx, items: [] });
+                groups.get(gk).items.push(p);
+            });
+
+            groups.forEach(function (g) {
+                let marker;
+                if (g.items.length === 1) {
+                    const key = statusKey(g.items[0].status);
+                    marker = L.marker([g.lat, g.lng], { icon: g.approx ? makeApproxIcon(key) : makeIcon(key) })
+                        .bindPopup(singlePopupHtml(g.items[0], g.approx), { maxWidth: 240 });
+                } else {
+                    const worst = g.items.reduce(function (w, p) {
+                        const k = statusKey(p.status);
+                        return STATUS_RANK[k] > STATUS_RANK[w] ? k : w;
+                    }, 'active');
+                    marker = L.marker([g.lat, g.lng], { icon: makeGroupIcon(g.items.length, worst, g.approx) })
+                        .bindPopup(groupPopupHtml(g.items, g.approx), { maxWidth: 280 });
+                }
+                marker.addTo(map);
+            });
+
+            // Coverage note: what is on the map, what is approximate, and how many
+            // partnerships have no resolved location (they get no marker at all).
+            const note = document.getElementById('map-coverage-note');
+            if (note && partnerships.length) {
+                const parts = [`<span><i class="ri-map-pin-2-line me-1"></i>${onMap} of ${partnerships.length} partnerships on the map</span>`];
+                if (approxCount) parts.push(`<span>${approxCount} approximate (dashed markers = country level)</span>`);
+                if (unmapped) parts.push(`<span class="text-warning-emphasis"><i class="ri-error-warning-line me-1"></i>${unmapped} not on map (location unresolved)</span>`);
+                note.innerHTML = parts.join('<span class="mx-2">&middot;</span>');
+                note.style.display = '';
+            }
             setTimeout(function () { map.invalidateSize(); }, 300);
         }
 
@@ -550,14 +662,14 @@
             el.innerHTML = top.map(([country, count]) => {
                 const flagEmoji = countryToFlagEmoji(country);
                 const flag = flagEmoji
-                    ? `<span class="fs-3" style="line-height:1;" role="img" aria-label="${country} flag">${flagEmoji}</span>`
+                    ? `<span class="fs-3" style="line-height:1;" role="img" aria-label="${esc(country)} flag">${flagEmoji}</span>`
                     : `<span class="fs-3" style="line-height:1;" role="img" aria-label="Unknown country">🌍</span>`;
                 const pct = Math.round((count / max) * 100);
                 return `<div class="d-flex align-items-center mb-3">
         <div class="flex-shrink-0 me-3">${flag}</div>
         <div class="flex-grow-1">
             <div class="d-flex justify-content-between mb-1">
-                <span class="fs-13 fw-medium">${country}</span>
+                <span class="fs-13 fw-medium">${esc(country)}</span>
                 <span class="fs-12 text-muted">${count}</span>
             </div>
             <div class="progress" style="height:4px;">

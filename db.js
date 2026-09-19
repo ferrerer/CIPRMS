@@ -56,6 +56,17 @@ async function connectDB() {
     } catch (indexErr) {
       console.error('⚠️  Could not create unique index on targets — duplicate-target race protection is NOT active:', indexErr.message);
     }
+    // 2026-09-19 automatic map location: cache of institution+country
+    // geocoding answers (services/geocodingService.js), keyed so a repeated
+    // lookup never hits the external provider twice. A brand-new collection —
+    // this touches no existing record. Non-fatal on failure, same precedent as
+    // above: without the unique index the cache still works (upserts by key),
+    // it just can't guard against a duplicate-key race.
+    try {
+      await db.collection('geocodecache').createIndex({ key: 1 }, { unique: true });
+    } catch (indexErr) {
+      console.error('⚠️  Could not create unique index on geocodecache.key:', indexErr.message);
+    }
     // 2026-09-17 performance fix: every "get next sequential id" write path
     // in this app (partnerships, users, requests, documentrequests,
     // documentfolders, activitylogs, notifications, calendarevents, targets —

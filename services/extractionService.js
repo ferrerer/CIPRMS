@@ -434,6 +434,7 @@ function extractFields(rawText) {
 }
 
 module.exports = {
+  OUR_INSTITUTION_RE, // shared with geocodingService so CSPC's own name is never geolocated as a partner
   extractFields, classifyDocumentType,
   extractCountry, inferCategory, inferRegion, inferNature, inferUnit,
   buildSummary, buildSearchKeywords
