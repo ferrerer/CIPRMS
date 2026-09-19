@@ -383,3 +383,225 @@ a:focus-visible {
 @media (max-width: 480px) {
     .stats-row { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES
+   Applied when Velzon sets [data-bs-theme="dark"] on <html>.
+   Overrides the hardcoded light colors in the rules above so
+   every role's UI stays readable in dark mode without needing
+   per-role CSS or a separate dark-mode stylesheet.
+
+   2026-09-17 recovery: this block existed in an orphaned copy of
+   this file at public/ciprms-bridge.css (never actually referenced
+   by any view — every page links /velzon/assets/css/ciprms-bridge.css,
+   which static-maps to THIS file) but was missing here, the copy
+   that's actually served. Without it, any element using a class from
+   the "General Cards"/"Tables"/"Filters"/"Modals"/etc. rules above
+   (e.g. the Dashboard's "Active Partnerships" table, which uses
+   .table-card) stayed hardcoded light/white in dark mode. Restored
+   verbatim from the orphaned copy; every class it targets already
+   exists in this file's own light-mode rules above. */
+
+[data-bs-theme="dark"] .stat-card,
+[data-bs-theme="dark"] .custom-card,
+[data-bs-theme="dark"] .report-card,
+[data-bs-theme="dark"] .map-card,
+[data-bs-theme="dark"] .table-card,
+[data-bs-theme="dark"] .filter-card,
+[data-bs-theme="dark"] .notif-card,
+[data-bs-theme="dark"] .breakdown-card,
+[data-bs-theme="dark"] .settings-card {
+    background: #1e2533;
+    box-shadow: 0 1px 2px rgba(0,0,0,.3);
+    border-color: rgba(255,255,255,.07);
+}
+
+[data-bs-theme="dark"] .stat-label {
+    color: #adb5bd;
+}
+[data-bs-theme="dark"] .stat-value {
+    color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .page-title,
+[data-bs-theme="dark"] .bc-title,
+[data-bs-theme="dark"] .modal-title,
+[data-bs-theme="dark"] .settings-section h3 {
+    color: #e9ecef;
+}
+
+[data-bs-theme="dark"] .page-content h1 {
+    color: #e9ecef;
+}
+[data-bs-theme="dark"] .page-content p.page-sub,
+[data-bs-theme="dark"] .page-content p[style*="color:#64748b"] {
+    color: #adb5bd;
+}
+
+/* ── Tables ── */
+[data-bs-theme="dark"] .data-table th,
+[data-bs-theme="dark"] .registry-table th {
+    background: #262d3d;
+    color: #adb5bd;
+    border-bottom-color: rgba(255,255,255,.08);
+}
+[data-bs-theme="dark"] .data-table td,
+[data-bs-theme="dark"] .registry-table td {
+    color: #ced4da;
+    border-bottom-color: rgba(255,255,255,.06);
+}
+[data-bs-theme="dark"] .data-table tr:hover td,
+[data-bs-theme="dark"] .registry-table tr:hover td {
+    background: rgba(255,255,255,.04);
+}
+
+/* ── Filter inputs ── */
+[data-bs-theme="dark"] .filter-row input[type="text"],
+[data-bs-theme="dark"] .filter-row input[type="search"],
+[data-bs-theme="dark"] .filter-row select {
+    border-color: rgba(255,255,255,.12);
+    background: #262d3d;
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .filter-row input:focus,
+[data-bs-theme="dark"] .filter-row select:focus {
+    border-color: #7094f5;
+    box-shadow: 0 0 0 2px rgba(112,148,245,.18);
+}
+
+/* ── Form controls ── */
+[data-bs-theme="dark"] .form-group input,
+[data-bs-theme="dark"] .form-group select,
+[data-bs-theme="dark"] .form-group textarea {
+    background: #262d3d;
+    border-color: rgba(255,255,255,.12);
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .form-group input:focus,
+[data-bs-theme="dark"] .form-group select:focus,
+[data-bs-theme="dark"] .form-group textarea:focus {
+    border-color: #7094f5;
+    box-shadow: 0 0 0 2px rgba(112,148,245,.15);
+}
+[data-bs-theme="dark"] .form-group label {
+    color: #adb5bd;
+}
+
+/* ── Modals ── */
+[data-bs-theme="dark"] .modal-box {
+    background: #1e2533;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+/* ── Notification panel ── */
+[data-bs-theme="dark"] .notif-panel {
+    background: #1e2533;
+    border-color: rgba(255,255,255,.08);
+}
+
+/* ── Settings section divider ── */
+[data-bs-theme="dark"] .settings-section h3 {
+    border-bottom-color: rgba(255,255,255,.08);
+}
+
+/* ── Buttons ── */
+[data-bs-theme="dark"] .header-add-btn,
+[data-bs-theme="dark"] .btn-add-primary {
+    background: #5a72d4;
+}
+[data-bs-theme="dark"] .header-add-btn:hover,
+[data-bs-theme="dark"] .btn-add-primary:hover {
+    background: #4a61b8;
+    color: #fff;
+}
+
+/* ── Grid.js tables (vendor theme, assets/libs/gridjs/theme/mermaid.min.css) ──
+   That vendor stylesheet hardcodes #fff/light-gray backgrounds and dark text
+   with no dark-mode variant at all, so every Grid.js-driven table (Audit
+   Trail on Reports & Analytics, Monitoring/Lifecycle/Registry) stayed a
+   light block inside an otherwise dark page. Overridden here instead of
+   editing the vendor file directly, mirroring the same dark surface/border/
+   text tones used elsewhere in this file. */
+[data-bs-theme="dark"] .gridjs-container {
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .gridjs-wrapper {
+    border-color: rgba(255,255,255,.1);
+}
+[data-bs-theme="dark"] .gridjs-th {
+    background-color: #262d3d;
+    border-color: rgba(255,255,255,.08);
+    color: #adb5bd;
+}
+[data-bs-theme="dark"] .gridjs-th-sort:hover {
+    background-color: #2f3749;
+}
+[data-bs-theme="dark"] .gridjs-td {
+    background-color: #1e2533;
+    border-color: rgba(255,255,255,.06);
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .gridjs-tr:hover .gridjs-td {
+    background-color: rgba(255,255,255,.04);
+}
+[data-bs-theme="dark"] .gridjs-footer {
+    background-color: #1e2533;
+    border-color: rgba(255,255,255,.08);
+}
+[data-bs-theme="dark"] .gridjs-input {
+    background-color: #262d3d;
+    border-color: rgba(255,255,255,.12);
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .gridjs-pagination {
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .gridjs-pages button,
+[data-bs-theme="dark"] .gridjs-pages button.gridjs-spread {
+    background-color: #1e2533;
+    border-color: rgba(255,255,255,.12);
+    color: #ced4da;
+}
+[data-bs-theme="dark"] .gridjs-pages button:hover {
+    background-color: #262d3d;
+    color: #e9ecef;
+}
+[data-bs-theme="dark"] .gridjs-pages button.gridjs-currentPage {
+    background-color: #2f3749;
+    color: #e9ecef;
+}
+[data-bs-theme="dark"] .gridjs-loading-bar {
+    background-color: #1e2533;
+}
+
+/* ── Header notification dropdown (all roles — shared views/partials/header.ejs) ──
+   The list used to rely on a bare `data-simplebar` + inline max-height with no
+   `overflow` set. SimpleBar auto-initializes elements present in the DOM when
+   its script runs, but this dropdown is `display:none` (closed) at that point,
+   so it never gets real dimensions and never finishes wrapping the element —
+   leaving a plain 300px-tall box with the browser default `overflow: visible`,
+   i.e. no clipping and no scrollbar at all. A plain CSS max-height +
+   overflow-y:auto is deterministic regardless of the element's visibility when
+   the page loads, and needs no JS re-init when notifications are re-rendered. */
+.notif-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+}
+[data-bs-theme="dark"] .notif-scroll {
+    scrollbar-color: rgba(255,255,255,.25) transparent;
+}
+
+/* Long notification title/description used to have no width or wrapping
+   limit, so a single very long sentence could stretch one notification item
+   to several lines and push the "See All Notifications" footer (and every
+   notification below it) far down — the actual cause of the dropdown
+   "growing" with notification count/length. Clamped to one line with an
+   ellipsis; the full text remains available on the Notifications page these
+   items already link to. */
+.notification-item .notif-title-line,
+.notification-item .notif-desc-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

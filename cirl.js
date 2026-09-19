@@ -709,7 +709,11 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, async (req, res) =>
       institution: partnership.inst || partnership.institution || '',
       country: partnership.country || '',
       type: partnership.type || '',
-      nature: partnership.nature || 'Renewal',
+      // partnership.nature can now be an array (multi-select) — the `requests`
+      // collection's own `nature` field is unaffected by that change and stays
+      // a plain string, so join for display here rather than storing an array
+      // where a string has always been expected.
+      nature: (Array.isArray(partnership.nature) ? partnership.nature.join(', ') : partnership.nature) || 'Renewal',
       category: partnership.cat || partnership.category || '',
       region: partnership.region || '',
       unit: partnership.unit || '',
@@ -1062,8 +1066,15 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
       return res.status(400).json({ error: message });
     }
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
-    if (!verifyMagicBytes(req.file)) {
+    const note = (req.body.note || '').trim().slice(0, 1000);
+    // File is now OPTIONAL (2026-09-19) — notes alone are a legitimate new
+    // version/draft entry. Only reject when NEITHER is present; a file with
+    // no note, or a note with no file, are both still valid on their own.
+    if (!req.file && !note) {
+      return res.status(400).json({ error: 'Provide a file, a note, or both to add a new version.' });
+    }
+    if (req.file && !verifyMagicBytes(req.file)) {
+      fs.unlink(req.file.path, () => { });
       return res.status(400).json({ error: 'Unsupported file type. Only PDF, JPG, JPEG, and PNG are accepted.' });
     }
     const id = parseInt(req.params.id);
@@ -1072,22 +1083,20 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
       const db = getDb();
       const target = await db.collection('requests').findOne({ id });
       if (!target) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(404).json({ error: 'Request not found.' });
       }
 
       const isReviewer = REQUEST_REVIEWER_ROLES.includes(actor.role);
       const isOwner = target.submittedByEmail && target.submittedByEmail === actor.email;
       if (!isReviewer && !isOwner) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(403).json({ error: 'You are not authorized to upload documents to this request.' });
       }
       if (['Approved', 'Rejected', 'Withdrawn'].includes(target.status)) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(400).json({ error: `This request has already been ${target.status.toLowerCase()} — no further documents can be added.` });
       }
-
-      const note = (req.body.note || '').trim().slice(0, 1000);
 
       // Document Library attribution: a reviewer (Staff/Administrator)
       // uploading a new version FOR the requester must own that Document
@@ -1101,23 +1110,30 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
       // request-history record — only this separate Document Library archive
       // call had the bug. When the requester uploads their own revision
       // (isOwner), behavior is unchanged (actor IS the requester already).
-      const { documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
-        documentType: expandDocTypeLabel(target.type),
-        institution: target.institution,
-        partner: target.institution,
-        title: `${target.type || 'Document'} – ${target.institution} (Request #${id})`
-      }, {
-        uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
-        uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
-        requestId: id,
-        requestType: 'partnership'
-      });
+      // A notes-only version has no file at all — skip the archive step
+      // entirely rather than inventing a fake filename/Document Library
+      // record for something that was never uploaded.
+      let documentId = null, fileLink = null;
+      if (req.file) {
+        ({ documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
+          documentType: expandDocTypeLabel(target.type),
+          institution: target.institution,
+          partner: target.institution,
+          title: `${target.type || 'Document'} – ${target.institution} (Request #${id})`
+        }, {
+          uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
+          uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
+          requestId: id,
+          requestType: 'partnership'
+        }));
+      }
 
       const docRecord = {
-        documentId, fileLink, originalFilename: req.file.originalname,
+        documentId, fileLink,
+        originalFilename: req.file ? req.file.originalname : null,
         uploadedAt: new Date().toISOString(), uploadedBy: actor.name,
         uploadedByEmail: actor.email, uploaderRole: actor.role,
-        note, fileType: req.file.mimetype, fileSize: req.file.size
+        note, fileType: req.file ? req.file.mimetype : null, fileSize: req.file ? req.file.size : 0
       };
       const setFields = { updatedAt: new Date().toISOString() };
       // A new version puts the request back "in collaboration" — reuses the
@@ -1127,8 +1143,9 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
       await db.collection('requests').updateOne({ id }, { $push: { supportingDocuments: docRecord }, $set: setFields });
       const updated = await db.collection('requests').findOne({ id });
 
+      const fileLabel = req.file ? req.file.originalname : 'notes only';
       await logActivity(db, actor, 'EDIT',
-        `Draft document uploaded for partnership request: ${target.institution} (${req.file.originalname})${note ? ' — "' + note + '"' : ''}`);
+        `Draft document uploaded for partnership request: ${target.institution} (${fileLabel})${note ? ' — "' + note + '"' : ''}`);
 
       // Reviewer uploaded → notify the requester. Requester uploaded a
       // revision → notify every reviewer (same broadcast set used for a
@@ -1141,7 +1158,9 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `New draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded "${req.file.originalname}" for your request (${target.institution}).${note ? ' Note: ' + note : ''}`,
+          desc: req.file
+            ? `${actor.name} uploaded "${req.file.originalname}" for your request (${target.institution}).${note ? ' Note: ' + note : ''}`
+            : `${actor.name} added new notes for your request (${target.institution}).${note ? ' Note: ' + note : ''}`,
           link: prLinkForRole(submitter && submitter.role, id),
           downloadLink: fileLink
         });
@@ -1153,7 +1172,9 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `Revised draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their request (${target.institution}).${note ? ' Note: ' + note : ''}`
+          desc: req.file
+            ? `${actor.name} uploaded a revised draft "${req.file.originalname}" for their request (${target.institution}).${note ? ' Note: ' + note : ''}`
+            : `${actor.name} added new notes to their request (${target.institution}).${note ? ' Note: ' + note : ''}`
         }, role => prLinkForRole(role, id));
       }
 
@@ -1517,8 +1538,15 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
       return res.status(400).json({ error: message });
     }
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
-    if (!verifyMagicBytes(req.file)) {
+    const note = (req.body.note || '').trim().slice(0, 1000);
+    // File is now OPTIONAL (2026-09-19) — same rule as the Partnership
+    // Request draft upload above: reject only when neither a file nor a
+    // note is present.
+    if (!req.file && !note) {
+      return res.status(400).json({ error: 'Provide a file, a note, or both to add a new version.' });
+    }
+    if (req.file && !verifyMagicBytes(req.file)) {
+      fs.unlink(req.file.path, () => { });
       return res.status(400).json({ error: 'Unsupported file type. Only PDF, JPG, JPEG, and PNG are accepted.' });
     }
     const id = parseInt(req.params.id);
@@ -1527,50 +1555,55 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
       const db = getDb();
       const target = await db.collection('documentrequests').findOne({ id });
       if (!target) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(404).json({ error: 'Document request not found.' });
       }
 
       const isReviewer = REQUEST_REVIEWER_ROLES.includes(actor.role);
       const isOwner = target.requestedByEmail && target.requestedByEmail === actor.email;
       if (!isReviewer && !isOwner) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(403).json({ error: 'You are not authorized to upload documents to this request.' });
       }
       if (DR_TERMINAL_STATUSES.includes(canonicalDrStatus(target.status))) {
-        fs.unlink(req.file.path, () => { });
+        if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(400).json({ error: `This document request has already been ${target.status.toLowerCase()} — no further documents can be added.` });
       }
-
-      const note = (req.body.note || '').trim().slice(0, 1000);
 
       // Same reviewer-attribution fix as POST /api/requests/:id/documents
       // above — a reviewer's own Document Library upload must be owned by
       // the reviewer (actor), not the requester, or it never appears in the
-      // reviewer's own library.
-      const { documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
-        documentType: expandDocTypeLabel(target.documentType),
-        institution: target.institution,
-        partner: target.institution,
-        title: `${target.documentType || 'Document'} – ${target.institution} (Doc Request #${id})`
-      }, {
-        uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
-        uploadedByEmail: isReviewer ? actor.email : target.requestedByEmail,
-        requestId: id,
-        requestType: 'document'
-      });
+      // reviewer's own library. A notes-only version has no file at all —
+      // skip the archive step entirely rather than inventing a fake
+      // filename/Document Library record for something never uploaded.
+      let documentId = null, fileLink = null;
+      if (req.file) {
+        ({ documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
+          documentType: expandDocTypeLabel(target.documentType),
+          institution: target.institution,
+          partner: target.institution,
+          title: `${target.documentType || 'Document'} – ${target.institution} (Doc Request #${id})`
+        }, {
+          uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
+          uploadedByEmail: isReviewer ? actor.email : target.requestedByEmail,
+          requestId: id,
+          requestType: 'document'
+        }));
+      }
 
       const docRecord = {
-        documentId, fileLink, originalFilename: req.file.originalname,
+        documentId, fileLink,
+        originalFilename: req.file ? req.file.originalname : null,
         uploadedAt: new Date().toISOString(), uploadedBy: actor.name,
         uploadedByEmail: actor.email, uploaderRole: actor.role,
-        note, fileType: req.file.mimetype, fileSize: req.file.size
+        note, fileType: req.file ? req.file.mimetype : null, fileSize: req.file ? req.file.size : 0
       };
       const setFields = { updatedAt: new Date().toISOString() };
       // A reviewer's first draft upload signals work has actually begun —
       // auto-advance Received → Preparing (recorded in statusHistory like
       // every other transition) rather than requiring a separate manual
-      // status click for what just happened anyway.
+      // status click for what just happened anyway. Notes-only counts too —
+      // it's still real review progress, not just a file drop.
       const pushOps = { supportingDocuments: docRecord };
       if (canonicalDrStatus(target.status) === 'Received') {
         setFields.status = 'Preparing';
@@ -1579,8 +1612,9 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
       await db.collection('documentrequests').updateOne({ id }, { $push: pushOps, $set: setFields });
       const updated = await db.collection('documentrequests').findOne({ id });
 
+      const fileLabel = req.file ? req.file.originalname : 'notes only';
       await logActivity(db, actor, 'EDIT',
-        `Draft document uploaded for document request: ${target.institution} (${req.file.originalname})${note ? ' — "' + note + '"' : ''}`);
+        `Draft document uploaded for document request: ${target.institution} (${fileLabel})${note ? ' — "' + note + '"' : ''}`);
 
       // Reviewer uploaded → notify the requester. Requester uploaded a
       // revision → notify every reviewer, same broadcast set used for a
@@ -1593,7 +1627,9 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `New draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded "${req.file.originalname}" for your document request (${target.institution}).${note ? ' Note: ' + note : ''}`,
+          desc: req.file
+            ? `${actor.name} uploaded "${req.file.originalname}" for your document request (${target.institution}).${note ? ' Note: ' + note : ''}`
+            : `${actor.name} added new notes for your document request (${target.institution}).${note ? ' Note: ' + note : ''}`,
           link: drLinkForRole(requester && requester.role, id),
           downloadLink: fileLink
         });
@@ -1605,7 +1641,9 @@ app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
           icon: 'ri-file-upload-line',
           color: 'info',
           title: `Revised draft uploaded: ${target.institution}`,
-          desc: `${actor.name} uploaded a revised draft "${req.file.originalname}" for their document request (${target.institution}).${note ? ' Note: ' + note : ''}`
+          desc: req.file
+            ? `${actor.name} uploaded a revised draft "${req.file.originalname}" for their document request (${target.institution}).${note ? ' Note: ' + note : ''}`
+            : `${actor.name} added new notes to their document request (${target.institution}).${note ? ' Note: ' + note : ''}`
         }, role => drLinkForRole(role, id));
       }
 
@@ -1939,8 +1977,15 @@ app.patch('/api/documents/:id/organize', requireUploader, async (req, res) => {
 // rather than perpetuated. Every field the Add/Edit forms actually send is
 // listed here; anything else in the request body is rejected outright rather
 // than silently written to a schemaless document.
+// `nature` became a 'stringArray' (2026-09-19, multi-select Nature of
+// Partnership) using the exact same generic array-field mechanism `unit`
+// already established — unlike `unit`, it has no closed VALID_... allow-list
+// (see the 'stringArray' branch below), because unrestricted free-text values
+// were already accepted for `nature` as a plain string before this change
+// (e.g. pre-existing records/OCR suggestions outside the Add form's 8-option
+// list) and must keep working unmodified.
 const PARTNERSHIP_FIELDS = {
-  inst: 'string', country: 'string', region: 'string', type: 'string', nature: 'string',
+  inst: 'string', country: 'string', region: 'string', type: 'string', nature: 'stringArray',
   cat: 'string', unit: 'stringArray', coordinator: 'string', partnerEmail: 'string', docLink: 'string',
   start: 'string', end: 'string', status: 'string', remarks: 'string',
   startYear: 'number', endYear: 'number'
@@ -3097,7 +3142,10 @@ async function computeCustomReportData(db, query, user) {
     }
     if (key === 'Region') return p.region || 'Unspecified';
     if (key === 'Agreement Type') return p.type || 'Unspecified';
-    if (key === 'Nature of Partnership') return p.nature || 'Unspecified';
+    if (key === 'Nature of Partnership') {
+      if (Array.isArray(p.nature)) return p.nature.length ? p.nature : 'Unspecified';
+      return p.nature || 'Unspecified';
+    }
     if (key === 'Category') return p.cat || 'Unspecified';
     if (key === 'Year') return p.startYear ? String(p.startYear) : (p.start ? String(new Date(p.start).getFullYear()) : 'Unspecified');
     return normalizeCountryGroupVal(p.country);

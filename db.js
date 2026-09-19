@@ -56,6 +56,28 @@ async function connectDB() {
     } catch (indexErr) {
       console.error('⚠️  Could not create unique index on targets — duplicate-target race protection is NOT active:', indexErr.message);
     }
+    // 2026-09-17 performance fix: every "get next sequential id" write path
+    // in this app (partnerships, users, requests, documentrequests,
+    // documentfolders, activitylogs, notifications, calendarevents, targets —
+    // every `.find({}).sort({ id: -1 }).limit(1)` call in cirl.js) relied on
+    // an unindexed full collection scan + in-memory sort to find the current
+    // max id. Harmless while these collections were tiny, but activitylogs
+    // (752 docs) and notifications (522 docs) have grown enough that this
+    // was measurably slow over Atlas's network round-trip — reproduced as a
+    // 15s Jest timeout on a test doing nothing more than 3 sequential
+    // partnership inserts, each triggering a logActivity() call that
+    // re-scanned the entire activitylogs collection. Same non-fatal
+    // try/catch precedent as the indexes above: these are plain (non-unique)
+    // indexes that only speed up the existing sort, so a failure to create
+    // one just leaves that collection's writes at their current speed — it
+    // never changes the nextId logic itself.
+    for (const coll of ['partnerships', 'users', 'requests', 'documentrequests', 'documentfolders', 'activitylogs', 'notifications', 'calendarevents', 'targets']) {
+      try {
+        await db.collection(coll).createIndex({ id: -1 });
+      } catch (indexErr) {
+        console.error(`⚠️  Could not create id index on ${coll} — nextId lookups on this collection remain unindexed:`, indexErr.message);
+      }
+    }
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
@@ -72,7 +94,7 @@ function getDb() {
 
 async function closeDB() {
   if (client) {
-    await client.close();1
+    await client.close();
     client = undefined;
     db = undefined;
   }

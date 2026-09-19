@@ -138,7 +138,7 @@
                         </div>
                         <div class="tab-content" id="notificationItemsTabContent">
                             <div class="tab-pane fade show active py-2 ps-2" id="all-noti-tab" role="tabpanel">
-                                <div data-simplebar style="max-height: 300px;" class="pe-2" id="notif-list">
+                                <div class="notif-scroll pe-2" id="notif-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
                                 <div class="my-3 text-center view-all">
@@ -146,7 +146,7 @@
                                 </div>
                             </div>
                             <div class="tab-pane fade py-2 ps-2" id="alerts-tab" role="tabpanel">
-                                <div data-simplebar style="max-height: 300px;" class="pe-2" id="notif-alerts-list">
+                                <div class="notif-scroll pe-2" id="notif-alerts-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
                                 <div class="my-2 text-center view-all">
@@ -242,9 +242,9 @@ fetch('/api/notifications/unread-count')
                 <div class="avatar-xs me-3 flex-shrink-0">
                     <span class="avatar-title bg-${color}-subtle text-${color} rounded-circle fs-16"><i class="${icon}"></i></span>
                 </div>
-                <div class="flex-grow-1">
-                    <h6 class="mt-0 mb-1 lh-base fs-13 ${n.unread ? 'fw-semibold' : 'fw-normal text-muted'}">${escapeHtml(n.title)}</h6>
-                    <p class="mb-1 fs-12 text-muted">${escapeHtml(n.desc || '')}</p>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <h6 class="mt-0 mb-1 lh-base fs-13 notif-title-line ${n.unread ? 'fw-semibold' : 'fw-normal text-muted'}" title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</h6>
+                    <p class="mb-1 fs-12 text-muted notif-desc-line" title="${escapeHtml(n.desc || '')}">${escapeHtml(n.desc || '')}</p>
                     <p class="mb-0 fs-11 fw-medium text-uppercase text-muted"><i class="mdi mdi-clock-outline"></i> ${escapeHtml(n.time || '')}</p>
                 </div>
             </div>
@@ -261,17 +261,44 @@ fetch('/api/notifications/unread-count')
         if (n && n.link) window.location.href = n.link;
     }
 
+    // Header dropdown shows only the newest 5 per tab — the full history
+    // (unbounded, same /api/notifications/mine ordering) stays one click away
+    // via "View All Notifications", which itself is never touched here.
+    const HEADER_NOTIF_LIMIT = 5;
+
+    // Velzon's own app.js (H(), wired up on page load regardless of whether
+    // this dropdown is even open yet) checks each tab-pane for existing
+    // `.notification-item` elements and, finding none against the initial
+    // static "Loading…" placeholder, permanently (a) hides that tab's
+    // ".view-all" footer and (b) injects its own hardcoded
+    // ".empty-notification-elem" ("Hey! You have no any notifications")
+    // block as an extra sibling of #notif-list/#notif-alerts-list. Because
+    // that happens before this file's own fetch ever resolves, the stray
+    // block and the hidden footer both survive untouched once real data
+    // renders — this restores the footer and clears Velzon's own stale
+    // block every time this function runs, so it can never linger regardless
+    // of how that race played out on a given load.
+    function resyncTabFooter(el) {
+        const pane = el.closest('.tab-pane');
+        if (!pane) return;
+        const stale = pane.querySelector('.empty-notification-elem');
+        if (stale) stale.remove();
+        const viewAll = pane.querySelector('.view-all');
+        if (viewAll) viewAll.style.display = '';
+    }
+
     function renderList(elId, items, emptyMsg) {
         const el = document.getElementById(elId);
         if (!el) return;
         if (!items.length) {
             el.innerHTML = `<div class="text-center text-muted py-4 fs-13">${emptyMsg}</div>`;
-            return;
+        } else {
+            el.innerHTML = items.map(renderNotifItem).join('');
+            el.querySelectorAll('[data-notif-id]').forEach(item => {
+                item.addEventListener('click', () => handleNotifClick(parseInt(item.dataset.notifId)));
+            });
         }
-        el.innerHTML = items.map(renderNotifItem).join('');
-        el.querySelectorAll('[data-notif-id]').forEach(item => {
-            item.addEventListener('click', () => handleNotifClick(parseInt(item.dataset.notifId)));
-        });
+        resyncTabFooter(el);
     }
 
     function loadDropdownNotifications() {
@@ -279,8 +306,8 @@ fetch('/api/notifications/unread-count')
             .then(r => r.json())
             .then(data => {
                 notifCache = Array.isArray(data) ? data : [];
-                renderList('notif-list', notifCache.slice(0, 6), 'No notifications yet.');
-                renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, 6), 'No unread notifications.');
+                renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
+                renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, HEADER_NOTIF_LIMIT), 'No unread notifications.');
             })
             .catch(() => {
                 renderList('notif-list', [], 'Could not load notifications.');

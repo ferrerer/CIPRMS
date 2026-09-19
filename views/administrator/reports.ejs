@@ -4,6 +4,7 @@
 
 <head>
     <meta charset="utf-8" />
+    <%- include('../partials/ui-state-init') %>
     <title>Reports & Analytics | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="shortcut icon" href="/images/cirl-logo.jpg">
@@ -207,7 +208,7 @@
                                                                 data-feather="calendar" class="text-info"></i></span>
                                                     </div>
                                                 </div>
-                                                <h6 class="fs-15 fw-semibold d-flex align-items-center gap-2">Mid-Year Output Report <span class="badge bg-info-subtle text-info fw-normal">Jan&ndash;Jun <%= new Date().getFullYear() %></span></h6>
+                                                <h6 class="fs-15 fw-semibold">Mid-Year Output Report</h6>
                                                 <p class="text-muted fs-13 mb-3">Summary of first-half partnership activities, including new, renewed, and expired agreements.</p>
                                                 <div class="d-flex gap-2 mt-auto">
                                                     <button class="btn btn-sm btn-danger" onclick="exportMidYearReport('pdf')"><i
@@ -228,7 +229,7 @@
                                                                 data-feather="bar-chart-2" class="text-primary"></i></span>
                                                     </div>
                                                 </div>
-                                                <h6 class="fs-15 fw-semibold d-flex align-items-center gap-2">Yearly Output Report <span class="badge bg-primary-subtle text-primary fw-normal">Jan&ndash;Dec <%= new Date().getFullYear() %></span></h6>
+                                                <h6 class="fs-15 fw-semibold">Yearly Output Report</h6>
                                                 <p class="text-muted fs-13 mb-3">Annual summary of partnership records for the academic/calendar year, suitable for CHED submission.</p>
                                                 <div class="d-flex gap-2 mt-auto">
                                                     <button class="btn btn-sm btn-danger" onclick="exportYearlyReport('pdf')"><i
@@ -246,16 +247,16 @@
                                                 <div class="d-flex mb-3">
                                                     <div class="avatar-sm flex-shrink-0">
                                                         <span class="avatar-title bg-success-subtle rounded fs-2"><i
-                                                                data-feather="shield" class="text-success"></i></span>
+                                                                data-feather="globe" class="text-success"></i></span>
                                                     </div>
                                                 </div>
-                                                <h6 class="fs-15 fw-semibold">Compliance / Audit Report</h6>
-                                                <p class="text-muted fs-13 mb-3">Structured report for accreditation
-                                                    bodies (QS Stars, AUN-QA, WURI) and regulatory audits.</p>
+                                                <h6 class="fs-15 fw-semibold">Partnership by Country</h6>
+                                                <p class="text-muted fs-13 mb-3">Percentage distribution of every
+                                                    partnership on record, grouped by country.</p>
                                                 <div class="d-flex gap-2 mt-auto">
-                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Compliance Audit Report'})"><i
+                                                    <button class="btn btn-sm btn-danger" onclick="exportReport('pdf', {title:'Partnership by Country Report', groupBy:'country'})"><i
                                                             class="ri-file-pdf-line me-1"></i>PDF</button>
-                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Compliance Audit Report'})"><i
+                                                    <button class="btn btn-sm btn-success" onclick="exportReport('excel', {title:'Partnership by Country Report', groupBy:'country'})"><i
                                                             class="ri-table-line me-1"></i>Excel</button>
                                                 </div>
                                             </div>
@@ -344,6 +345,19 @@
                                                             <option value="CIRL">CIRL</option>
                                                         </select>
                                                     </div>
+                                                    <div class="col-xl-3 col-md-6">
+                                                        <label class="form-label fw-semibold">Group By</label>
+                                                        <select class="form-select" id="cr-groupby">
+                                                            <option value="">None</option>
+                                                            <option value="country">Country</option>
+                                                            <option value="inst">Institution</option>
+                                                            <option value="unit">College / Unit</option>
+                                                            <option value="region">Region</option>
+                                                            <option value="type">Agreement Type</option>
+                                                            <option value="nature">Nature of Partnership</option>
+                                                            <option value="cat">Category</option>
+                                                        </select>
+                                                    </div>
                                                 </div>
 
                                                 <h6 class="text-uppercase fs-11 fw-semibold text-muted mb-2">Date Filters</h6>
@@ -417,7 +431,21 @@
                                                 <div id="rpm-view-preview">
                                                     <div class="mb-3 d-flex align-items-center flex-wrap gap-1" id="prev-filters"></div>
                                                     <div class="row g-3 mb-4" id="prev-summary-cards"></div>
-                                                    <div class="table-responsive">
+
+                                                    <!-- Grouped view (Group By set, e.g. Country) — same computeCustomReportData()
+                                                         result PDF/Excel already render as a grouped table; shown instead of the
+                                                         flat records table below, never alongside it. -->
+                                                    <div class="table-responsive" id="prev-grouped-wrap" style="display:none;">
+                                                        <div class="d-flex align-items-center mb-2">
+                                                            <h6 class="fw-semibold mb-0 text-dark flex-grow-1"><i class="ri-bar-chart-2-line me-1 text-primary"></i>Grouped Breakdown</h6>
+                                                        </div>
+                                                        <table class="table table-sm table-bordered align-middle mb-0">
+                                                            <thead class="bg-light"><tr id="prev-grouped-thead-row"></tr></thead>
+                                                            <tbody id="prev-grouped-tbody"></tbody>
+                                                        </table>
+                                                    </div>
+
+                                                    <div class="table-responsive" id="prev-flat-wrap">
                                                         <div class="d-flex align-items-center mb-2">
                                                             <h6 class="fw-semibold mb-0 text-dark flex-grow-1"><i class="ri-list-check-2 me-1 text-primary"></i>Included Records (<span id="prev-records-count">0</span>)</h6>
                                                         </div>
@@ -441,99 +469,49 @@
                                                     </div>
                                                 </div><!-- end rpm-view-preview -->
 
-                                                <!-- VIEW 2: Compare — configuration step -->
+                                                <!-- VIEW 2: Compare — configure 1 to 5 independent report configurations.
+                                                     Each config card below owns its OWN filters (never shared with any
+                                                     other config or with the main Builder) and is submitted through
+                                                     /api/reports/comparison/multi/* — the existing N-way engine. -->
                                                 <div id="rpm-view-compare-select" style="display:none;">
                                                     <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
                                                         <i class="ri-information-line fs-4"></i>
                                                         <div class="fs-13">
-                                                            <strong>Your original report is preserved as-is.</strong> It will appear on the right, unchanged. Choose a dimension and a value below to build the report you want to compare it against — that one will appear on the left, with the result in the center.
+                                                            <strong>Build 2 to 5 independent report configurations to compare.</strong> Each configuration has its own filters and Group By — nothing is shared between them. The first configuration starts pre-filled from the Custom Report Builder above; add more with "Add Comparison".
                                                         </div>
                                                     </div>
-                                                    <p class="text-muted fs-13">The comparison-against report reuses every filter already set in the Custom Report Builder — category, date range, agreement type, country and status — except for the one dimension you override below.</p>
-                                                    <div class="mb-3 d-flex align-items-center flex-wrap gap-1" id="cmp-inherited-filters"></div>
-                                                    <div class="row g-3">
-                                                        <div class="col-md-6">
-                                                            <label class="form-label fw-semibold">Compare By</label>
-                                                            <select class="form-select" id="cmp-field" onchange="onCompareFieldChange()">
-                                                                <option value="country">Country</option>
-                                                                <option value="inst">Institution</option>
-                                                                <option value="unit">College / Unit</option>
-                                                                <option value="region">Region</option>
-                                                                <option value="type">Agreement Type</option>
-                                                                <option value="nature">Nature of Partnership</option>
-                                                                <option value="cat">Category</option>
-                                                                <option value="year">Year</option>
-                                                                <option value="status">Partnership Status</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="col-md-6">
-                                                            <label class="form-label fw-semibold">Compare Against</label>
-                                                            <select class="form-select" id="cmp-value">
-                                                                <option value="">Loading…</option>
-                                                            </select>
-                                                        </div>
+                                                    <div id="cmp-configs-list"></div>
+                                                    <div class="d-flex align-items-center gap-2 mb-4">
+                                                        <button type="button" class="btn btn-outline-primary btn-sm" id="cmp-add-btn" onclick="addComparisonConfig()"><i class="ri-add-line me-1"></i>Add Comparison</button>
+                                                        <span class="text-muted fs-12" id="cmp-limit-note"></span>
                                                     </div>
                                                     <div class="mt-4">
                                                         <button class="btn btn-info text-white" id="btn-generate-comparison" onclick="generateComparison()"><i class="ri-git-branch-line me-1"></i>Generate Comparison</button>
                                                     </div>
                                                 </div><!-- end rpm-view-compare-select -->
 
-                                                <!-- VIEW 3: Comparison Result — Compared Against (left) / Result (center) / Original Report (right) -->
+                                                <!-- VIEW 3: Comparison Result — one row per configuration (dynamic,
+                                                     2-5), no fixed "Group A"/"Group B" columns and no "Total Compared"
+                                                     metric anywhere. -->
                                                 <div id="rpm-view-compare-result" style="display:none;">
-                                                    <div class="row g-3">
-                                                        <div class="col-lg-4 order-lg-1">
-                                                            <div class="card border border-danger-subtle h-100 mb-0">
-                                                                <div class="card-header bg-danger-subtle py-2">
-                                                                    <h6 class="mb-0 text-danger fw-semibold"><i class="ri-file-chart-line me-1"></i>Compared Against — <span id="cmp-b-label">Group B</span></h6>
-                                                                </div>
-                                                                <div class="card-body">
-                                                                    <div class="text-center mb-3">
-                                                                        <div class="display-6 fw-bold text-danger" id="cmp-b-count">0</div>
-                                                                        <div class="text-muted fs-12" id="cmp-b-pct">0% of compared</div>
-                                                                    </div>
-                                                                    <div class="table-responsive" style="max-height:320px;">
-                                                                        <table class="table table-sm table-bordered mb-0"><tbody id="cmp-b-tbody"></tbody></table>
-                                                                    </div>
-                                                                    <p class="text-muted fs-12 mt-2 mb-0" id="cmp-b-note"></p>
-                                                                </div>
-                                                            </div>
+                                                    <div class="mb-3">
+                                                        <h6 class="fw-semibold mb-1" id="cmp-result-title"></h6>
+                                                        <p class="text-muted fs-12 mb-0" id="cmp-result-meta"></p>
+                                                    </div>
+                                                    <div id="cmp-empty" class="text-center text-muted py-4" style="display:none;">
+                                                        <i class="ri-inbox-line fs-2 d-block mb-2"></i>No comparison data for the selected configurations.
+                                                    </div>
+                                                    <div id="cmp-result-body">
+                                                        <div id="cmp-chart-card" class="mb-3">
+                                                            <div id="cmp-apex-chart" class="apex-charts" dir="ltr"></div>
                                                         </div>
-
-                                                        <div class="col-lg-4 order-lg-2">
-                                                            <div class="card border border-primary h-100 mb-0">
-                                                                <div class="card-header bg-primary-subtle py-2">
-                                                                    <h6 class="mb-0 text-primary fw-semibold"><i class="ri-scales-3-line me-1"></i>Comparison Result</h6>
-                                                                </div>
-                                                                <div class="card-body">
-                                                                    <p class="text-muted fs-12 mb-3" id="cmp-title"></p>
-                                                                    <div class="row g-2 mb-3" id="cmp-summary-cards"></div>
-                                                                    <div id="cmp-chart-card">
-                                                                        <div id="cmp-apex-chart" class="apex-charts" dir="ltr"></div>
-                                                                    </div>
-                                                                    <div id="cmp-empty" class="text-center text-muted py-4" style="display:none;">
-                                                                        <i class="ri-inbox-line fs-2 d-block mb-2"></i>No comparison data for the selected filters.
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                        <div class="table-responsive mb-4">
+                                                            <table class="table table-sm table-bordered align-middle mb-0">
+                                                                <thead class="bg-light"><tr><th>Comparison</th><th>Partnerships</th><th>Percentage</th></tr></thead>
+                                                                <tbody id="cmp-summary-tbody"></tbody>
+                                                            </table>
                                                         </div>
-
-                                                        <div class="col-lg-4 order-lg-3">
-                                                            <div class="card border border-primary-subtle h-100 mb-0">
-                                                                <div class="card-header bg-primary-subtle py-2">
-                                                                    <h6 class="mb-0 text-primary fw-semibold"><i class="ri-file-chart-line me-1"></i>Original Report — <span id="cmp-a-label">Group A</span></h6>
-                                                                </div>
-                                                                <div class="card-body">
-                                                                    <div class="text-center mb-3">
-                                                                        <div class="display-6 fw-bold text-primary" id="cmp-a-count">0</div>
-                                                                        <div class="text-muted fs-12" id="cmp-a-pct">0% of compared</div>
-                                                                    </div>
-                                                                    <div class="table-responsive" style="max-height:320px;">
-                                                                        <table class="table table-sm table-bordered mb-0"><tbody id="cmp-a-tbody"></tbody></table>
-                                                                    </div>
-                                                                    <p class="text-muted fs-12 mt-2 mb-0" id="cmp-a-note"></p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                        <div id="cmp-config-results"></div>
                                                     </div>
                                                 </div><!-- end rpm-view-compare-result -->
 
@@ -803,7 +781,19 @@
                 language: { search: { placeholder: 'Search audit log...' } },
                 style: {
                     table: { border: 'none' },
-                    th: { background: 'var(--vz-table-bg,#f3f6f9)', color: 'var(--vz-table-color,#878a99)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '700', border: 'none', padding: '10px 16px' },
+                    // 2026-09-18: background/color used to be set here as
+                    // inline styles referencing --vz-table-bg/--vz-table-color
+                    // — CSS variables Velzon only ever defines scoped to
+                    // `.table-light` elements (a Bootstrap table variant this
+                    // grid never has), so they always silently fell through to
+                    // their light hardcoded fallback (#f3f6f9/#878a99) in BOTH
+                    // themes. An inline style beats any stylesheet selector
+                    // regardless of specificity, so that hardcoded fallback
+                    // could never be themed dark by CSS. Removed so this
+                    // header instead follows the real stylesheet rules
+                    // (assets/libs/gridjs/theme/mermaid.min.css for light,
+                    // assets/css/ciprms-bridge.css's dark-mode block for dark).
+                    th: { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '700', border: 'none', padding: '10px 16px' },
                     td: { border: 'none', padding: '10px 16px', fontSize: '13px' }
                 }
             }).render(document.getElementById('audit-grid'));
@@ -874,6 +864,7 @@
             var status = document.getElementById('cr-status').value;
             var country = document.getElementById('cr-country').value.trim();
             var unit = document.getElementById('cr-unit').value;
+            var groupBy = document.getElementById('cr-groupby').value;
 
             var params = new URLSearchParams();
             params.set('reportType', reportType);
@@ -885,12 +876,13 @@
             if (status) params.set('status', status);
             if (country) params.set('country', country);
             if (unit) params.set('unit', unit);
+            if (groupBy) params.set('groupBy', groupBy);
 
             return params;
         }
 
         // Restores every Custom Report Builder field to its default/blank
-        // state (Reset Filters button) — must clear all 9 remaining fields so
+        // state (Reset Filters button) — must clear all 10 remaining fields so
         // no stale value can silently affect the next generated report.
         function resetCustomReportFilters() {
             document.getElementById('cr-title').value = '';
@@ -900,6 +892,7 @@
             document.getElementById('cr-status').value = '';
             document.getElementById('cr-country').value = '';
             document.getElementById('cr-unit').value = '';
+            document.getElementById('cr-groupby').value = '';
             document.getElementById('cr-date-from').value = '';
             document.getElementById('cr-date-to').value = '';
         }
@@ -1076,6 +1069,21 @@
                 </div>
             `;
 
+            // Grouped (Group By set) vs flat records table — mutually exclusive.
+            // Uses the exact same `data` computeCustomReportData() already
+            // returned for this same request, so Preview can never disagree
+            // with what PDF/Excel render from that identical result.
+            var groupedWrap = document.getElementById('prev-grouped-wrap');
+            var flatWrap = document.getElementById('prev-flat-wrap');
+            if (data.isComparison && Array.isArray(data.comparisonData)) {
+                flatWrap.style.display = 'none';
+                groupedWrap.style.display = '';
+                renderGroupedPreviewTable(data);
+                return;
+            }
+            groupedWrap.style.display = 'none';
+            flatWrap.style.display = '';
+
             // Detailed Records Table
             var recCountEl = document.getElementById('prev-records-count');
             var recTbody = document.getElementById('prev-records-tbody');
@@ -1094,7 +1102,7 @@
                         + '<td>' + escapeHtml(p.country || '—') + '</td>'
                         + '<td>' + escapeHtml(p.region || '—') + '</td>'
                         + '<td><span class="badge bg-primary-subtle text-primary">' + escapeHtml(p.type || '—') + '</span></td>'
-                        + '<td>' + escapeHtml(p.nature || '—') + '</td>'
+                        + '<td>' + escapeHtml((Array.isArray(p.nature) ? p.nature.join(', ') : p.nature) || '—') + '</td>'
                         + '<td><span class="badge bg-secondary-subtle text-secondary">' + escapeHtml((Array.isArray(p.unit) ? p.unit.join(', ') : p.unit) || '—') + '</span></td>'
                         + '<td>' + escapeHtml(p.start || '—') + '</td>'
                         + '<td>' + escapeHtml(p.end || '—') + '</td>'
@@ -1103,6 +1111,31 @@
                 });
             }
             recTbody.innerHTML = recHtml;
+        }
+
+        // Generic metrics-driven grouped table — mirrors the exact same
+        // `metrics` (column list) + `comparisonData` (rows) shape the Excel
+        // exporter's own isGrouped branch already renders from, so a
+        // Country-grouped report's Preview table and its Excel sheet are
+        // always the same columns/values, never two separate calculations.
+        function renderGroupedPreviewTable(data) {
+            var theadRow = document.getElementById('prev-grouped-thead-row');
+            var tbody = document.getElementById('prev-grouped-tbody');
+            var metrics = data.metrics || [];
+            theadRow.innerHTML = metrics.map(function (m) { return '<th>' + escapeHtml(m) + '</th>'; }).join('');
+
+            var rows = data.comparisonData || [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="' + Math.max(metrics.length, 1) + '" class="text-center text-muted py-3">No partnerships found matching the selected filters.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(function (row) {
+                return '<tr>' + metrics.map(function (m) {
+                    var v = row[m];
+                    if (Array.isArray(v)) v = v.join(', ');
+                    return '<td>' + escapeHtml(v === undefined || v === null || v === '' ? '—' : v) + '</td>';
+                }).join('') + '</tr>';
+            }).join('');
         }
 
         // Partnership fields (inst/country/type) are attacker-influenceable via
@@ -1190,11 +1223,21 @@
         }
 
 
-        // ── COMPARE REPORTS (accessed from the Preview modal — reuses the ─────
-        // existing /api/reports/comparison/* engine and export routes) ────────
+        // ── COMPARE REPORTS (accessed from the Preview modal) ──────────────────
+        // Multi-configuration comparison: 1 to MAX_CMP_CONFIGS independent report
+        // configurations, each with its own filters/Group By, all routed through
+        // /api/reports/comparison/multi/* → computeMultiComparisonReport(), which
+        // itself just runs each configuration through the same
+        // computeCustomReportData() a single report already uses. Configurations
+        // are a plain array rendered by iterating _cmpConfigIds — there is no
+        // "Report A"/"Report B"-style hardcoding anywhere in this section.
         var _cmpChartInstance = null;
         var _lastComparisonData = null;
         var _lastComparisonQs = null;
+        var _cmpConfigIds = [];
+        var _cmpConfigSeq = 0;
+        var MAX_CMP_CONFIGS = 5;
+        var MIN_CMP_CONFIGS = 1;
 
         function statusBadgeClass(status) {
             if (status === 'Active') return 'bg-success-subtle text-success';
@@ -1204,85 +1247,182 @@
             return 'bg-light text-dark';
         }
 
-        /**
-         * Comparison dimension (from the Compare view) + the SAME filters
-         * currently set in the Custom Report Builder — req: "Apply the same
-         * filters selected by the Administrator to both reports."
-         */
-        /**
-         * The comparison-against report (Group B / left column) reuses every
-         * filter already set in the Custom Report Builder — Group A / right
-         * column is the ORIGINAL report, untouched, computed server-side from
-         * these SAME base filters with none of them overridden.
-         */
-        function buildComparisonQueryString() {
-            var params = new URLSearchParams();
-            params.append('compType', 'Compare Against');
-            params.append('compareField', document.getElementById('cmp-field').value);
-            params.append('compareValue', document.getElementById('cmp-value').value);
-            params.append('title', (_lastCustomReportData && _lastCustomReportData.title) || 'Original Report');
-            // Report Type (e.g. "Active Partnerships") implies a status server-side
-            // even when the Status filter is left at "All" — forwarding it here is
-            // what keeps Group A (the preserved original report) identical to what
-            // Preview just showed, instead of reverting to every status.
-            params.append('reportType', document.getElementById('cr-type').value);
-            var cat = document.getElementById('cr-cat').value;
-            var dateFrom = document.getElementById('cr-date-from').value;
-            var dateTo = document.getElementById('cr-date-to').value;
-            var agtype = document.getElementById('cr-agtype').value;
-            var status = document.getElementById('cr-status').value;
-            var country = document.getElementById('cr-country').value.trim();
-            var unit = document.getElementById('cr-unit').value;
-            if (cat) params.append('cat', cat);
-            if (dateFrom) params.append('dateFrom', dateFrom);
-            if (dateTo) params.append('dateTo', dateTo);
-            if (agtype) params.append('agtype', agtype);
-            if (status) params.append('status', status);
-            if (country) params.append('country', country);
-            if (unit) params.append('unit', unit);
-            return params.toString();
+        // Builds one configuration card's HTML. Mirrors exactly the 8 fields the
+        // Custom Report Builder itself exposes (reportType/cat/dateFrom/dateTo/
+        // agtype/status/country/unit) plus Group By — every input id follows the
+        // cmpcfg-{id}-{field} convention so each card's state lives independently
+        // in the DOM and is never shared with any other card.
+        function renderConfigCardHtml(id, index, prefill) {
+            prefill = prefill || {};
+            return '' +
+                '<div class="card border mb-3" data-cmp-id="' + id + '">' +
+                '  <div class="card-body">' +
+                '    <div class="d-flex align-items-center justify-content-between mb-3">' +
+                '      <h6 class="fw-semibold mb-0" id="cmpcfg-' + id + '-title">Comparison ' + (index + 1) + '</h6>' +
+                '      <button type="button" class="btn btn-sm btn-outline-danger cmp-remove-btn" onclick="removeComparisonConfig(' + id + ')"><i class="ri-close-line me-1"></i>Remove</button>' +
+                '    </div>' +
+                '    <div class="row g-3">' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Label</label>' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-label" placeholder="Comparison ' + (index + 1) + '" value="' + escapeHtml(prefill.label || '') + '">' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Report Type</label>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-reportType">' +
+                '          <option value="Summary"' + (prefill.reportType === 'Summary' || !prefill.reportType ? ' selected' : '') + '>Summary</option>' +
+                '          <option value="Active Partnerships"' + (prefill.reportType === 'Active Partnerships' ? ' selected' : '') + '>Active Partnerships</option>' +
+                '          <option value="Expiring Soon"' + (prefill.reportType === 'Expiring Soon' ? ' selected' : '') + '>Expiring Soon</option>' +
+                '          <option value="Expired Partnerships"' + (prefill.reportType === 'Expired Partnerships' ? ' selected' : '') + '>Expired Partnerships</option>' +
+                '          <option value="Mid-Year"' + (prefill.reportType === 'Mid-Year' ? ' selected' : '') + '>Mid-Year Report</option>' +
+                '          <option value="Yearly"' + (prefill.reportType === 'Yearly' ? ' selected' : '') + '>Yearly Output Report</option>' +
+                '        </select>' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Category</label>' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-cat" placeholder="e.g. Academic" value="' + escapeHtml(prefill.cat || '') + '">' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Status</label>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-status">' +
+                '          <option value="">All</option>' +
+                '          <option value="Active"' + (prefill.status === 'Active' ? ' selected' : '') + '>Active</option>' +
+                '          <option value="Expiring Soon"' + (prefill.status === 'Expiring Soon' ? ' selected' : '') + '>Expiring Soon</option>' +
+                '          <option value="Expired"' + (prefill.status === 'Expired' ? ' selected' : '') + '>Expired</option>' +
+                '          <option value="Inactive"' + (prefill.status === 'Inactive' ? ' selected' : '') + '>Inactive</option>' +
+                '        </select>' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Date From</label>' +
+                '        <input type="date" class="form-control" id="cmpcfg-' + id + '-dateFrom" value="' + escapeHtml(prefill.dateFrom || '') + '">' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Date To</label>' +
+                '        <input type="date" class="form-control" id="cmpcfg-' + id + '-dateTo" value="' + escapeHtml(prefill.dateTo || '') + '">' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Agreement Type</label>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-agtype">' +
+                '          <option value="">All</option>' +
+                '          <option value="MOA"' + (prefill.agtype === 'MOA' ? ' selected' : '') + '>MOA</option>' +
+                '          <option value="MOU"' + (prefill.agtype === 'MOU' ? ' selected' : '') + '>MOU</option>' +
+                '        </select>' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Country</label>' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-country" placeholder="e.g. Japan" value="' + escapeHtml(prefill.country || '') + '">' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">College / Unit</label>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-unit">' +
+                '          <option value="">All Units</option>' +
+                '          <option value="CCS"' + (prefill.unit === 'CCS' ? ' selected' : '') + '>CCS</option>' +
+                '          <option value="CILS"' + (prefill.unit === 'CILS' ? ' selected' : '') + '>CILS</option>' +
+                '          <option value="CETE"' + (prefill.unit === 'CETE' ? ' selected' : '') + '>CETE</option>' +
+                '          <option value="CNAS"' + (prefill.unit === 'CNAS' ? ' selected' : '') + '>CNAS</option>' +
+                '          <option value="CAMS"' + (prefill.unit === 'CAMS' ? ' selected' : '') + '>CAMS</option>' +
+                '          <option value="CIRL"' + (prefill.unit === 'CIRL' ? ' selected' : '') + '>CIRL</option>' +
+                '        </select>' +
+                '      </div>' +
+                '      <div class="col-xl-3 col-md-6">' +
+                '        <label class="form-label fw-semibold">Group By</label>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-groupBy">' +
+                '          <option value="">None</option>' +
+                '          <option value="country"' + (prefill.groupBy === 'country' ? ' selected' : '') + '>Country</option>' +
+                '          <option value="inst"' + (prefill.groupBy === 'inst' ? ' selected' : '') + '>Institution</option>' +
+                '          <option value="unit"' + (prefill.groupBy === 'unit' ? ' selected' : '') + '>College / Unit</option>' +
+                '          <option value="region"' + (prefill.groupBy === 'region' ? ' selected' : '') + '>Region</option>' +
+                '          <option value="type"' + (prefill.groupBy === 'type' ? ' selected' : '') + '>Agreement Type</option>' +
+                '          <option value="nature"' + (prefill.groupBy === 'nature' ? ' selected' : '') + '>Nature of Partnership</option>' +
+                '          <option value="cat"' + (prefill.groupBy === 'cat' ? ' selected' : '') + '>Category</option>' +
+                '        </select>' +
+                '      </div>' +
+                '    </div>' +
+                '  </div>' +
+                '</div>';
         }
 
-        function renderInheritedFilterBadges() {
-            var el = document.getElementById('cmp-inherited-filters');
-            var pairs = [
-                ['Category', document.getElementById('cr-cat').value],
-                ['Date From', document.getElementById('cr-date-from').value],
-                ['Date To', document.getElementById('cr-date-to').value],
-                ['Agreement Type', document.getElementById('cr-agtype').value],
-                ['Status', document.getElementById('cr-status').value],
-                ['Country', document.getElementById('cr-country').value],
-                ['College / Unit', document.getElementById('cr-unit').value]
-            ].filter(function (p) { return p[1]; });
-            el.innerHTML = pairs.length
-                ? pairs.map(function (p) {
-                    return '<span class="badge bg-secondary-subtle text-secondary me-1 mb-1"><strong class="text-secondary-emphasis">' + escapeHtml(p[0]) + ':</strong> ' + escapeHtml(p[1]) + '</span>';
-                }).join('')
-                : '<span class="text-muted fs-12">No filters applied — comparing across all partnerships.</span>';
+        function renumberComparisonConfigTitles() {
+            _cmpConfigIds.forEach(function (id, index) {
+                var t = document.getElementById('cmpcfg-' + id + '-title');
+                if (t) t.textContent = 'Comparison ' + (index + 1);
+            });
         }
 
-        function onCompareFieldChange() {
-            var field = document.getElementById('cmp-field').value;
-            var valSel = document.getElementById('cmp-value');
-            valSel.innerHTML = '<option value="">Loading…</option>';
-            fetch('/api/reports/dimension-values?field=' + encodeURIComponent(field))
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    var values = data.values || [];
-                    if (!values.length) {
-                        valSel.innerHTML = '<option value="">No values available</option>';
-                        return;
-                    }
-                    valSel.innerHTML = values.map(function (v) {
-                        return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>';
-                    }).join('');
-                })
-                .catch(function () { valSel.innerHTML = '<option value="">Failed to load values</option>'; });
+        function updateCmpButtonsState() {
+            var addBtn = document.getElementById('cmp-add-btn');
+            var note = document.getElementById('cmp-limit-note');
+            var atMax = _cmpConfigIds.length >= MAX_CMP_CONFIGS;
+            if (addBtn) addBtn.disabled = atMax;
+            if (note) note.textContent = atMax ? ('Maximum of ' + MAX_CMP_CONFIGS + ' comparisons reached.') : (_cmpConfigIds.length + ' of ' + MAX_CMP_CONFIGS + ' comparisons.');
+
+            var showRemove = _cmpConfigIds.length > MIN_CMP_CONFIGS;
+            document.querySelectorAll('.cmp-remove-btn').forEach(function (btn) {
+                btn.style.display = showRemove ? '' : 'none';
+            });
         }
 
+        function addComparisonConfig(prefill) {
+            if (_cmpConfigIds.length >= MAX_CMP_CONFIGS) return;
+            var id = ++_cmpConfigSeq;
+            _cmpConfigIds.push(id);
+            var list = document.getElementById('cmp-configs-list');
+            list.insertAdjacentHTML('beforeend', renderConfigCardHtml(id, _cmpConfigIds.length - 1, prefill));
+            updateCmpButtonsState();
+        }
+
+        function removeComparisonConfig(id) {
+            if (_cmpConfigIds.length <= MIN_CMP_CONFIGS) return;
+            _cmpConfigIds = _cmpConfigIds.filter(function (x) { return x !== id; });
+            var card = document.querySelector('[data-cmp-id="' + id + '"]');
+            if (card) card.remove();
+            renumberComparisonConfigTitles();
+            updateCmpButtonsState();
+        }
+
+        // Reads live DOM values (never a separately-synced JS object) so nothing
+        // an Administrator/Staff member typed can be lost by a re-render.
+        function collectComparisonConfigs() {
+            return _cmpConfigIds.map(function (id, index) {
+                function val(field) {
+                    var el = document.getElementById('cmpcfg-' + id + '-' + field);
+                    return el ? el.value.trim() : '';
+                }
+                var cfg = {};
+                var label = val('label');
+                cfg.label = label || ('Comparison ' + (index + 1));
+                var reportType = val('reportType'); if (reportType) cfg.reportType = reportType;
+                var cat = val('cat'); if (cat) cfg.cat = cat;
+                var status = val('status'); if (status) cfg.status = status;
+                var dateFrom = val('dateFrom'); if (dateFrom) cfg.dateFrom = dateFrom;
+                var dateTo = val('dateTo'); if (dateTo) cfg.dateTo = dateTo;
+                var agtype = val('agtype'); if (agtype) cfg.agtype = agtype;
+                var country = val('country'); if (country) cfg.country = country;
+                var unit = val('unit'); if (unit) cfg.unit = unit;
+                var groupBy = val('groupBy'); if (groupBy) cfg.groupBy = groupBy;
+                return cfg;
+            });
+        }
+
+        // First entry into the Compare view: seed exactly one configuration,
+        // pre-filled from the Custom Report Builder's current filters (matching
+        // "the first configuration starts from the report you just previewed").
+        // Returning to this view later (changeComparison()) does NOT reset
+        // anything already built.
         function openCompareSelect() {
-            renderInheritedFilterBadges();
-            onCompareFieldChange();
+            if (_cmpConfigIds.length === 0) {
+                addComparisonConfig({
+                    label: (_lastCustomReportData && _lastCustomReportData.title) || '',
+                    reportType: document.getElementById('cr-type').value,
+                    cat: document.getElementById('cr-cat').value,
+                    dateFrom: document.getElementById('cr-date-from').value,
+                    dateTo: document.getElementById('cr-date-to').value,
+                    agtype: document.getElementById('cr-agtype').value,
+                    status: document.getElementById('cr-status').value,
+                    country: document.getElementById('cr-country').value.trim(),
+                    unit: document.getElementById('cr-unit').value,
+                    groupBy: document.getElementById('cr-groupby').value
+                });
+            }
             switchRpmView('compare-select');
         }
 
@@ -1296,13 +1436,15 @@
         var _comparisonRequestSeq = 0;
 
         function generateComparison() {
-            var qs = buildComparisonQueryString();
+            var configs = collectComparisonConfigs();
+            if (!configs.length) return;
+            var qs = 'configs=' + encodeURIComponent(JSON.stringify(configs));
             _lastComparisonQs = qs;
             var mySeq = ++_comparisonRequestSeq;
             var btn = document.getElementById('btn-generate-comparison');
             if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Generating…'; }
 
-            fetch('/api/reports/comparison/preview?' + qs)
+            fetch('/api/reports/comparison/multi/preview?' + qs)
                 .then(function (r) {
                     if (!r.ok) return r.json().then(function (e) { throw new Error(e.error || 'Server error while generating the comparison.'); });
                     return r.json();
@@ -1310,7 +1452,7 @@
                 .then(function (data) {
                     if (mySeq !== _comparisonRequestSeq) return; // superseded by a newer comparison request
                     _lastComparisonData = data;
-                    renderComparisonResult(data);
+                    renderMultiComparisonResult(data);
                     switchRpmView('compare-result');
                 })
                 .catch(function (err) {
@@ -1338,66 +1480,74 @@
         }
 
         /**
-         * 3-column comparison result — Report 2 / Group B (left), Comparison
-         * Result (center), Report 1 / Group A (right). Real data only, from
-         * /api/reports/comparison/preview — nothing here is hardcoded.
+         * Dynamically generates one row per comparison result (Comparison |
+         * Partnerships | Percentage), iterating data.results — no hardcoded
+         * "Report A"/"Report B" columns and no per-letter duplicated logic.
+         * Real data only, from /api/reports/comparison/multi/preview. There is
+         * deliberately no "Total Compared" metric anywhere in this function.
          */
-        function renderComparisonResult(data) {
-            document.getElementById('cmp-title').textContent = data.title + ' — ' + data.periodLabel;
-            document.getElementById('cmp-a-label').textContent = data.groupA;
-            document.getElementById('cmp-b-label').textContent = data.groupB;
-            document.getElementById('cmp-a-count').textContent = data.totalA;
-            document.getElementById('cmp-b-count').textContent = data.totalB;
+        function renderMultiComparisonResult(data) {
+            var results = data.results || [];
+            document.getElementById('cmp-result-title').textContent = data.title || 'Multi-Configuration Comparison';
+            document.getElementById('cmp-result-meta').textContent = 'Generated ' + data.generatedDate + ' by ' + data.generatedBy + ' • ' + results.length + ' configuration' + (results.length === 1 ? '' : 's');
 
-            var totalBoth = data.totalBoth || 0;
-            var pctA = totalBoth > 0 ? ((data.totalA / totalBoth) * 100).toFixed(1) : '0.0';
-            var pctB = totalBoth > 0 ? ((data.totalB / totalBoth) * 100).toFixed(1) : '0.0';
-            document.getElementById('cmp-a-pct').textContent = pctA + '% of compared';
-            document.getElementById('cmp-b-pct').textContent = pctB + '% of compared';
-
-            renderRecordsIntoTable('cmp-a-tbody', data.groupARecords);
-            renderRecordsIntoTable('cmp-b-tbody', data.groupBRecords);
-            var aShown = (data.groupARecords || []).length;
-            var bShown = (data.groupBRecords || []).length;
-            document.getElementById('cmp-a-note').textContent = aShown < data.totalA ? ('Showing ' + aShown + ' of ' + data.totalA + '. Export to see all.') : '';
-            document.getElementById('cmp-b-note').textContent = bShown < data.totalB ? ('Showing ' + bShown + ' of ' + data.totalB + '. Export to see all.') : '';
-
-            var diff = data.diff || 0;
-            var pctDiff = totalBoth > 0 ? ((diff / totalBoth) * 100).toFixed(1) : '0.0';
-            var aLarger = data.totalA >= data.totalB;
-            var trendIcon = diff === 0 ? 'ri-subtract-line text-muted' : (aLarger ? 'ri-arrow-up-line text-success' : 'ri-arrow-down-line text-danger');
-            var trendText = diff === 0 ? 'Even — no difference' : ((aLarger ? data.groupA : data.groupB) + ' leads by ' + diff);
-
-            var summaryEl = document.getElementById('cmp-summary-cards');
             var emptyEl = document.getElementById('cmp-empty');
-            var chartCard = document.getElementById('cmp-chart-card');
-
-            if (totalBoth === 0) {
-                summaryEl.innerHTML = '';
-                chartCard.style.display = 'none';
+            var bodyEl = document.getElementById('cmp-result-body');
+            if (!results.length || (data.grandTotal || 0) === 0) {
                 emptyEl.style.display = '';
+                bodyEl.style.display = 'none';
                 if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
                 return;
             }
             emptyEl.style.display = 'none';
-            chartCard.style.display = '';
+            bodyEl.style.display = '';
 
-            summaryEl.innerHTML =
-                '<div class="col-6"><div class="card bg-warning-subtle border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-warning">' + diff + '</div><div class="fs-11 text-warning fw-semibold">Difference</div></div></div>' +
-                '<div class="col-6"><div class="card bg-light border-0 text-center p-2 mb-0"><div class="fs-4 fw-bold text-dark">' + totalBoth + '</div><div class="fs-11 text-dark fw-semibold">Total Compared</div></div></div>' +
-                '<div class="col-12"><div class="card bg-body border p-2 mb-0 text-center"><i class="' + trendIcon + ' fs-4 d-block"></i><div class="fs-12 fw-semibold">' + escapeHtml(trendText) + '</div><div class="fs-11 text-muted">' + pctDiff + '% gap</div></div></div>';
+            // Summary table: one row per comparison, from an iterated array.
+            var summaryTbody = document.getElementById('cmp-summary-tbody');
+            summaryTbody.innerHTML = results.map(function (r) {
+                return '<tr>' +
+                    '<td class="fw-semibold">' + escapeHtml(r.label) + '</td>' +
+                    '<td>' + r.count + '</td>' +
+                    '<td>' + Number(r.percentage).toFixed(1) + '%</td>' +
+                    '</tr>';
+            }).join('');
 
+            // One detail card per comparison — clearly labeled, built from the
+            // same array, so which records belong to which configuration is
+            // always unambiguous.
+            var configResultsEl = document.getElementById('cmp-config-results');
+            configResultsEl.innerHTML = results.map(function (r) {
+                var tbodyId = 'cmp-records-' + r.id;
+                return '' +
+                    '<div class="card border mb-3">' +
+                    '  <div class="card-header bg-light d-flex align-items-center justify-content-between">' +
+                    '    <h6 class="fw-semibold mb-0">' + escapeHtml(r.label) + '</h6>' +
+                    '    <span class="badge bg-primary-subtle text-primary">' + r.count + ' partnership' + (r.count === 1 ? '' : 's') + ' • ' + Number(r.percentage).toFixed(1) + '%</span>' +
+                    '  </div>' +
+                    '  <div class="table-responsive">' +
+                    '    <table class="table table-sm align-middle mb-0">' +
+                    '      <tbody id="' + tbodyId + '"></tbody>' +
+                    '    </table>' +
+                    '  </div>' +
+                    '</div>';
+            }).join('');
+            results.forEach(function (r) { renderRecordsIntoTable('cmp-records-' + r.id, r.records); });
+
+            // Multi-series bar chart — one bar per comparison, colors cycle for
+            // any count from 1 to MAX_CMP_CONFIGS, nothing hardcoded to 2.
             if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
-            document.getElementById('cmp-apex-chart').innerHTML = '';
+            var chartEl = document.getElementById('cmp-apex-chart');
+            chartEl.innerHTML = '';
             if (typeof ApexCharts !== 'undefined') {
-                _cmpChartInstance = new ApexCharts(document.getElementById('cmp-apex-chart'), {
-                    series: [{ name: data.groupA, data: [data.totalA] }, { name: data.groupB, data: [data.totalB] }],
-                    chart: { type: 'bar', height: 180, toolbar: { show: false }, fontFamily: 'inherit' },
-                    colors: ['#0a58ca', '#dc3545'],
-                    plotOptions: { bar: { horizontal: true, barHeight: '45%', borderRadius: 4 } },
+                var colors = ['#0a3d91', '#991B1B', '#0ab39c', '#b45309', '#6d28d9'];
+                _cmpChartInstance = new ApexCharts(chartEl, {
+                    series: [{ name: 'Partnerships', data: results.map(function (r) { return r.count; }) }],
+                    chart: { type: 'bar', height: 180 + (results.length * 20), toolbar: { show: false }, fontFamily: 'inherit' },
+                    colors: results.map(function (r, i) { return colors[i % colors.length]; }),
+                    plotOptions: { bar: { horizontal: true, barHeight: '55%', borderRadius: 4, distributed: true } },
                     dataLabels: { enabled: true },
-                    xaxis: { categories: ['Count'] },
-                    legend: { position: 'top' }
+                    xaxis: { categories: results.map(function (r) { return r.label; }) },
+                    legend: { show: false }
                 });
                 _cmpChartInstance.render();
             }
@@ -1408,17 +1558,17 @@
         }
 
         function clearComparison() {
-            document.getElementById('cmp-field').value = 'country';
-            onCompareFieldChange();
+            document.getElementById('cmp-configs-list').innerHTML = '';
+            _cmpConfigIds = [];
             _lastComparisonData = null;
             _lastComparisonQs = null;
             if (_cmpChartInstance) { try { _cmpChartInstance.destroy(); } catch (e) {} _cmpChartInstance = null; }
-            switchRpmView('compare-select');
+            openCompareSelect();
         }
 
         function exportComparison(format) {
-            var qs = _lastComparisonQs || buildComparisonQueryString();
-            window.open('/api/reports/comparison/' + format + '?' + qs, '_blank');
+            var qs = _lastComparisonQs || ('configs=' + encodeURIComponent(JSON.stringify(collectComparisonConfigs())));
+            window.open('/api/reports/comparison/multi/' + format + '?' + qs, '_blank');
         }
         // ── END COMPARE REPORTS ─────────────────────────────────────────────────
 

@@ -148,6 +148,44 @@ describe('Preview + Download: every historical draft, not just the latest', () =
   });
 });
 
+// 2026-09-19: the file/image attachment became OPTIONAL — notes alone are a
+// legitimate new version, same rule as the Partnership Request analog in
+// request-draft-collaboration.test.js.
+test('A notes-only version (no file) is accepted and appended to the history', async () => {
+  const db = await connectDB();
+  const beforeDocsCount = await db.collection('documents').countDocuments({ requestType: 'document', requestId });
+
+  const res = await staffAgent
+    .post(`/api/document-requests/${requestId}/documents`)
+    .field('note', 'Updated the agreement details based on the latest review.');
+
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(res.body.documentId).toBeNull();
+  expect(res.body.fileLink).toBeNull();
+  const docs = res.body.request.supportingDocuments;
+  expect(docs.length).toBe(3); // v1 (Staff), v2 (submitter), and this notes-only v3
+  const notesOnly = docs[2];
+  expect(notesOnly.note).toBe('Updated the agreement details based on the latest review.');
+  expect(notesOnly.uploaderRole).toBe('Staff');
+  expect(notesOnly.uploadedByEmail).toBe(staffUser.email);
+  expect(notesOnly.uploadedAt).toBeTruthy();
+  expect(notesOnly.documentId).toBeNull();
+  expect(notesOnly.fileLink).toBeNull();
+  expect(notesOnly.originalFilename).toBeNull();
+  expect(notesOnly.fileType).toBeNull();
+  expect(notesOnly.fileSize).toBe(0);
+
+  const afterDocsCount = await db.collection('documents').countDocuments({ requestType: 'document', requestId });
+  expect(afterDocsCount).toBe(beforeDocsCount);
+});
+
+test('A completely empty submission (no file, no note) is rejected — file-optional does not mean content-optional', async () => {
+  const res = await staffAgent.post(`/api/document-requests/${requestId}/documents`).field('note', '');
+  expect(res.status).toBe(400);
+  expect(res.body.error).toMatch(/file.*note|note.*file/i);
+});
+
 test('A different user cannot upload to someone else\'s document request (ownership enforced server-side)', async () => {
   const res = await otherAgent
     .post(`/api/document-requests/${requestId}/documents`)

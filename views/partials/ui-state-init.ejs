@@ -128,7 +128,23 @@
         // user's last-known fullscreen *preference*, so it's captured here
         // for completeness (and available to any future control) without
         // ever being auto-applied on load.
+        //
+        // 2026-09-18: app.js's own fullscreenchange handler (its N()
+        // function) only clears the icon-swap class (`fullscreen-enable` on
+        // <body>) when one of the legacy vendor-prefixed flags
+        // (webkitIsFullScreen/mozFullScreen/msFullscreenElement) is falsy —
+        // it never checks the modern document.fullscreenElement. In any
+        // current browser those legacy flags simply don't exist, so that
+        // condition is true on EVERY fullscreenchange event, including the
+        // one fired the instant real fullscreen is entered — the class (and
+        // therefore the icon) flips back to "not fullscreen" right away even
+        // though the page IS still in real fullscreen. This listener runs
+        // after app.js's (registered later, on DOMContentLoaded vs app.js's
+        // synchronous parse-time registration) and simply re-asserts the
+        // class to match reality, correcting the desync without touching
+        // app.js itself.
         document.addEventListener('fullscreenchange', function () {
+            document.body.classList.toggle('fullscreen-enable', !!document.fullscreenElement);
             writeState({ fullscreen: !!document.fullscreenElement });
         });
     });

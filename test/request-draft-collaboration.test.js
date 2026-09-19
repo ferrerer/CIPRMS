@@ -124,6 +124,46 @@ test('The requester (owner) can upload their own revised draft — appended, not
   expect(docs[1].note).toBe('Article 4 updated per your comments.');
 });
 
+// 2026-09-19: the file/image attachment became OPTIONAL — notes alone are a
+// legitimate new version. This proves the notes-only path is accepted, saved
+// with full metadata, appears in the version history, and creates NO
+// Document Library record (nothing was actually uploaded to archive).
+test('A notes-only version (no file) is accepted and appended to the history', async () => {
+  const db = await connectDB();
+  const beforeDocsCount = await db.collection('documents').countDocuments({ requestType: 'partnership', requestId });
+
+  const res = await staffAgent
+    .post(`/api/requests/${requestId}/documents`)
+    .field('note', 'Updated the agreement details based on the latest review.');
+
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  expect(res.body.documentId).toBeNull();
+  expect(res.body.fileLink).toBeNull();
+  const docs = res.body.request.supportingDocuments;
+  expect(docs.length).toBe(3); // v2 (Staff), v3 (submitter), and this notes-only v4
+  const notesOnly = docs[2];
+  expect(notesOnly.note).toBe('Updated the agreement details based on the latest review.');
+  expect(notesOnly.uploaderRole).toBe('Staff');
+  expect(notesOnly.uploadedByEmail).toBe(staffUser.email);
+  expect(notesOnly.uploadedAt).toBeTruthy();
+  expect(notesOnly.documentId).toBeNull();
+  expect(notesOnly.fileLink).toBeNull();
+  expect(notesOnly.originalFilename).toBeNull();
+  expect(notesOnly.fileType).toBeNull();
+  expect(notesOnly.fileSize).toBe(0);
+
+  // No new Document Library record was created for this notes-only version.
+  const afterDocsCount = await db.collection('documents').countDocuments({ requestType: 'partnership', requestId });
+  expect(afterDocsCount).toBe(beforeDocsCount);
+});
+
+test('A completely empty submission (no file, no note) is rejected — file-optional does not mean content-optional', async () => {
+  const res = await staffAgent.post(`/api/requests/${requestId}/documents`).field('note', '');
+  expect(res.status).toBe(400);
+  expect(res.body.error).toMatch(/file.*note|note.*file/i);
+});
+
 test('A different user cannot upload to someone else\'s request (ownership enforced server-side)', async () => {
   const res = await otherAgent
     .post(`/api/requests/${requestId}/documents`)

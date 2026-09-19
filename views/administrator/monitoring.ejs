@@ -2,6 +2,7 @@
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
+    <%- include('../partials/ui-state-init') %>
     <title>Monitoring | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="shortcut icon" href="/images/cirl-logo.jpg">
@@ -539,13 +540,17 @@
                   </select>
                 </div>
                 <div class="col-lg-4 mb-3">
-                  <label class="form-label" for="f-nature">Nature of Partnership <span class="text-danger">*</span></label>
-                  <select class="form-select" id="f-nature">
-                    <option value="">Select…</option>
-                    <option>Research</option><option>Student Exchange</option><option>Training</option>
-                    <option>Conference</option><option>Faculty Exchange</option><option>Joint Program</option>
-                    <option>Internship</option><option>Other</option>
-                  </select>
+                  <label class="form-label" for="f-nature-input">Nature of Partnership <span class="text-danger">*</span></label>
+                  <!-- Multi-select (2026-09-19) — reuses the exact same searchable
+                       chip-combobox component/classes as Responsible Unit below,
+                       just backed by NATURE_OPTIONS instead of UNIT_OPTIONS. -->
+                  <div class="unit-combo" id="f-nature-combo">
+                    <div class="unit-combo-chips" id="f-nature-chips"></div>
+                    <div class="unit-combo-input-wrap">
+                      <input type="text" class="form-control" id="f-nature-input" placeholder="Type or search nature…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                      <div class="unit-combo-dropdown" id="f-nature-dropdown" role="listbox" style="display:none"></div>
+                    </div>
+                  </div>
                 </div>
                 <div class="col-lg-4 mb-3">
                   <label class="form-label" for="f-cat">Category</label>
@@ -690,13 +695,14 @@
             <select class="form-select" id="e-type"><option value="">Select…</option><option>MOA</option><option>MOU</option></select>
           </div>
           <div class="col-lg-3 mb-3">
-            <label class="form-label" for="e-nature">Nature <span class="text-danger">*</span></label>
-            <select class="form-select" id="e-nature">
-              <option value="">Select…</option>
-              <option>Research</option><option>Student Exchange</option><option>Training</option>
-              <option>Conference</option><option>Faculty Exchange</option><option>Joint Program</option>
-              <option>Internship</option><option>Other</option>
-            </select>
+            <label class="form-label" for="e-nature-input">Nature <span class="text-danger">*</span></label>
+            <div class="unit-combo" id="e-nature-combo">
+              <div class="unit-combo-chips" id="e-nature-chips"></div>
+              <div class="unit-combo-input-wrap">
+                <input type="text" class="form-control" id="e-nature-input" placeholder="Type or search nature…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <div class="unit-combo-dropdown" id="e-nature-dropdown" role="listbox" style="display:none"></div>
+              </div>
+            </div>
           </div>
           <div class="col-lg-3 mb-3">
             <label class="form-label" for="e-cat">Category</label>

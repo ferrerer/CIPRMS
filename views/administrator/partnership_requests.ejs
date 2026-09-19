@@ -4,6 +4,7 @@
 
 <head>
   <meta charset="utf-8" />
+  <%- include('../partials/ui-state-init') %>
   <title>Requests | CIPRMS-CSPC-CIRL</title>
   <meta name="description" content="Manage Partnership Requests and Document Requests for CIPRMS CSPC-CIRL">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -274,6 +275,51 @@
       font-size: 1.6rem;
     }
 
+    /* ── Dark mode overrides ──────────────────────────────────────────────
+       This page's own light-only inline colors above (section tabs, detail
+       box/value) had no [data-bs-theme="dark"] counterpart, so they stayed
+       hardcoded light/white even with Dark Mode on. Values mirror the same
+       Velzon dark surface/text tones already used by ciprms-bridge.css's
+       dark-mode block (see assets/css/ciprms-bridge.css) for consistency. */
+    [data-bs-theme="dark"] .section-tab {
+      background: #1e2533;
+      color: #ced4da;
+      border-color: rgba(255, 255, 255, .12);
+    }
+    [data-bs-theme="dark"] .section-tab:hover {
+      background: #262d3d;
+      color: #7094f5;
+    }
+    [data-bs-theme="dark"] .section-tab:not(.active) .section-tab-icon {
+      background: rgba(112, 148, 245, .15);
+      color: #7094f5;
+    }
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"]:not(.active):hover {
+      background: rgba(10, 179, 156, .12);
+      color: #3bc2b0;
+    }
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"]:not(.active):hover .section-tab-icon {
+      background: rgba(10, 179, 156, .18);
+      color: #3bc2b0;
+    }
+    [data-bs-theme="dark"] .section-tab:not(.active) .tab-count {
+      background: rgba(112, 148, 245, .18);
+      color: #7094f5;
+    }
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"]:not(.active) .tab-count {
+      background: rgba(10, 179, 156, .18);
+      color: #3bc2b0;
+    }
+    [data-bs-theme="dark"] .detail-box {
+      background: #262d3d;
+    }
+    [data-bs-theme="dark"] .detail-value {
+      color: #e9ecef;
+    }
+    [data-bs-theme="dark"] .detail-label {
+      color: #adb5bd;
+    }
+
     /* ── Toast ── */
     #pr-toast {
       position: fixed;
@@ -454,14 +500,6 @@
                             <option>Rejected</option>
                             <option>Withdrawn</option>
                           </select>
-                          <select class="form-select form-select-sm" id="pr-type" style="width:120px;"
-                            onchange="renderPR()">
-                            <option value="">All Types</option>
-                            <option>MOU</option>
-                            <option>MOA</option>
-                            <option>LOI</option>
-                            <option>JVA</option>
-                          </select>
                           <span class="text-muted fs-12 ms-auto" id="pr-count"></span>
                         </div>
 
@@ -515,13 +553,6 @@
                             <option>Release</option>
                             <option>Completed</option>
                             <option>Rejected</option>
-                          </select>
-                          <select class="form-select form-select-sm" id="dr-type" style="width:130px;"
-                            onchange="renderDR()">
-                            <option value="">All Types</option>
-                            <option>MOA</option>
-                            <option>MOU</option>
-                            <option>Accreditation</option>
                           </select>
                           <span class="text-muted fs-12 ms-auto" id="dr-count"></span>
                         </div>
@@ -589,7 +620,7 @@
       <div class="modal-content">
         <div class="modal-header bg-light p-3">
           <h5 class="modal-title" id="pr-draft-modal-title">
-            <i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration
+            <i class="ri-file-list-3-line me-2 text-primary"></i>
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -598,15 +629,16 @@
           <div id="pr-draft-upload-wrap" class="border-top pt-3">
             <p class="detail-label mb-2">Upload a New Version</p>
             <div class="mb-2">
+              <label class="form-label fs-12 text-muted mb-1" for="pr-draft-file">Attachment (Optional)</label>
               <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
             </div>
             <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
+              <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version…"></textarea>
             </div>
             <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
               <i class="ri-upload-2-line me-1"></i>Upload
             </button>
-            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. Saved to the Document Library and the other side is notified.</small>
+            <small class="text-muted d-block mt-2">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is saved to the Document Library; the other side is notified either way.</small>
           </div>
           <div id="pr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
             <i class="ri-lock-line me-1"></i>This request has already been decided — no further documents can be added.
@@ -655,7 +687,7 @@
               <label class="form-label detail-label" for="dr-status-update">Update Status</label>
               <select class="form-select form-select-sm" id="dr-status-update" style="max-width:280px;" onchange="updateDrStatus(currentDRId, this.value)">
               </select>
-              <small class="text-muted d-block mt-1">Only the next step in the workflow can be selected here — use Reject below to decline the request outright instead.</small>
+              <small class="text-muted d-block mt-1">Only the next step in the workflow can be selected here.</small>
             </div>
             <div class="col-12">
               <p class="detail-label">Notes</p>
@@ -709,7 +741,7 @@
       <div class="modal-content">
         <div class="modal-header bg-light p-3">
           <h5 class="modal-title" id="dr-draft-modal-title">
-            <i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration
+            <i class="ri-file-list-3-line me-2 text-primary"></i>
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -718,15 +750,16 @@
           <div id="dr-draft-upload-wrap" class="border-top pt-3">
             <p class="detail-label mb-2">Upload a New Version</p>
             <div class="mb-2">
+              <label class="form-label fs-12 text-muted mb-1" for="dr-draft-file">Attachment (Optional)</label>
               <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
             </div>
             <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
+              <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version…"></textarea>
             </div>
             <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
               <i class="ri-upload-2-line me-1"></i>Upload
             </button>
-            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. Saved to the Document Library and the other side is notified.</small>
+            <small class="text-muted d-block mt-2">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is saved to the Document Library; the other side is notified either way.</small>
           </div>
           <div id="dr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
             <i class="ri-lock-line me-1"></i>This document request has already been decided — no further documents can be added.
@@ -946,7 +979,6 @@
     function renderPR() {
       const s = (document.getElementById('pr-search').value || '').toLowerCase();
       const st = document.getElementById('pr-status').value;
-      const ty = document.getElementById('pr-type').value;
 
       prFiltered = prData.filter(r => {
         const id = String(r.id || '');
@@ -955,8 +987,7 @@
         const country = String(r.country || '');
         const hay = [id, by, inst, country].join(' ').toLowerCase();
         return (!s || hay.includes(s))
-          && (!st || r.status === st)
-          && (!ty || r.type === ty);
+          && (!st || r.status === st);
       });
 
       const tbody = document.getElementById('pr-tbody');
@@ -996,10 +1027,6 @@
               <button class="btn btn-sm btn-soft-primary" onclick="openPRDetail('${uid}')">
                 <i class="ri-${canAct ? 'search-eye' : 'eye'}-line me-1"></i>${canAct ? 'Review' : 'View'}
               </button>
-              ${canAct ? `
-              <button class="btn btn-sm btn-soft-danger" title="Reject" onclick="quickPR('${uid}','Rejected')">
-                <i class="ri-close-line"></i></button>
-              ` : ''}
             </div>
           </td>
         </tr>`;
@@ -1126,8 +1153,6 @@
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
           <i class="ri-close-line me-1"></i>Close</button>
         ${isReview ? `
-          <button class="btn btn-danger" onclick="resolvePR('${uid}','Rejected')">
-            <i class="ri-forbid-line me-1"></i>Reject</button>
           <button class="btn btn-success" onclick="resolvePR('${uid}','Approved')">
             <i class="ri-check-line me-1"></i>Approve</button>
         ` : ''}`;
@@ -1349,7 +1374,7 @@
       const r = drData.find(x => x.id === currentDRId);
       if (!r) return;
       document.getElementById('dr-draft-modal-title').innerHTML =
-        `<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — ${escapeHtml(r.documentType || 'Document Request')} #${r.id}`;
+        `<i class="ri-file-list-3-line me-2 text-primary"></i>Request #${r.id}`;
       renderDRDraftTimeline(r);
       const closed = DR_TERMINAL_STATUSES.includes(r.canonicalStatus || r.status);
       document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
@@ -1363,14 +1388,18 @@
       const fileInput = document.getElementById('dr-draft-file');
       const noteInput = document.getElementById('dr-draft-note');
       const file = fileInput.files[0];
-      if (!file || !currentDRId) return showToast('<i class="ri-error-warning-line me-1"></i>Choose a file first.', '#f06548');
+      const note = noteInput.value.trim();
+      // File is optional (2026-09-19) — notes alone are a valid new version.
+      // Only block submission when there's genuinely nothing to save.
+      if (!currentDRId) return;
+      if (!file && !note) return showToast('<i class="ri-error-warning-line me-1"></i>Add a file, a note, or both.', '#f06548');
       const btn = document.getElementById('dr-draft-upload-btn');
       const originalBtnHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
       const formData = new FormData();
-      formData.append('document', file);
-      formData.append('note', noteInput.value.trim());
+      if (file) formData.append('document', file);
+      formData.append('note', note);
       try {
         const res = await fetch('/api/document-requests/' + currentDRId + '/documents', { method: 'POST', body: formData });
         const data = await res.json();
@@ -1396,7 +1425,7 @@
       if (!r) return;
       currentPRId = uid;
       document.getElementById('pr-draft-modal-title').innerHTML =
-        `<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #REQ-${String(r.id).padStart(3, '0')}`;
+        `<i class="ri-file-list-3-line me-2 text-primary"></i>#REQ-${String(r.id).padStart(3, '0')}`;
       renderDraftTimeline(r);
       const closed = ['Approved', 'Rejected', 'Withdrawn'].includes(r.status);
       document.getElementById('pr-draft-upload-wrap').style.display = closed ? 'none' : '';
@@ -1410,14 +1439,18 @@
       const fileInput = document.getElementById('pr-draft-file');
       const noteInput = document.getElementById('pr-draft-note');
       const file = fileInput.files[0];
-      if (!file || !currentPRId) return showToast('<i class="ri-error-warning-line me-1"></i>Choose a file first.', '#f06548');
+      const note = noteInput.value.trim();
+      // File is optional (2026-09-19) — notes alone are a valid new version.
+      // Only block submission when there's genuinely nothing to save.
+      if (!currentPRId) return;
+      if (!file && !note) return showToast('<i class="ri-error-warning-line me-1"></i>Add a file, a note, or both.', '#f06548');
       const btn = document.getElementById('pr-draft-upload-btn');
       const originalBtnHtml = btn.innerHTML;
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
       const formData = new FormData();
-      formData.append('document', file);
-      formData.append('note', noteInput.value.trim());
+      if (file) formData.append('document', file);
+      formData.append('note', note);
       try {
         const res = await fetch('/api/requests/' + currentPRId + '/documents', { method: 'POST', body: formData });
         const data = await res.json();
@@ -1474,14 +1507,6 @@
       }
     }
 
-    async function quickPR(uid, decision) {
-      const r = prData.find(x => String(x.id) === uid);
-      if (!r) return;
-      const verb = decision === 'Approved' ? 'Approve' : 'Reject';
-      if (!confirm(`${verb} this partnership request?`)) return;
-      await resolvePR(uid, decision);
-    }
-
     /* ═══════════════════════════════════════════════════════
        DOCUMENT REQUESTS
     ═══════════════════════════════════════════════════════ */
@@ -1497,15 +1522,10 @@
     function renderDR() {
       const s = (document.getElementById('dr-search').value || '').toLowerCase();
       const st = document.getElementById('dr-status').value;
-      const ty = document.getElementById('dr-type').value;
 
       drFiltered = drData.filter(r =>
         (!s || [(r.institution || ''), (r.requestedBy || '')].join(' ').toLowerCase().includes(s))
         && (!st || (r.canonicalStatus || r.status) === st)
-        // documentType is now a free-form, possibly multi-item joined string
-        // (e.g. "Universitas Airlangga - MOA, MOUs"), so the fixed-option
-        // type filter matches as a substring rather than requiring equality.
-        && (!ty || (r.documentType || '').toLowerCase().includes(ty.toLowerCase()))
       );
 
       const tbody = document.getElementById('dr-tbody');
@@ -1614,18 +1634,13 @@
         <a href="/api/document-requests/${id}/pdf" class="btn btn-soft-info btn-sm btn-icon" title="Download PDF">
           <i class="ri-file-download-line"></i></a>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
-          <i class="ri-close-line me-1"></i>Close</button>
-        ${canAct ? `
-          <button class="btn btn-danger" onclick="resolveDR(${id},'Rejected')">
-            <i class="ri-close-line me-1"></i>Reject</button>
-        ` : ''}`;
+          <i class="ri-close-line me-1"></i>Close</button>`;
 
       new bootstrap.Modal(document.getElementById('dr-modal')).show();
     }
 
-    // Shared by both the Update Status dropdown (any workflow stage) and the
-    // Reject button — a single PATCH call, the same server-side
-    // transition/RBAC validation either way.
+    // Backs the Update Status dropdown (any workflow stage) — a single PATCH
+    // call, the same server-side transition/RBAC validation for every stage.
     async function submitDrStatusChange(id, newStatus) {
       const r = drData.find(x => x.id === id);
       if (!r) return;
@@ -1667,10 +1682,6 @@
     function updateDrStatus(id, newStatus) {
       if (!newStatus) return;
       submitDrStatusChange(id, newStatus);
-    }
-
-    function resolveDR(id, decision) {
-      submitDrStatusChange(id, decision);
     }
 
     /* ─── INIT ─── */

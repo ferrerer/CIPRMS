@@ -2,6 +2,7 @@
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
+    <%- include('../partials/ui-state-init') %>
     <title>Requests | CIPRMS-CSPC-CIRL</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="shortcut icon" href="/images/cirl-logo.jpg">
@@ -157,6 +158,34 @@
       [data-bs-theme="dark"] .doc-combo-option { color: #d3d5db; }
       [data-bs-theme="dark"] .doc-combo-option:hover, [data-bs-theme="dark"] .doc-combo-option.active { background: #363c4c; color: #a9bcf5; }
       [data-bs-theme="dark"] .doc-combo-option.custom { color: #4bd1b0; }
+
+      /* ── Dark mode — the rest of this page's custom classes above
+         (table card, section tabs, Document Request Form) never got the
+         same [data-bs-theme="dark"] treatment as the doc-combo classes
+         above, so they stayed hardcoded light. Same dark surface/border/
+         text tones used throughout the rest of the app's dark-mode CSS. ── */
+      [data-bs-theme="dark"] .table-card { background: #1e2533; }
+      [data-bs-theme="dark"] .table thead th { background-color: #262d3d; color: #adb5bd; }
+      [data-bs-theme="dark"] .table tbody td { border-bottom-color: rgba(255,255,255,.06); }
+      [data-bs-theme="dark"] .badge-soft-pending { background-color: rgba(255,152,0,.15); color: #ffb74d; }
+      [data-bs-theme="dark"] .badge-soft-fulfilled { background-color: rgba(76,175,80,.15); color: #81c784; }
+      [data-bs-theme="dark"] .badge-soft-rejected { background-color: rgba(244,67,54,.15); color: #e57373; }
+      [data-bs-theme="dark"] .section-tab { background: #262d3d; color: #ced4da; }
+      [data-bs-theme="dark"] .section-tab:hover { background: #2f3749; color: #7094f5; }
+      [data-bs-theme="dark"] .dr-form-header { border-bottom-color: #5a72d4; }
+      [data-bs-theme="dark"] .dr-form-header .dr-form-title,
+      [data-bs-theme="dark"] .dr-form-header .dr-form-code { color: #7094f5; }
+      [data-bs-theme="dark"] .dr-form-table,
+      [data-bs-theme="dark"] .dr-row { border-color: rgba(255,255,255,.1); }
+      [data-bs-theme="dark"] .dr-label {
+          background: #262d3d; color: #ced4da; border-right-color: rgba(255,255,255,.1);
+      }
+      [data-bs-theme="dark"] .dr-readonly {
+          background: #1a1f2b; border-color: rgba(255,255,255,.15); color: #e9ecef;
+      }
+      @media (max-width: 576px) {
+          [data-bs-theme="dark"] .dr-label { border-bottom-color: rgba(255,255,255,.1); }
+      }
 
       @media (max-width: 576px) {
           .doc-chip span.doc-chip-label { max-width: 200px; }

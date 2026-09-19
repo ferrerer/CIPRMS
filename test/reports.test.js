@@ -696,7 +696,7 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
     expect(res.body.records.every(p =>
       p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
       p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CIRL') : p.unit === 'CIRL') &&
-      p.type === 'MOU' && p.nature === 'Training'
+      p.type === 'MOU' && (Array.isArray(p.nature) ? p.nature.includes('Training') : p.nature === 'Training')
     )).toBe(true);
 
     // Changing just one dimension to something that doesn't exist must zero
@@ -756,7 +756,7 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
       expect(res.body.groupARecords.every(p =>
         p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
         p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CIRL') : p.unit === 'CIRL') &&
-        p.type === 'MOU' && p.nature === 'Training'
+        p.type === 'MOU' && (Array.isArray(p.nature) ? p.nature.includes('Training') : p.nature === 'Training')
       )).toBe(true);
       // Group B must have ONLY the unit dimension overridden — every other
       // original filter (status, country, region, cat, agreement type,
@@ -765,7 +765,7 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
       expect(res.body.groupBRecords.every(p =>
         p.status === 'Active' && p.country === 'Testland' && p.region === 'Asia' &&
         p.cat === 'International' && (Array.isArray(p.unit) ? p.unit.includes('CETE') : p.unit === 'CETE') &&
-        p.type === 'MOU' && p.nature === 'Training'
+        p.type === 'MOU' && (Array.isArray(p.nature) ? p.nature.includes('Training') : p.nature === 'Training')
       )).toBe(true);
     } finally {
       const db = await connectDB();

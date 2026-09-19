@@ -65,11 +65,35 @@ function sanitizeUrl(url) {
 // entries are allowed here — only these six values are ever selectable.
 var UNIT_OPTIONS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
 
-function createUnitCombo(prefix) {
+// "Nature of Partnership" reuses this exact same searchable chip-combobox
+// pattern (2026-09-19, multi-select) — same predefined-list behavior as
+// Unit, just backed by its own option list and its own set of element ids
+// (f/e-nature-chips/-input/-dropdown instead of -unit-*). The options below
+// are the exact 8 values the single-select dropdown it replaced already had
+// — none added, none removed.
+var NATURE_OPTIONS = ['Research', 'Student Exchange', 'Training', 'Conference', 'Faculty Exchange', 'Joint Program', 'Internship', 'Other'];
+
+// Generic factory behind both combos above — parameterized by `field` (the
+// id-segment: 'unit' or 'nature') and its own allowed `options` list, so the
+// exact same searchable/removable-chips behavior, keyboard handling, and
+// outside-click-closes-dropdown logic isn't duplicated per field.
+//
+// `restrictToOptions` (default true, Unit's original behavior) controls what
+// setValues() does with a value that ISN'T in `options`: Unit has always had
+// closed-set backend validation, so filtering out anything unrecognized here
+// is pure defense-in-depth. Nature never had that closed-set validation as a
+// plain string, so an existing record can legitimately hold a value outside
+// this form's 8 options (e.g. a legacy/free-text/OCR value) — silently
+// dropping it on load would destroy real data, so Nature passes
+// restrictToOptions:false and keeps any such value as its own chip (visible,
+// removable) while the dropdown of NEW picks still only ever offers the
+// fixed list.
+function createChipCombo(prefix, field, options, comboOpts) {
+  var restrictToOptions = !(comboOpts && comboOpts.restrictToOptions === false);
   var selected = [];
-  var chips = document.getElementById(prefix + '-unit-chips');
-  var input = document.getElementById(prefix + '-unit-input');
-  var dropdown = document.getElementById(prefix + '-unit-dropdown');
+  var chips = document.getElementById(prefix + '-' + field + '-chips');
+  var input = document.getElementById(prefix + '-' + field + '-input');
+  var dropdown = document.getElementById(prefix + '-' + field + '-dropdown');
   // A blur (e.g. clicking a chip's remove button, which isn't
   // mousedown-guarded like dropdown options are) schedules a delayed close
   // rather than an immediate one. If the input regains focus before that
@@ -119,11 +143,11 @@ function createUnitCombo(prefix) {
     // dropdown is already open showing this exact query's results.
     if (dropdown.style.display === 'block' && dropdown.dataset.q === q) return;
     dropdown.dataset.q = q;
-    var available = UNIT_OPTIONS.filter(function (u) { return selected.indexOf(u) === -1; });
+    var available = options.filter(function (u) { return selected.indexOf(u) === -1; });
     var matches = q ? available.filter(function (u) { return u.toLowerCase().indexOf(q) !== -1; }) : available;
     dropdown.innerHTML = matches.length
       ? matches.map(function (u) { return '<div class="unit-combo-option" data-val="' + escapeHtml(u) + '">' + escapeHtml(u) + '</div>'; }).join('')
-      : '<div class="unit-combo-empty">' + (available.length ? 'No matching unit.' : 'All units selected.') + '</div>';
+      : '<div class="unit-combo-empty">' + (available.length ? 'No matching option.' : 'All options selected.') + '</div>';
     dropdown.style.display = 'block';
     input.setAttribute('aria-expanded', 'true');
     dropdown.querySelectorAll('.unit-combo-option').forEach(function (opt) {
@@ -145,7 +169,7 @@ function createUnitCombo(prefix) {
     if (e.key === 'Enter') {
       e.preventDefault();
       var q = input.value.trim().toUpperCase();
-      var match = UNIT_OPTIONS.filter(function (u) { return selected.indexOf(u) === -1; })
+      var match = options.filter(function (u) { return selected.indexOf(u) === -1; })
         .find(function (u) { return u.toUpperCase() === q || u.toUpperCase().indexOf(q) === 0; });
       if (match) addValue(match);
     } else if (e.key === 'Backspace' && !input.value && selected.length) {
@@ -161,9 +185,11 @@ function createUnitCombo(prefix) {
     getValues: function () { return selected.slice(); },
     setValues: function (vals) {
       // Accepts an array (new records) or a single legacy string value
-      // (records created before the 2026-09-03 multi-unit combobox).
+      // (records created before the 2026-09-03 multi-unit / 2026-09-19
+      // multi-nature combobox).
       var arr = Array.isArray(vals) ? vals : (vals ? [vals] : []);
-      selected = arr.filter(function (v) { return UNIT_OPTIONS.indexOf(v) !== -1; });
+      arr = arr.filter(function (v) { return typeof v === 'string' && v.trim(); }).map(function (v) { return v.trim(); });
+      selected = restrictToOptions ? arr.filter(function (v) { return options.indexOf(v) !== -1; }) : arr;
       renderChips();
       input.value = '';
     },
@@ -172,14 +198,19 @@ function createUnitCombo(prefix) {
   };
 }
 
+function createUnitCombo(prefix) { return createChipCombo(prefix, 'unit', UNIT_OPTIONS); }
+function createNatureCombo(prefix) { return createChipCombo(prefix, 'nature', NATURE_OPTIONS, { restrictToOptions: false }); }
+
 document.addEventListener('click', function (e) {
   ['f', 'e'].forEach(function (prefix) {
-    var dropdown = document.getElementById(prefix + '-unit-dropdown');
-    var input = document.getElementById(prefix + '-unit-input');
-    if (dropdown && input && e.target !== input && !dropdown.contains(e.target)) {
-      dropdown.style.display = 'none';
-      dropdown.innerHTML = '';
-    }
+    ['unit', 'nature'].forEach(function (field) {
+      var dropdown = document.getElementById(prefix + '-' + field + '-dropdown');
+      var input = document.getElementById(prefix + '-' + field + '-input');
+      if (dropdown && input && e.target !== input && !dropdown.contains(e.target)) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+      }
+    });
   });
 });
 
@@ -488,7 +519,10 @@ function buildGrid() {
         ?'<button class="btn btn-sm btn-soft-warning" title="Renew" aria-label="Renew" onclick="openRenewModal('+p.id+')"><i class="ri-refresh-line"></i></button>':''))
       +(canManage ? '<button class="btn btn-sm btn-soft-danger" title="Delete" aria-label="Delete" onclick="openDeleteModal('+p.id+')"><i class="ri-delete-bin-line"></i></button>' : '')
       +'</div>';
-    return [gridjs.html(instHtml), gridjs.html(countryHtml), p.nature, p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
+    // nature can be an array (multi-select, 2026-09-19) — join for display,
+    // same treatment as Unit already gets in the View modal below.
+    var natureDisplay = Array.isArray(p.nature) ? p.nature.join(', ') : p.nature;
+    return [gridjs.html(instHtml), gridjs.html(countryHtml), natureDisplay, p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
   });
 
   if (window._regGrid) { window._regGrid.updateConfig({data:data}).forceRender(); return; }
@@ -520,7 +554,7 @@ function openViewModal(id) {
     +'<div class="col-sm-6"><div class="text-muted fs-12">Country</div><div class="fw-semibold">'+escapeHtml(p.country)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Region</div><div class="fw-semibold">'+escapeHtml(p.region)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Type</div><div class="fw-semibold">'+escapeHtml(p.type)+'</div></div>'
-    +'<div class="col-sm-6"><div class="text-muted fs-12">Nature</div><div class="fw-semibold">'+escapeHtml(p.nature)+'</div></div>'
+    +'<div class="col-sm-6"><div class="text-muted fs-12">Nature</div><div class="fw-semibold">'+escapeHtml(Array.isArray(p.nature)?p.nature.join(', '):p.nature)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Category</div><div class="fw-semibold">'+escapeHtml(p.cat)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">Start Date</div><div class="fw-semibold">'+escapeHtml(p.start)+'</div></div>'
     +'<div class="col-sm-6"><div class="text-muted fs-12">End Date</div><div class="fw-semibold">'+escapeHtml(p.end)+'</div></div>'
@@ -560,12 +594,13 @@ function confirmDelete(){
 
 var editingId=null;
 var eUnitCombo = createUnitCombo('e');
+var eNatureCombo = createNatureCombo('e');
 function openEditModal(id){
   var p=partnerships.find(function(x){return x.id===id;}); if(!p) return; editingId=id;
   var toISO=function(s){var d=new Date(s);return isNaN(d)?'':d.toISOString().slice(0,10);};
   document.getElementById('e-inst').value=p.inst; document.getElementById('e-country').value=p.country;
   document.getElementById('e-region').value=p.region; document.getElementById('e-partner-email').value=p.partnerEmail||'';
-  document.getElementById('e-type').value=p.type; document.getElementById('e-nature').value=p.nature;
+  document.getElementById('e-type').value=p.type; eNatureCombo.setValues(p.nature);
   document.getElementById('e-cat').value=p.cat; document.getElementById('e-start').value=toISO(p.start);
   document.getElementById('e-end').value=toISO(p.end); document.getElementById('e-status').value=p.status;
   eUnitCombo.setValues(p.unit); document.getElementById('e-coordinator').value=p.coordinator||'';
@@ -585,7 +620,7 @@ function saveEdit(){
   var p=partnerships.find(function(x){return x.id===editingId;}); if(!p) return;
   var updates={inst:inst,country:document.getElementById('e-country').value.trim(),region:document.getElementById('e-region').value,
     partnerEmail:document.getElementById('e-partner-email').value.trim(),type:document.getElementById('e-type').value,
-    nature:document.getElementById('e-nature').value,cat:document.getElementById('e-cat').value,
+    nature:eNatureCombo.getValues(),cat:document.getElementById('e-cat').value,
     start:fmt(document.getElementById('e-start').value),end:fmt(end),endYear:new Date(end).getFullYear(),
     status:document.getElementById('e-status').value,unit:units,
     coordinator:document.getElementById('e-coordinator').value.trim(),docLink:document.getElementById('e-doclink').value.trim(),
@@ -784,15 +819,14 @@ function applyOcrToForm() {
     if (/agreement/i.test(r.documentType)) set('f-type', 'MOA');
     else if (/understanding/i.test(r.documentType)) set('f-type', 'MOU');
   }
-  // f-nature's options don't cover every value inferNature() can produce
-  // (e.g. Technology Transfer, Community Outreach) — only apply an exact,
-  // unambiguous match rather than forcing an incorrect one.
+  // NATURE_OPTIONS doesn't cover every value inferNature() can produce (e.g.
+  // Technology Transfer, Community Outreach) — only apply an exact,
+  // unambiguous match rather than forcing an incorrect one. OCR always
+  // proposes a single best-guess value, so this sets it as the combo's only
+  // selection rather than adding to whatever (if anything) was already there.
   if (r.nature) {
-    var natureSelect = document.getElementById('f-nature');
-    if (natureSelect) {
-      var opt = Array.prototype.find.call(natureSelect.options, function (o) { return o.value.toLowerCase() === r.nature.toLowerCase(); });
-      if (opt) set('f-nature', opt.value);
-    }
+    var natureOpt = NATURE_OPTIONS.find(function (o) { return o.toLowerCase() === r.nature.toLowerCase(); });
+    if (natureOpt) { fNatureCombo.setValues([natureOpt]); filled.push('f-nature-input'); }
   }
 
   var startIso = ocrIsoDate(r.startDate);
@@ -875,13 +909,8 @@ function applyRequestToForm(r) {
   if (r.type === 'MOA' || r.type === 'MOU') set('f-type', r.type);
 
   if (r.nature) {
-    var natureSelect = document.getElementById('f-nature');
-    if (natureSelect) {
-      var opt = Array.prototype.find.call(natureSelect.options, function (o) {
-        return o.value.toLowerCase() === r.nature.toLowerCase();
-      });
-      if (opt) set('f-nature', opt.value);
-    }
+    var natureOpt = NATURE_OPTIONS.find(function (o) { return o.toLowerCase() === r.nature.toLowerCase(); });
+    if (natureOpt) fNatureCombo.setValues([natureOpt]);
   }
 
   var startIso = ocrIsoDate(r.startDate);
@@ -953,6 +982,7 @@ function checkFromRequestParam() {
 function highlight(id,on){var el=document.getElementById(id);if(!el)return;el.style.borderColor=on?'#dc2626':'';el.addEventListener('input',function(){el.style.borderColor='';},{once:true});}
 
 var fUnitCombo = createUnitCombo('f');
+var fNatureCombo = createNatureCombo('f');
 
 function submitPartnership(){
   var inst=document.getElementById('f-inst').value.trim(),type=document.getElementById('f-type').value,
@@ -965,7 +995,7 @@ function submitPartnership(){
   var d=Math.ceil((new Date(end)-new Date())/86400000);
   var status=document.getElementById('f-status').value||(d<0?'Expired':d<=90?'Expiring Soon':'Active');
   var payload={inst:inst,country:document.getElementById('f-country').value.trim()||'—',
-    region:region||'—',type:type,nature:document.getElementById('f-nature').value||'—',
+    region:region||'—',type:type,nature:fNatureCombo.getValues(),
     cat:document.getElementById('f-cat').value||'International',unit:units,
     coordinator:document.getElementById('f-coordinator').value.trim(),
     partnerEmail:document.getElementById('f-partner-email').value.trim(),
@@ -1010,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', function() {
     var ft=document.getElementById('add-step1-tab');if(ft)new bootstrap.Tab(ft).show();
     document.getElementById('addPartnershipForm').reset();
     fUnitCombo.clear();
+    fNatureCombo.clear();
     dismissOcrResult();
     ocrShow('ocr-progress-wrap', false);
     hideFromRequestBanner();
