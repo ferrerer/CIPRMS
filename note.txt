@@ -7,7 +7,6 @@ And push: git push
 
 Auth. Personnel (new pages)
 Page	URL
-Dashboard	http://localhost:3000/personnel/dashboard
 Registry	http://localhost:3000/personnel/registry
 Requests	http://localhost:3000/personnel/requests
 Lifecycle	http://localhost:3000/personnel/lifecycle

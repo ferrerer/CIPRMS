@@ -27,7 +27,7 @@
                       <h4 class="mb-sm-0"><i class="ri-settings-3-line me-2 text-primary"></i>Settings</h4>
                       <div class="page-title-right">
                         <ol class="breadcrumb m-0">
-                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Settings</li>
                         </ol>
                       </div>
@@ -75,7 +75,6 @@
                                 <ul class="nav nav-tabs-custom rounded card-header-tabs border-bottom-0" role="tablist">
                                     <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-profile"><i class="ri-building-4-line me-1"></i>Organization Profile</a></li>
                                     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-password"><i class="ri-lock-line me-1"></i>Change Password</a></li>
-                                    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-notif"><i class="ri-notification-3-line me-1"></i>Notification Preferences</a></li>
                                 </ul>
                             </div>
                             <div class="card-body p-4">
@@ -136,32 +135,6 @@
                                         <p class="text-muted fs-13 mt-3">Must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.</p>
                                         <div class="d-flex justify-content-end pt-3 border-top">
                                             <button type="button" class="btn btn-success" onclick="changePassword()"><i class="ri-lock-line me-1"></i>Update Password</button>
-                                        </div>
-                                    </div>
-
-                                    <div class="tab-pane" id="tab-notif">
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="n-requests" checked>
-                                            <label class="form-check-label" for="n-requests">Request updates</label>
-                                        </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="n-approvals" checked>
-                                            <label class="form-check-label" for="n-approvals">Approval decisions</label>
-                                        </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="n-documents" checked>
-                                            <label class="form-check-label" for="n-documents">Document verification</label>
-                                        </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="n-meetings" checked>
-                                            <label class="form-check-label" for="n-meetings">Meeting schedules</label>
-                                        </div>
-                                        <div class="form-check form-switch mb-4">
-                                            <input class="form-check-input" type="checkbox" id="n-renewals" checked>
-                                            <label class="form-check-label" for="n-renewals">Renewal reminders</label>
-                                        </div>
-                                        <div class="d-flex justify-content-end pt-3 border-top">
-                                            <button type="button" class="btn btn-success" onclick="saveProfile()"><i class="ri-save-3-line me-1"></i>Save Preferences</button>
                                         </div>
                                     </div>
 
@@ -234,6 +207,12 @@
         }
     }
 
+    // Notification Preferences are no longer shown on this page, but the values already stored
+    // must survive every profile save unchanged: POST /api/partner/profile stores each notify*
+    // field as (value !== false), so simply omitting them would silently reset a saved "off" to "on".
+    var NOTIFY_KEYS = ['notifyRequestUpdates', 'notifyApprovals', 'notifyDocuments', 'notifyMeetings', 'notifyRenewals'];
+    var storedNotifyPrefs = {};
+
     function loadProfile() {
         fetch('/api/partner/profile').then(function (r) { return r.json(); }).then(function (p) {
             document.getElementById('p-org').value = p.organization || '';
@@ -243,11 +222,7 @@
             if (p.avatarUrl) applyAvatar(p.avatarUrl);
             updateCard();
 
-            document.getElementById('n-requests').checked = p.notifyRequestUpdates !== false;
-            document.getElementById('n-approvals').checked = p.notifyApprovals !== false;
-            document.getElementById('n-documents').checked = p.notifyDocuments !== false;
-            document.getElementById('n-meetings').checked = p.notifyMeetings !== false;
-            document.getElementById('n-renewals').checked = p.notifyRenewals !== false;
+            NOTIFY_KEYS.forEach(function (k) { storedNotifyPrefs[k] = p[k]; });
         });
     }
 
@@ -256,13 +231,9 @@
             organization: document.getElementById('p-org').value.trim(),
             contactName: document.getElementById('p-contact').value.trim(),
             contactNumber: document.getElementById('p-phone').value.trim(),
-            address: document.getElementById('p-address').value.trim(),
-            notifyRequestUpdates: document.getElementById('n-requests').checked,
-            notifyApprovals: document.getElementById('n-approvals').checked,
-            notifyDocuments: document.getElementById('n-documents').checked,
-            notifyMeetings: document.getElementById('n-meetings').checked,
-            notifyRenewals: document.getElementById('n-renewals').checked
+            address: document.getElementById('p-address').value.trim()
         };
+        NOTIFY_KEYS.forEach(function (k) { if (typeof storedNotifyPrefs[k] === 'boolean') payload[k] = storedNotifyPrefs[k]; });
         fetch('/api/partner/profile', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         }).then(function (r) { return r.json(); }).then(function (data) {

@@ -1,7 +1,7 @@
 <!-- ========== Personnel Sidebar ========== -->
 <div class="app-menu navbar-menu">
     <div class="navbar-brand-box">
-        <a href="/personnel/dashboard" class="logo logo-dark">
+        <a href="/personnel/monitoring" class="logo logo-dark">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
             </span>
@@ -11,7 +11,7 @@
                 <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#405189;">CIPRMS</span>
             </span>
         </a>
-        <a href="/personnel/dashboard" class="logo logo-light">
+        <a href="/personnel/monitoring" class="logo logo-light">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
             </span>
@@ -27,37 +27,19 @@
         </button>
     </div>
 
-    <!-- Sidebar User Box (Velzon style) -->
-    <div class="dropdown sidebar-user m-1 rounded">
-        <button type="button" class="btn material-shadow-none" id="sidebar-user-dropdown" data-bs-toggle="dropdown"
-            aria-haspopup="true" aria-expanded="false">
-            <span class="d-flex align-items-center gap-2">
-                <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
-                <span class="text-start">
-                    <span class="d-block fw-medium sidebar-user-name-text">
-                        <%= typeof user !=='undefined' && user ? user.name || 'Personnel' : 'Personnel' %>
-                    </span>
-                    <span class="d-block fs-14 sidebar-user-name-sub-text"><i
-                            class="ri ri-circle-fill fs-10 text-success align-baseline"></i> <span class="align-middle">
-                            <%= typeof user !=='undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : (user.role || 'Auth. Personnel')) : 'Auth. Personnel' %>
-                        </span></span>
+    <!-- Sidebar user box — identity + role label only. Profile lives in the
+         header user menu; Settings and Logout are nav items below. There is no
+         Notifications page for this role (the header bell remains). -->
+    <div class="sidebar-user m-1 rounded">
+        <div class="d-flex align-items-center gap-2 px-3 py-2">
+            <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+            <span class="text-start">
+                <span class="d-block fw-medium sidebar-user-name-text">
+                    <%= typeof user !=='undefined' && user ? user.name || 'College Staff' : 'College Staff' %>
                 </span>
+                <span class="d-block fs-14 sidebar-user-name-sub-text" id="sidebar-role-label"><i
+                        class="ri ri-circle-fill fs-10 text-success align-baseline"></i> <span class="align-middle">College Staff</span></span>
             </span>
-        </button>
-        <div class="dropdown-menu dropdown-menu-end">
-            <h6 class="dropdown-header">Welcome!</h6>
-            <a class="dropdown-item" href="/personnel/settings"><i
-                    class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span
-                    class="align-middle">Profile</span></a>
-            <a class="dropdown-item" href="/personnel/notifications"><i
-                    class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span
-                    class="align-middle">Notifications</span></a>
-            <div class="dropdown-divider"></div>
-            <a class="dropdown-item" href="/personnel/settings"><i
-                    class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span
-                    class="align-middle">Settings</span></a>
-            <a class="dropdown-item" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i>
-                <span class="align-middle">Logout</span></a>
         </div>
     </div>
 
@@ -67,22 +49,6 @@
             <ul class="navbar-nav" id="navbar-nav">
 
                 <li class="menu-title"><span>Main Menu</span></li>
-
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'dashboard') ? 'active' : '' %>"
-                        href="/personnel/dashboard">
-                        <i class="ri-dashboard-2-line"></i>
-                        <span>Dashboard</span>
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'calendar') ? 'active' : '' %>"
-                        href="/personnel/calendar">
-                        <i class="ri-calendar-2-line"></i>
-                        <span>Calendar</span>
-                    </a>
-                </li>
 
                 <li class="nav-item">
                     <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'monitoring') ? 'active' : '' %>"
@@ -100,12 +66,11 @@
                     </a>
                 </li>
 
-                <!-- Document Library -->
                 <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'documents') ? 'active' : '' %>"
-                        href="/personnel/documents">
-                        <i class="ri-folder-zip-line"></i>
-                        <span>Document Library</span>
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'calendar') ? 'active' : '' %>"
+                        href="/personnel/calendar">
+                        <i class="ri-calendar-2-line"></i>
+                        <span>Calendar</span>
                     </a>
                 </li>
 

@@ -1,7 +1,7 @@
 <!-- ========== Potential Partner Sidebar ========== -->
 <div class="app-menu navbar-menu">
     <div class="navbar-brand-box">
-        <a href="/partner/dashboard" class="logo logo-dark">
+        <a href="/partner/monitoring" class="logo logo-dark">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
             </span>
@@ -11,7 +11,7 @@
                 <span style="font-size:18px;font-weight:700;letter-spacing:-.3px;color:#405189;">CIPRMS</span>
             </span>
         </a>
-        <a href="/partner/dashboard" class="logo logo-light">
+        <a href="/partner/monitoring" class="logo logo-light">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
             </span>
@@ -62,14 +62,6 @@
                 <li class="menu-title"><span>Main Menu</span></li>
 
                 <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'dashboard') ? 'active' : '' %>"
-                        href="/partner/dashboard">
-                        <i class="ri-dashboard-2-line"></i>
-                        <span>Dashboard</span>
-                    </a>
-                </li>
-
-                <li class="nav-item">
                     <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'requests') ? 'active' : '' %>"
                         href="/partner/requests">
                         <i class="ri-file-list-3-line"></i>
@@ -82,24 +74,6 @@
                         href="/partner/monitoring">
                         <i class="ri-refresh-line"></i>
                         <span>Monitoring</span>
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'documents') ? 'active' : '' %>"
-                        href="/partner/documents">
-                        <i class="ri-folder-2-line"></i>
-                        <span>Document Library</span>
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'notifications') ? 'active' : '' %>"
-                        href="/partner/notifications">
-                        <i class="ri-notification-3-line"></i>
-                        <span>Notifications</span>
-                        <span class="badge bg-danger rounded-pill" id="sidebar-notif-badge"
-                            style="display:none;margin-left:auto;"></span>
                     </a>
                 </li>
 
@@ -134,15 +108,3 @@
     <div class="sidebar-background"></div>
 </div>
 <div class="vertical-overlay"></div>
-
-<script>
-    fetch('/api/notifications/unread-count')
-        .then(r => r.json())
-        .then(d => {
-            const badge = document.getElementById('sidebar-notif-badge');
-            if (badge && (d.count || 0) > 0) {
-                badge.textContent = d.count;
-                badge.style.display = '';
-            }
-        }).catch(() => { });
-</script>

@@ -144,7 +144,7 @@
                       <h4 class="mb-sm-0">Requests</h4>
                       <div class="page-title-right">
                         <ol class="breadcrumb m-0">
-                          <li class="breadcrumb-item"><a href="/partner/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Requests</li>
                         </ol>
                       </div>
@@ -152,14 +152,14 @@
                   </div>
                 </div>
 
-                <!-- Section switcher — Partnership Request / Document Request share this page but
+                <!-- Section switcher — Partnership Request / Submission Of MOA/MOU share this page but
                      remain fully independent forms; only one panel is visible at a time. -->
                 <div class="section-tabs">
                     <a class="section-tab active" id="tab-pr" href="#" onclick="switchSection('pr');return false;">
                         <i class="ri-building-4-line"></i> Partnership Request
                     </a>
                     <a class="section-tab" id="tab-dr" href="#" onclick="switchSection('dr');return false;">
-                        <i class="ri-file-shield-2-line"></i> Document Request
+                        <i class="ri-file-upload-line"></i> Submission Of MOA/MOU
                     </a>
                 </div>
 
@@ -168,7 +168,6 @@
                     <div class="card" id="request-form-card">
                         <div class="card-header d-flex align-items-center">
                             <h4 class="card-title mb-0 flex-grow-1" id="form-title">New Partnership Request</h4>
-                            <button type="button" class="btn btn-sm btn-light" onclick="openNewRequestForm()"><i class="ri-add-line me-1"></i>Start New</button>
                         </div>
                         <div class="card-body">
 
@@ -256,7 +255,6 @@
                             </div>
 
                             <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-light" onclick="saveDraft()"><i class="ri-save-line me-1"></i>Save as Draft</button>
                                 <button type="button" class="btn btn-success" onclick="submitRequest()"><i class="ri-send-plane-line me-1"></i>Submit Request</button>
                             </div>
                         </div>
@@ -264,27 +262,26 @@
                     <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/partner/monitoring">Monitoring</a> page.</p>
                 </div>
 
-                <!-- ═══════════ PANEL: DOCUMENT REQUEST ═══════════ -->
+                <!-- ═══════════ PANEL: SUBMISSION OF MOA/MOU ═══════════ -->
                 <div id="panel-dr" style="display:none">
                     <div class="card shadow-sm border-0">
                         <div class="card-body p-4">
                             <div class="dr-form-header">
                                 <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL">
                                 <div>
-                                    <p class="dr-form-title">Documents Request Form</p>
+                                    <p class="dr-form-title">Submission Of MOA/MOU</p>
                                     <p class="dr-form-subtitle">Center for International Relations and Linkages — CSPC</p>
                                 </div>
-                                <div class="dr-form-code">CSPC-F-CIRL-04</div>
                             </div>
-                            <p class="text-muted fs-13 mt-2 mb-0">Request MOA, MOU, or Accreditation documents from CSPC-CIRL — to propose a new partnership, use Partnership Request instead.</p>
-                            <form id="drForm">
+                            <p class="text-muted fs-13 mt-2 mb-0">Send CSPC-CIRL your MOA/MOU files, images and notes. Attach a file or image, write a note, or do both — a file is optional. To propose a new partnership, use Partnership Request instead.</p>
+                            <form id="drForm" onsubmit="return false;">
                                 <div class="dr-form-table">
                                     <div class="dr-row">
-                                        <div class="dr-label">Name of Requestor</div>
+                                        <div class="dr-label">Submitted By</div>
                                         <div class="dr-value"><div class="dr-readonly"><%= user.name %></div></div>
                                     </div>
                                     <div class="dr-row">
-                                        <div class="dr-label">Office / College / Institution</div>
+                                        <div class="dr-label">Office / College / Institution <span class="text-danger ms-1">*</span></div>
                                         <div class="dr-value">
                                             <input type="text" class="form-control" id="dr-f-inst" placeholder="Enter your organization...">
                                             <small class="text-muted d-none mt-1" id="dr-inst-autofill-hint">Auto-filled from your profile</small>
@@ -294,34 +291,17 @@
                                         <div class="dr-label">Date / Time</div>
                                         <div class="dr-value"><div class="dr-readonly" id="dr-datetime-display">—</div></div>
                                     </div>
-                                    <div class="dr-row">
-                                        <div class="dr-label">Contact No.</div>
-                                        <div class="dr-value"><input type="text" class="form-control" id="dr-f-contact" placeholder="e.g. 0917-000-0000"></div>
-                                    </div>
                                     <div class="dr-row dr-row-tall">
-                                        <div class="dr-label">Document(s) Requested <span class="text-danger">*</span></div>
+                                        <div class="dr-label">Notes</div>
                                         <div class="dr-value" style="display:block">
-                                            <div class="doc-combo" id="dr-f-type-combo">
-                                                <div class="doc-combo-chips" id="dr-f-type-chips"></div>
-                                                <div class="doc-combo-input-wrap">
-                                                    <input type="text" class="form-control" id="dr-f-type-input" placeholder="Type or search document..." autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
-                                                    <div class="doc-combo-dropdown" id="dr-f-type-dropdown" role="listbox" style="display:none"></div>
-                                                </div>
-                                            </div>
-                                            <small class="text-muted d-block mt-2">Pick a suggestion or type any custom document name, then press Enter or select it to add. You can add multiple.</small>
+                                            <textarea class="form-control" id="dr-f-notes" rows="5" maxlength="2000" placeholder="Add notes about the MOA/MOU you are submitting..."></textarea>
                                         </div>
                                     </div>
                                     <div class="dr-row dr-row-tall">
-                                        <div class="dr-label">Purpose</div>
+                                        <div class="dr-label">File / Image <span class="text-muted fw-normal ms-1">(optional)</span></div>
                                         <div class="dr-value" style="display:block">
-                                            <textarea class="form-control" id="dr-f-notes" rows="4" placeholder="Describe what's needed and why..."></textarea>
-                                        </div>
-                                    </div>
-                                    <div class="dr-row">
-                                        <div class="dr-label">Document Form</div>
-                                        <div class="dr-value dr-radio-group">
-                                            <label class="dr-radio"><input type="radio" name="dr-f-form" value="Printed Copy"> Printed Copy</label>
-                                            <label class="dr-radio"><input type="radio" name="dr-f-form" value="Digital Copy"> Digital Copy</label>
+                                            <input type="file" class="form-control" id="dr-f-file" accept=".pdf,.jpg,.jpeg,.png">
+                                            <small class="text-muted d-block mt-2">PDF, JPG, JPEG or PNG — max 10MB. You can submit notes only, a file/image only, or both.</small>
                                         </div>
                                     </div>
                                     <div class="dr-row">
@@ -331,14 +311,14 @@
                                 </div>
                                 <div class="d-flex justify-content-end gap-2 mt-4">
                                     <button type="button" class="btn btn-light px-4" onclick="resetDocRequestForm()">Clear</button>
-                                    <button type="button" class="btn btn-success px-5 fw-bold" id="dr-submit-btn" onclick="submitDocRequest()">
-                                        Submit Request
+                                    <button type="button" class="btn btn-success px-5 fw-bold" id="dr-submit-btn" onclick="submitMoaMou()">
+                                        Submit
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
-                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/partner/monitoring">Monitoring</a> page.</p>
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Your submission is sent to CSPC-CIRL for review.</p>
                 </div>
 
             </div>
@@ -449,26 +429,6 @@
             notes: document.getElementById('f-notes').value.trim(),
             attachmentLink: (ocrExtractedResult && ocrExtractedResult.fileLink) || undefined
         };
-    }
-
-    function saveDraft() {
-        var payload = collectFormData();
-        if (editingId) {
-            fetch('/api/requests/' + editingId + '/edit', {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            }).then(function (r) { return r.json(); }).then(function (data) {
-                if (data.success) { showToast('Draft updated.'); loadHistory(); }
-                else showToast(data.error || 'Failed to update draft.');
-            });
-        } else {
-            payload.isDraft = true;
-            fetch('/api/requests', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            }).then(function (r) { return r.json(); }).then(function (data) {
-                if (data.success) { showToast('Saved as draft.'); editingId = data.request.id; loadHistory(); }
-                else showToast(data.error || 'Failed to save draft.');
-            });
-        }
     }
 
     function submitRequest() {
@@ -641,11 +601,10 @@
     }
 
     /* ═══════════════════════════════════════════════════
-       DOCUMENT REQUEST (reused verbatim from the previous
-       standalone partner_document_requests.ejs — same
-       /api/document-requests endpoints — with `dr-` prefixed
+       SUBMISSION OF MOA/MOU (was the Document Request form) —
+       same /api/document-requests endpoints, with `dr-` prefixed
        ids/function names so it can coexist on the same page
-       as the Partnership Request form above)
+       as the Partnership Request form above
        ═══════════════════════════════════════════════════ */
     var drAutoInst = ''; // organization pulled from the partner's saved profile, if any
 
@@ -675,159 +634,83 @@
         });
     }
 
-    var DOC_TYPE_SUGGESTIONS = [
-        'Compliance requirements for international linkages and consortia (MAN)',
-        'Universitas Airlangga - MOA',
-        'MOUs',
-        'Photos/Docs - IMC Japan',
-        'Terminal Reports (International Activity); Year end report of activities',
-        'QS Star Rating result',
-        'Handbook or manual regarding student participation on internationalization',
-        'International Linkages; International students/faculty'
-    ];
-
-    /* Searchable multi-select combobox: predefined suggestions + free-text
-       custom entries, rendered as removable chips. Mounted on
-       #<prefix>-chips / #<prefix>-input / #<prefix>-dropdown. */
-    function createDocCombo(prefix) {
-        var selected = [];
-        var chips = document.getElementById(prefix + '-chips');
-        var input = document.getElementById(prefix + '-input');
-        var dropdown = document.getElementById(prefix + '-dropdown');
-
-        function renderChips() {
-            chips.innerHTML = selected.map(function (val, i) {
-                return '<span class="doc-chip"><span class="doc-chip-label">' + escapeHtml(val) + '</span>' +
-                    '<button type="button" data-i="' + i + '" aria-label="Remove">&times;</button></span>';
-            }).join('');
-            chips.querySelectorAll('button').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    selected.splice(parseInt(btn.getAttribute('data-i'), 10), 1);
-                    renderChips();
-                    input.classList.remove('is-invalid');
-                });
-            });
-        }
-
-        function closeDropdown() {
-            dropdown.style.display = 'none';
-            dropdown.innerHTML = '';
-            input.setAttribute('aria-expanded', 'false');
-        }
-
-        function addValue(raw) {
-            var val = (raw || '').trim();
-            if (!val) return;
-            var existingIdx = selected.findIndex(function (v) { return v.toLowerCase() === val.toLowerCase(); });
-            if (existingIdx !== -1) { input.value = ''; closeDropdown(); return; }
-            var canonical = DOC_TYPE_SUGGESTIONS.find(function (s) { return s.toLowerCase() === val.toLowerCase(); });
-            selected.push(canonical || val);
-            renderChips();
-            input.value = '';
-            input.classList.remove('is-invalid');
-            closeDropdown();
-            input.focus();
-        }
-
-        function openDropdown() {
-            var q = input.value.trim().toLowerCase();
-            var available = DOC_TYPE_SUGGESTIONS.filter(function (s) {
-                return !selected.some(function (v) { return v.toLowerCase() === s.toLowerCase(); });
-            });
-            var matches = q ? available.filter(function (s) { return s.toLowerCase().indexOf(q) !== -1; }) : available;
-            var exact = q && available.some(function (s) { return s.toLowerCase() === q; });
-
-            var html = matches.map(function (s) {
-                return '<div class="doc-combo-option" data-val="' + escapeHtml(s) + '">' + escapeHtml(s) + '</div>';
-            }).join('');
-            if (q && !exact) {
-                html += '<div class="doc-combo-option custom" data-val="' + escapeHtml(input.value.trim()) + '">' +
-                    '<i class="ri-add-line"></i> Add "' + escapeHtml(input.value.trim()) + '"' +
-                    '<span class="doc-combo-option-hint">Custom</span></div>';
-            }
-            if (!html) html = '<div class="doc-combo-empty">No matching suggestions — keep typing to add a custom document.</div>';
-            dropdown.innerHTML = html;
-            dropdown.style.display = 'block';
-            input.setAttribute('aria-expanded', 'true');
-            dropdown.querySelectorAll('.doc-combo-option').forEach(function (opt) {
-                opt.addEventListener('mousedown', function (e) {
-                    e.preventDefault();
-                    addValue(opt.getAttribute('data-val'));
-                });
-            });
-        }
-
-        input.addEventListener('focus', openDropdown);
-        input.addEventListener('input', openDropdown);
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (input.value.trim()) addValue(input.value);
-            } else if (e.key === 'Backspace' && !input.value && selected.length) {
-                selected.pop();
-                renderChips();
-            } else if (e.key === 'Escape') {
-                closeDropdown();
-            }
-        });
-        input.addEventListener('blur', function () { setTimeout(closeDropdown, 120); });
-
-        return {
-            getValues: function () { return selected.slice(); },
-            clear: function () { selected = []; renderChips(); input.value = ''; closeDropdown(); },
-            markInvalid: function () { input.classList.add('is-invalid'); }
-        };
-    }
-
-    var drFTypeCombo = createDocCombo('dr-f-type');
+    /* Submission Of MOA/MOU rides on the EXISTING Document Request endpoints — no new backend:
+         POST /api/document-requests              creates the submission (institution + notes) and notifies the reviewers
+         POST /api/document-requests/:id/documents attaches the file/image through the normal secure upload +
+                                                   Document Library archive. That route only requires a file OR a
+                                                   note, so the file is genuinely optional.
+       Accepted: notes only, a file/image only, or both. */
+    var MOA_MOU_TYPE = 'MOA/MOU Submission';
+    var MOA_MAX_BYTES = 10 * 1024 * 1024;
+    var moaPendingId = null; // a submission that was created but whose file upload failed — Submit then retries ONLY the upload
 
     function resetDocRequestForm() {
         document.getElementById('dr-f-inst').value = drAutoInst;
-        drFTypeCombo.clear();
         document.getElementById('dr-f-notes').value = '';
-        document.getElementById('dr-f-contact').value = '';
-        document.querySelectorAll('input[name="dr-f-form"]').forEach(function (el) { el.checked = false; });
+        document.getElementById('dr-f-file').value = '';
+        moaPendingId = null;
+        document.querySelectorAll('#panel-dr .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
     }
 
-    function submitDocRequest() {
-        var inst = document.getElementById('dr-f-inst').value.trim();
-        var documentTypes = drFTypeCombo.getValues();
-        var notes = document.getElementById('dr-f-notes').value.trim();
-        var contactNumber = document.getElementById('dr-f-contact').value.trim();
-        var documentFormEl = document.querySelector('input[name="dr-f-form"]:checked');
-        var documentForm = documentFormEl ? documentFormEl.value : '';
+    function moaFileProblem(file) {
+        if (!file) return '';
+        if (file.size > MOA_MAX_BYTES) return 'That file is too large. The maximum size is 10MB.';
+        if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) return 'Only PDF, JPG, JPEG or PNG files are accepted.';
+        return '';
+    }
 
-        if (!inst || documentTypes.length === 0) {
-            showToast('Please fill in all required fields.');
-            if (!inst) document.getElementById('dr-f-inst').classList.add('is-invalid');
-            if (documentTypes.length === 0) drFTypeCombo.markInvalid();
-            return;
-        }
+    function submitMoaMou() {
+        var inst = document.getElementById('dr-f-inst').value.trim();
+        var notes = document.getElementById('dr-f-notes').value.trim();
+        var fileEl = document.getElementById('dr-f-file');
+        var file = fileEl.files[0] || null;
+
         document.querySelectorAll('#panel-dr .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        if (!inst) { showToast('Please enter your office / college / institution.'); document.getElementById('dr-f-inst').classList.add('is-invalid'); return; }
+        if (!notes && !file && !moaPendingId) { showToast('Add a note, attach a file or image, or both.'); return; }
+        var problem = moaFileProblem(file);
+        if (problem) { showToast(problem); fileEl.classList.add('is-invalid'); return; }
 
         var btn = document.getElementById('dr-submit-btn');
         var orig = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<i class="ri-loader-4-line me-2"></i>Submitting...';
 
-        fetch('/api/document-requests', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ institution: inst, documentTypes: documentTypes, notes: notes, contactNumber: contactNumber, documentForm: documentForm })
-        }).then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-        .then(function (result) {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            if (result.ok && result.data.success) {
-                showToast('Document request submitted!');
-                resetDocRequestForm();
-            } else {
-                showToast(result.data.error || 'Error submitting request.');
-            }
+        var create = moaPendingId
+            ? Promise.resolve(moaPendingId)
+            : fetch('/api/document-requests', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ institution: inst, documentTypes: [MOA_MOU_TYPE], notes: notes })
+            }).then(function (res) {
+                return res.json().then(function (data) {
+                    if (!res.ok || !data.success) throw new Error(data.error || 'Error submitting.');
+                    return data.request.id;
+                });
+            });
+
+        create.then(function (id) {
+            if (!file) return id; // notes only — nothing to upload
+            var fd = new FormData();
+            fd.append('document', file);
+            return fetch('/api/document-requests/' + id + '/documents', { method: 'POST', body: fd }).then(function (res) {
+                return res.json().catch(function () { return {}; }).then(function (data) {
+                    if (!res.ok) { var err = new Error(data.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
+                    return id;
+                });
+            });
+        }).then(function () {
+            showToast('Submission sent to CSPC-CIRL!');
+            resetDocRequestForm();
         }).catch(function (e) {
-            console.error(e);
+            if (e && e.uploadStep) {
+                moaPendingId = e.requestId;
+                showToast('Your notes were received, but the file could not be uploaded: ' + e.message + ' Click Submit to try the file again.');
+            } else {
+                showToast((e && e.message) || 'Error submitting.');
+            }
+        }).then(function () {
             btn.disabled = false;
             btn.innerHTML = orig;
-            showToast('Error submitting request.');
         });
     }
 

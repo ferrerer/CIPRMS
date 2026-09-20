@@ -473,33 +473,6 @@ describe('Finding #7 — logout is POST-only', () => {
   });
 });
 
-describe('Follow-up sweep — Auth. Personnel dashboard no longer ships hardcoded demo data (type chart)', () => {
-  test('the rendered page contains no hardcoded expiring-partnership rows or table, and the type chart is data-driven', async () => {
-    const personnel = await createTestUser({ role: 'Auth. Personnel' });
-    const agent = request.agent(app);
-    await loginAs(agent, personnel);
-    const res = await agent.get('/personnel/dashboard');
-    expect(res.status).toBe(200);
-    // These exact hardcoded table rows (institution + fixed expiry date) were
-    // the original hardcoded demo data this sweep found. Checking for the
-    // date pairing (not just the bare institution name) avoids a false
-    // positive against the still-untouched world map widget below, which
-    // legitimately reuses some of the same institution names in its own
-    // separate hardcoded marker array (a documented, deliberately
-    // out-of-scope item — see the final report).
-    expect(res.text).not.toContain('Jun 15, 2026');
-    expect(res.text).not.toContain('Jan 5, 2026');
-    // 2026-09-16 (commit afddb25): the "Expiring Partnerships" table itself
-    // was later removed from this dashboard entirely (a deliberate product
-    // decision, not a regression) — its data-driven tbody must no longer be
-    // present either.
-    expect(res.text).not.toContain('id="expiring-tbody"');
-    // The type/status chart's series used to be a hardcoded [32,19,37,9,5] —
-    // confirm the fetch-driven update call is present instead.
-    expect(res.text).toContain('typeChart.updateSeries');
-  });
-});
-
 describe('Finding #8 — secure cookie default', () => {
   // A NODE_ENV-based boolean was tried first and reverted after live
   // verification showed it breaks local HTTP development outright (see

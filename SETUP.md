@@ -18,7 +18,6 @@ views/
     sidebar_personnel.ejs  ← Velzon sidebar — Personnel role
     sidebar_viewonly.ejs   ← Velzon sidebar — View-only role
   admin_dashboard.ejs
-  personnel_dashboard.ejs
   viewonly_dashboard.ejs
   registry.ejs / personnel_registry.ejs
   requests.ejs / personnel_requests.ejs

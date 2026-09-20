@@ -4,8 +4,20 @@
             <div class="d-flex">
                 <!-- LOGO -->
     <div class="navbar-brand-box horizontal-logo">
-        <% var homeDashboard = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/dashboard' : user.role === 'Auth. Personnel' ? '/personnel/dashboard' : user.role === 'potential_partner' ? '/partner/dashboard' : '/staff/dashboard') : '/'; %>
+        <% var homeDashboard = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/dashboard' : user.role === 'Auth. Personnel' ? '/personnel/monitoring' : user.role === 'potential_partner' ? '/partner/monitoring' : '/staff/dashboard') : '/'; %>
         <% var notificationsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Auth. Personnel' ? '/personnel/notifications' : user.role === 'potential_partner' ? '/partner/notifications' : user.role === 'Staff' ? '/staff/notifications' : '/notifications') : '/notifications'; %>
+        <%
+            // College Staff (backend role "Auth. Personnel") and Potential Partner: no Search bar, and no link to the
+            // Notifications PAGE (that page is closed/removed for both). Their Notifications bell and Profile/user menu are
+            // the same as every other role's. Administrator and Staff keep the full header.
+            var isDeptUser = (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel');
+            var isPartnerUser = (typeof user !== 'undefined' && user && user.role === 'potential_partner');
+            var reducedHeader = isDeptUser || isPartnerUser;
+        %>
+        <% if (isPartnerUser) { %>
+        <%# Partner pages do not load ciprms-bridge.css, which is where the notification dropdown's overflow protection lives. %>
+        <link rel="stylesheet" href="/velzon/assets/css/header-notifications.css">
+        <% } %>
         <a href="<%= homeDashboard %>" class="logo logo-dark">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">
@@ -34,6 +46,7 @@
                     </span>
                 </button>
 
+<% if (!reducedHeader) { %>
                 <!-- App Search -->
                 <form class="app-search d-none d-md-block">
                     <div class="position-relative">
@@ -72,10 +85,12 @@
                         </div>
                     </div>
                 </form>
+<% } %>
             </div>
 
             <div class="d-flex align-items-center">
 
+<% if (!reducedHeader) { %>
                 <!-- Mobile Search -->
                 <div class="dropdown d-md-none topbar-head-dropdown header-item">
                     <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle" id="page-header-search-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Search">
@@ -93,6 +108,7 @@
                     </div>
                 </div>
 
+<% } %>
                 <!-- Fullscreen -->
                 <div class="ms-1 header-item d-none d-sm-flex">
                     <button type="button" class="btn btn-icon btn-topbar material-shadow-none btn-ghost-secondary rounded-circle" data-toggle="fullscreen" aria-label="Toggle fullscreen">
@@ -141,17 +157,21 @@
                                 <div class="notif-scroll pe-2" id="notif-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
+<% if (!reducedHeader) { %>
                                 <div class="my-3 text-center view-all">
                                     <a href="<%= notificationsHref %>" class="btn btn-soft-success waves-effect waves-light">View All Notifications <i class="ri-arrow-right-line align-middle"></i></a>
                                 </div>
+<% } %>
                             </div>
                             <div class="tab-pane fade py-2 ps-2" id="alerts-tab" role="tabpanel">
                                 <div class="notif-scroll pe-2" id="notif-alerts-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
+<% if (!reducedHeader) { %>
                                 <div class="my-2 text-center view-all">
                                     <a href="<%= notificationsHref %>" class="btn btn-soft-primary btn-sm">View Unread Notifications <i class="ri-arrow-right-line align-middle"></i></a>
                                 </div>
+<% } %>
                             </div>
                         </div>
                     </div>
@@ -164,7 +184,7 @@
                             <img class="rounded-circle header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
                             <span class="text-start ms-xl-2">
                                 <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text"><%= typeof user !== 'undefined' && user ? user.name || 'User' : 'User' %></span>
-                                <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : (user.role || '')) : '' %></span>
+                                <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : user.role === 'Auth. Personnel' ? 'College Staff' : user.role === 'Staff' ? 'CIRL Staff' : (user.role || '')) : '' %></span>
                             </span>
                         </span>
                     </button>
@@ -172,7 +192,9 @@
                         <h6 class="dropdown-header">Welcome!</h6>
                 <% var settingsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/admin/settings' : user.role === 'Auth. Personnel' ? '/personnel/settings' : user.role === 'potential_partner' ? '/partner/settings' : user.role === 'Staff' ? '/staff/settings' : '/') : '/'; %>
                 <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Profile</span></a>
+<% if (!reducedHeader) { %>
                 <a class="dropdown-item" href="<%= notificationsHref %>"><i class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Notifications</span></a>
+<% } %>
                 <div class="dropdown-divider"></div>
                 <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Settings</span></a>
                 <a class="dropdown-item" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Logout</span></a>

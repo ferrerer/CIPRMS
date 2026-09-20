@@ -1,0 +1,33 @@
+/* ── Header notification dropdown — overflow protection for Partner pages ─────────
+   views/partials/header.ejs renders the SAME notification dropdown for every
+   role, and its overflow protection (a capped, scrollable list and one-line
+   ellipsis titles/descriptions) has always lived in ciprms-bridge.css under
+   "Header notification dropdown (all roles)".
+
+   Administrator/Staff pages load ciprms-bridge.css themselves. The Partner
+   pages that remain (Requests, Monitoring, Calendar, Settings) do NOT — only
+   the Partner Dashboard and Notifications pages did, and both were removed —
+   and the bridge file restyles many unrelated components those pages were
+   never built against, so it is not pulled in wholesale. Instead header.ejs
+   links THIS file for Partners only. Keep the two blocks below identical to
+   the matching block in ciprms-bridge.css.
+
+   Without them the dropdown grows with notification count/length (no clipping,
+   no scrollbar) and one very long sentence stretches an item over several
+   lines, pushing every notification below it far down the page. */
+
+.notif-scroll {
+    max-height: 280px;
+    overflow-y: auto;
+}
+[data-bs-theme="dark"] .notif-scroll {
+    scrollbar-color: rgba(255,255,255,.25) transparent;
+}
+
+.notification-item .notif-title-line,
+.notification-item .notif-desc-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

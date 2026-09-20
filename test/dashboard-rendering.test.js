@@ -15,12 +15,10 @@ const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
 const { createTestUser, loginAs, cleanupAll } = require('./helpers');
 
-let db, agent;
+let db;
 
 beforeAll(async () => {
   db = await connectDB();
-  agent = request.agent(app);
-  await loginAs(agent, await createTestUser({ role: 'potential_partner' }));
 });
 
 afterAll(async () => {
@@ -28,19 +26,7 @@ afterAll(async () => {
   await closeDB();
 });
 
-describe('Potential Partner dashboard: "Top Partner Countries" widget', () => {
-  test('renders the live-data container the client-side script targets, not the old hardcoded placeholder block', async () => {
-    const res = await agent.get('/partner/dashboard');
-    expect(res.status).toBe(200);
-    // The real container renderTopCountries() writes into.
-    expect(res.text).toContain('id="top-countries-list"');
-    // This exact call signature (a literal `null` btn argument) only ever
-    // appeared in the removed hardcoded topPartners forEach block — the live
-    // JS renderer never emits an onclick handler for this widget at all, so
-    // its presence would mean the fake block has regressed back in.
-    expect(res.text).not.toContain('flyToContinent(null,');
-  });
-
+describe('Dashboard "Top Partner Countries" widget (the Potential Partner dashboard it was first fixed on has since been removed)', () => {
   test('Administrator dashboard\'s equivalent widget (the known-good reference implementation) is unaffected', async () => {
     const adminAgent = request.agent(app);
     await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));

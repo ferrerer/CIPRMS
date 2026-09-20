@@ -29,7 +29,7 @@
                             <h4 class="mb-sm-0">Calendar</h4>
                             <div class="page-title-right">
                                 <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                    <li class="breadcrumb-item"><a href="<%= (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel') ? '/personnel/monitoring' : '/dashboard' %>">CIPRMS</a></li>
                                     <li class="breadcrumb-item active">Calendar</li>
                                 </ol>
                             </div>
@@ -176,9 +176,9 @@
                                                     <optgroup label="Roles">
                                                         <option value="all">All Users</option>
                                                         <option value="Administrator">Administrators</option>
-                                                        <option value="Auth. Personnel">Auth. Personnel</option>
+                                                        <option value="Auth. Personnel">College Staff</option>
                                                         <option value="potential_partner">Partner</option>
-                                                        <option value="Staff">Staff Users</option>
+                                                        <option value="Staff">CIRL Staff</option>
                                                     </optgroup>
                                                     <optgroup label="Individual Users" id="f-recipients-individuals"></optgroup>
                                                 </select>

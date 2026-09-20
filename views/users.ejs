@@ -61,9 +61,9 @@
                                     <select class="form-select form-select-sm" id="usr-filter-role" style="width:180px;" onchange="renderUsers()">
                                         <option value="">All Roles</option>
                                         <option value="Administrator">Administrator</option>
-                                        <option value="Auth. Personnel">Auth. Personnel</option>
+                                        <option value="Auth. Personnel">College Staff</option>
                                         <option value="potential_partner">Partner</option>
-                                        <option value="Staff">Staff</option>
+                                        <option value="Staff">CIRL Staff</option>
                                     </select>
                                 </div>
                             </div>
@@ -95,7 +95,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h4 class="card-title mb-0"><i class="ri-lock-2-line me-2 text-primary"></i>Role Permissions Matrix (RBAC)</h4>
-                                <p class="text-muted fs-13 mb-0 mt-1">Reflects the actual route/page gating in <code>cirl.js</code> as of 2026-08-27 (Administrator/Staff full-parity revision) — re-audited feature by feature, not carried over from prior documentation.</p>
+                                <p class="text-muted fs-13 mb-0 mt-1">Reflects the actual route/page gating in <code>cirl.js</code> as of 2026-08-27 (Administrator/CIRL Staff full-parity revision) — re-audited feature by feature, not carried over from prior documentation.</p>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
@@ -104,9 +104,9 @@
                                             <tr>
                                                 <th>Feature</th>
                                                 <th class="text-center"><i class="ri-shield-star-line me-1"></i>Administrator</th>
-                                                <th class="text-center"><i class="ri-user-star-line me-1"></i>Auth. Personnel</th>
+                                                <th class="text-center"><i class="ri-user-star-line me-1"></i>College Staff</th>
                                                 <th class="text-center"><i class="ri-handshake-line me-1"></i>Partner</th>
-                                                <th class="text-center"><i class="ri-briefcase-line me-1"></i>Staff</th>
+                                                <th class="text-center"><i class="ri-briefcase-line me-1"></i>CIRL Staff</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -268,8 +268,8 @@
                             <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
                             <option value="Administrator">Administrator</option>
                             <% } %>
-                            <option value="Auth. Personnel" selected>Auth. Personnel</option>
-                            <option value="Staff">Staff</option>
+                            <option value="Auth. Personnel" selected>College Staff</option>
+                            <option value="Staff">CIRL Staff</option>
                             <option value="potential_partner">Partner</option>
                         </select>
                     </div>
@@ -341,8 +341,11 @@
   }
 
   // â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Label only — the stored/RBAC value stays 'Auth. Personnel' (option values, filters, API).
   function formatRole(role) {
     if (role === 'potential_partner') return 'Partner';
+    if (role === 'Auth. Personnel') return 'College Staff';
+    if (role === 'Staff') return 'CIRL Staff';
     return role || '';
   }
   function roleBadge(role) {

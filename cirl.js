@@ -249,6 +249,24 @@ function requirePersonnel(req, res, next) {
 }
 
 /**
+ * College Staff (backend role "Auth. Personnel") has a deliberately
+ * reduced UI: Monitoring, Requests (Document Requests only) and Calendar.
+ * This guard sits behind requirePersonnel on the pages that role does not
+ * get — the Notifications PAGE and Document Library — and bounces ONLY an
+ * Auth. Personnel session to its Monitoring home. (Settings/Profile and the
+ * header Notifications bell ARE available to this role; there is no Dashboard
+ * page at all — /personnel/dashboard is a plain redirect.)
+ * Administrator still passes (requirePersonnel admits both roles) and every
+ * shared API those pages call (notifications, profile, documents) is left
+ * untouched, since Administrator/Staff/potential_partner use them too.
+ */
+function denyDepartmentPage(req, res, next) {
+  const user = req.session && req.session.user;
+  if (user && user.role === 'Auth. Personnel') return res.redirect(homeForRole(user.role));
+  return next();
+}
+
+/**
  * Requires Administrator, Auth. Personnel, or potential_partner — the roles
  * allowed to submit/edit/withdraw their own Partnership or Document
  * Requests. Staff is intentionally excluded: as of 2026-08-27 Staff no
@@ -326,15 +344,36 @@ function requireStaffAccess(req, res, next) {
 // ── HELPER: role → home URL ───────────────────────────────────────────────────
 function homeForRole(role) {
   if (role === 'Administrator') return '/dashboard';
-  if (role === 'Auth. Personnel') return '/personnel/dashboard';
-  if (role === 'potential_partner') return '/partner/dashboard';
+  if (role === 'Auth. Personnel') return '/personnel/monitoring';
+  if (role === 'potential_partner') return '/partner/monitoring'; // Partner has no Dashboard — Monitoring is its home
   return '/staff/dashboard';
 }
 
 // ── HELPER: role → user-visible label ──────────────────────────────────────────
+// The stored / RBAC role VALUES never change — sessions, the users collection, every
+// permission check, API payloads, <option value="…"> and role filters keep "Staff",
+// "Auth. Personnel" and "potential_partner". Only what people SEE is renamed:
+//   Staff             → "CIRL Staff"
+//   Auth. Personnel   → "College Staff"   (shown earlier as "Department/Colleges")
+//   potential_partner → "Partner"
+const ROLE_LABELS = { 'Staff': 'CIRL Staff', 'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner' };
+const PREVIOUS_COLLEGE_STAFF_LABEL = 'Department/Colleges'; // stored in some audit text written between the two renames
+function displayRoleName(role) {
+  return Object.prototype.hasOwnProperty.call(ROLE_LABELS, role) ? ROLE_LABELS[role] : role;
+}
+// Free text that already embeds a role name — e.g. an audit-trail entry such as
+// "User created: X (Auth. Personnel)" or "User updated: X — role: Staff, status: …".
+// Display-time only: the stored text is never rewritten. Idempotent.
+function displayRoleText(text) {
+  if (typeof text !== 'string') return text;
+  return text
+    .split('Auth. Personnel').join(ROLE_LABELS['Auth. Personnel'])
+    .split(PREVIOUS_COLLEGE_STAFF_LABEL).join(ROLE_LABELS['Auth. Personnel'])
+    .replace(/\(Staff\)/g, '(' + ROLE_LABELS['Staff'] + ')')
+    .replace(/\brole: Staff\b/g, 'role: ' + ROLE_LABELS['Staff']);
+}
 function formatRole(role) {
-  if (role === 'potential_partner') return 'Partner';
-  return role || '';
+  return displayRoleName(role) || '';
 }
 
 // ── PUBLIC ROUTES ─────────────────────────────────────────────────────────────
@@ -4741,7 +4780,7 @@ app.get('/api/reports/activitylog/pdf', requireStaffAccess, async (req, res) => 
         { key: 'role', label: 'Role', width: 110 },
         { key: 'date', label: 'Date & Time', width: 120 }
       ],
-      rows: logs.map(l => ({ ...l, role: formatRole(l.role) }))
+      rows: logs.map(l => ({ ...l, role: formatRole(l.role), record: displayRoleText(l.record) }))
     });
   } catch (err) {
     console.error('❌ Activity log PDF export error:', err);
@@ -4802,7 +4841,7 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
     });
     const auditDataKeys = ['action', 'record', 'by', 'role', 'date'];
     logs.forEach((l, idx) => {
-      const row = sheet.addRow(auditDataKeys.map(k => k === 'role' ? formatRole(l[k]) : l[k]));
+      const row = sheet.addRow(auditDataKeys.map(k => k === 'role' ? formatRole(l[k]) : k === 'record' ? displayRoleText(l[k]) : l[k]));
       const fill = idx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
       row.eachCell({ includeEmpty: true }, cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -4880,7 +4919,7 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
       return res.status(400).json({ error: 'Invalid role.' });
     }
     if (req.session.user.role === 'Staff' && role === 'Administrator') {
-      return res.status(403).json({ error: 'Staff cannot create Administrator accounts.' });
+      return res.status(403).json({ error: 'CIRL Staff cannot create Administrator accounts.' });
     }
     const status = req.body.status || 'Active';
     if (!VALID_USER_STATUSES.includes(status)) {
@@ -4953,10 +4992,10 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     if (req.session.user.role === 'Staff') {
       const target = await db.collection('users').findOne({ id });
       if (target && target.role === 'Administrator') {
-        return res.status(403).json({ error: 'Staff cannot modify Administrator accounts.' });
+        return res.status(403).json({ error: 'CIRL Staff cannot modify Administrator accounts.' });
       }
       if (updateData.role === 'Administrator') {
-        return res.status(403).json({ error: 'Staff cannot grant the Administrator role.' });
+        return res.status(403).json({ error: 'CIRL Staff cannot grant the Administrator role.' });
       }
     }
 
@@ -5041,7 +5080,7 @@ app.delete('/api/users/:id', requireStaffAccess, async (req, res) => {
     // Privilege-escalation boundary: Staff can never delete an Administrator
     // account, regardless of how many Administrators remain.
     if (target && target.role === 'Administrator' && req.session.user.role === 'Staff') {
-      return res.status(403).json({ error: 'Staff cannot delete Administrator accounts.' });
+      return res.status(403).json({ error: 'CIRL Staff cannot delete Administrator accounts.' });
     }
     if (target && target.role === 'Administrator') {
       const adminCount = await db.collection('users').countDocuments({ role: 'Administrator' });
@@ -6310,12 +6349,18 @@ app.get('/admin/settings', requireAdmin, (req, res) => {
 });
 
 // ── AUTH. PERSONNEL ROUTES ────────────────────────────────────────────────────
+// College Staff (stored role "Auth. Personnel") sees Monitoring, Requests, Calendar and Settings/Profile
+// (plus the header Notifications bell). It has NO Dashboard page (the
+// personnel_dashboard view was deliberately removed), and the Notifications
+// PAGE and Document Library below are closed to that role via
+// denyDepartmentPage (see its definition above).
+//
+// /personnel/dashboard is kept ONLY as a safe redirect so an old bookmark or
+// link can never hit a missing view (500): Auth. Personnel lands on its
+// Monitoring home; Administrator (also admitted by requirePersonnel) goes to
+// its own dashboard. Nothing renders here.
 app.get('/personnel/dashboard', requirePersonnel, (req, res) => {
-  res.render('auth. personnel/personnel_dashboard', {
-    activePage: 'dashboard',
-    sidebarPartial: 'sidebar_personnel',
-    user: req.session.user
-  });
+  res.redirect(homeForRole(req.session.user.role));
 });
 
 app.get('/personnel/requests', requirePersonnel, (req, res) => {
@@ -6353,7 +6398,7 @@ app.get('/personnel/calendar', requirePersonnel, (req, res) => {
   });
 });
 
-app.get('/personnel/notifications', requirePersonnel, (req, res) => {
+app.get('/personnel/notifications', requirePersonnel, denyDepartmentPage, (req, res) => {
   res.render('administrator/notifications', {
     activePage: 'notifications',
     sidebarPartial: 'sidebar_personnel',
@@ -6361,7 +6406,7 @@ app.get('/personnel/notifications', requirePersonnel, (req, res) => {
   });
 });
 
-app.get('/personnel/documents', requirePersonnel, (req, res) => {
+app.get('/personnel/documents', requirePersonnel, denyDepartmentPage, (req, res) => {
   res.render('administrator/documents', {
     activePage: 'documents',
     sidebarPartial: 'sidebar_personnel',
@@ -6506,23 +6551,20 @@ app.get('/staff/settings', requireStaffAccess, (req, res) => {
 
 // ── POTENTIAL PARTNER ROUTES ──────────────────────────────────────────────────
 // External organizations applying for / managing an official partnership with CSPC.
-app.get('/partner', requirePartner, (req, res) => res.redirect('/partner/dashboard'));
-
-app.get('/partner/dashboard', requirePartner, (req, res) => {
-  res.render('potential_partner/partner_dashboard', {
-    activePage: 'dashboard', sidebarPartial: 'sidebar_partner', user: req.session.user
-  });
-});
+// Partner has NO Dashboard, Document Library or Notifications page (removed from
+// its UI; the header Notifications bell remains). Requests, Monitoring, Calendar
+// and Settings are what's left, and Monitoring is the landing page (homeForRole).
+// The three removed URLs are kept ONLY as safe redirects so an old bookmark or
+// notification link can never 404/500. The shared notification system, its APIs
+// and the document APIs are untouched — Administrator/Staff/Department use them.
+app.get('/partner', requirePartner, (req, res) => res.redirect(homeForRole(req.session.user.role)));
+for (const removedPartnerPage of ['/partner/dashboard', '/partner/documents', '/partner/notifications']) {
+  app.get(removedPartnerPage, requirePartner, (req, res) => res.redirect(homeForRole(req.session.user.role)));
+}
 
 app.get('/partner/requests', requirePartner, (req, res) => {
   res.render('potential_partner/partner_requests', {
     activePage: 'requests', sidebarPartial: 'sidebar_partner', user: req.session.user
-  });
-});
-
-app.get('/partner/documents', requirePartner, (req, res) => {
-  res.render('potential_partner/partner_documents', {
-    activePage: 'documents', sidebarPartial: 'sidebar_partner', user: req.session.user
   });
 });
 
@@ -6535,12 +6577,6 @@ app.get('/partner/calendar', requirePartner, (req, res) => {
 app.get('/partner/monitoring', requirePartner, (req, res) => {
   res.render('potential_partner/partner_monitoring', {
     activePage: 'monitoring', sidebarPartial: 'sidebar_partner', user: req.session.user
-  });
-});
-
-app.get('/partner/notifications', requirePartner, (req, res) => {
-  res.render('potential_partner/partner_notifications', {
-    activePage: 'notifications', sidebarPartial: 'sidebar_partner', user: req.session.user
   });
 });
 

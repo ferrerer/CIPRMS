@@ -577,9 +577,9 @@
                                                         <select id="audit-filter-role" class="form-select form-select-sm" onchange="applyAuditFilters()">
                                                             <option value="">All Roles</option>
                                                             <option value="Administrator">Administrator</option>
-                                                            <option value="Auth. Personnel">Auth. Personnel</option>
+                                                            <option value="Auth. Personnel">College Staff</option>
                                                             <option value="potential_partner">Partner</option>
-                                                            <option value="Staff">Staff</option>
+                                                            <option value="Staff">CIRL Staff</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-md-2">
@@ -728,9 +728,23 @@
             'potential_partner': 'bg-success-subtle text-success',
             'Staff': 'bg-secondary-subtle text-secondary'
         };
+        // Labels only — the stored/RBAC value stays 'Auth. Personnel' (roleBadge keys, the role filter, API).
         function formatRole(role) {
             if (role === 'potential_partner') return 'Partner';
+            if (role === 'Auth. Personnel') return 'College Staff';
+            if (role === 'Staff') return 'CIRL Staff';
             return role || '';
+        }
+        // Audit entries embed a role name in their free-text details ("User created: X (Auth. Personnel)",
+        // "User updated: X — role: Staff, …"), including entries written before either rename. Translate for
+        // display only; stored text is unchanged. Keep in step with displayRoleText() in cirl.js.
+        function displayRoleText(text) {
+            if (typeof text !== 'string') return text;
+            return text
+                .split('Auth. Personnel').join('College Staff')
+                .split('Department/Colleges').join('College Staff')
+                .replace(/\(Staff\)/g, '(CIRL Staff)')
+                .replace(/\brole: Staff\b/g, 'role: CIRL Staff');
         }
         const roleLabel = {
             'potential_partner': 'Partner'
@@ -774,7 +788,7 @@
                     { name: 'Role', formatter: (cell) => gridjs.html(`<span class="badge ${roleBadge[cell] || 'bg-secondary-subtle text-secondary'}">${formatRole(cell)}</span>`) },
                     { name: 'Date & Time' }
                 ],
-                data: logs.map((a, i) => [i + 1, a.action, a.record, a.by, a.role, a.date]),
+                data: logs.map((a, i) => [i + 1, a.action, displayRoleText(a.record), a.by, a.role, a.date]),
                 search: true,
                 pagination: { limit: 15 },
                 sort: true,

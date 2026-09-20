@@ -27,7 +27,7 @@
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
                       <div class="page-title-right">
                         <ol class="breadcrumb m-0">
-                          <li class="breadcrumb-item"><a href="/personnel/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Monitoring</li>
                         </ol>
                       </div>
@@ -40,11 +40,11 @@
                      the matching section below. -->
                 <div class="row">
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate" style="cursor:pointer" onclick="goToTotal()" role="button" title="Go to your requests">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToTotal()" role="button" title="Go to your document requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
-                                        <p class="fw-medium text-muted mb-0">Total Requests</p>
+                                        <p class="fw-medium text-muted mb-0">Total Document Requests</p>
                                         <h2 class="mt-4 ff-secondary fw-semibold"><span class="counter-value" id="cnt-total">0</span></h2>
                                         <p class="mb-0 text-muted"><span class="badge bg-primary-subtle text-primary mb-0"><i class="ri-file-list-3-line align-middle"></i> Submitted</span></p>
                                     </div>
@@ -56,7 +56,7 @@
                         </div>
                     </div>
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate" style="cursor:pointer" onclick="goToInProgress()" role="button" title="Go to your in-progress requests">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToInProgress()" role="button" title="Go to your in-progress document requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -72,7 +72,7 @@
                         </div>
                     </div>
                     <div class="col-xl-3 col-md-6">
-                        <div class="card card-animate" style="cursor:pointer" onclick="goToApproved()" role="button" title="Go to your approved requests">
+                        <div class="card card-animate" style="cursor:pointer" onclick="goToApproved()" role="button" title="Go to your approved document requests">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between">
                                     <div>
@@ -105,34 +105,6 @@
                     </div>
                 </div>
                 <!-- end stat cards -->
-
-                <!-- My Partnership Requests (includes Renewal requests, distinguished by Request Type) -->
-                <div class="row">
-                    <div class="col-xl-12">
-                        <div class="card">
-                            <div class="card-header d-flex align-items-center">
-                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-list-3-line me-2"></i>My Partnership Requests</h4>
-                                <a href="/personnel/requests" class="btn btn-soft-primary btn-sm"><i class="ri-add-line me-1"></i>New Request</a>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-hover align-middle mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>Request #</th><th>Institution</th><th>Request Type</th><th>Status</th>
-                                                <th>Date Submitted</th><th>Last Updated</th><th>Current Stage</th>
-                                                <th>Administrator</th><th>Remarks</th><th class="text-end">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="pr-monitor-body">
-                                            <tr><td colspan="10" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- My Document Requests -->
                 <div class="row">
@@ -203,69 +175,6 @@
                     </div>
                 </div>
 
-            </div>
-        </div>
-
-        <!-- Partnership Request Details Modal -->
-        <div class="modal fade" id="pr-detail-modal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="ri-building-4-line me-2 text-primary"></i>Partnership Request Details</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row g-3">
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Request #</label><div class="fw-bold fs-13" id="prd-id">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Request Type</label><div class="fw-bold fs-13" id="prd-type">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Institution</label><div class="fw-bold fs-13" id="prd-inst">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Status</label><div id="prd-status">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Date Submitted</label><div class="fw-bold fs-13" id="prd-date">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Last Updated</label><div class="fw-bold fs-13" id="prd-updated">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Current Stage</label><div class="fw-bold fs-13" id="prd-stage">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Administrator</label><div class="fw-bold fs-13" id="prd-admin">—</div></div>
-                            <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Remarks / Notes</label><div class="text-muted fs-13" id="prd-notes">—</div></div>
-                            <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Attached Documents</label><div id="prd-docs">—</div></div>
-                        </div>
-                    </div>
-                    <div class="modal-footer" id="prd-footer">
-                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Draft Collaboration Modal -->
-        <div class="modal fade" id="pr-draft-modal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="pr-draft-modal-title"><i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="pr-draft-timeline" class="mb-3"></div>
-                        <div id="pr-draft-upload-wrap" class="border-top pt-3">
-                            <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
-                            <div class="mb-2">
-                                <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
-                            </div>
-                            <div class="mb-2">
-                                <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
-                            </div>
-                            <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
-                                <i class="ri-upload-2-line me-1"></i>Upload
-                            </button>
-                            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. CIRL is notified of your revision.</small>
-                        </div>
-                        <div id="pr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
-                            <i class="ri-lock-line me-1"></i>This request has already been decided — no further documents can be added.
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -474,15 +383,6 @@
         return 'bg-warning-subtle text-warning'; // Pending / Received and any other undecided state
     }
 
-    // "Current Stage" is a human-readable phase name derived from the same
-    // `status` field the Status column already shows — not a separate piece
-    // of backend state — so the two columns never disagree. Identical to the
-    // potential_partner Monitoring page.
-    var PR_STAGE_LABEL = {
-        'Draft': 'Draft — Not Submitted', 'Pending': 'Awaiting Review',
-        'Under Review': 'Under Review by CIRL', 'Approved': 'Approved',
-        'Rejected': 'Rejected', 'Withdrawn': 'Withdrawn'
-    };
     // Document Request workflow (2026-09-04): a 6-stage pipeline
     // (Received/Preparing/Awaiting for Approval/Approved/Release/Completed)
     // plus a separate Rejected outcome. Keyed off each request's
@@ -532,27 +432,21 @@
         return isNaN(d) ? (fallback || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
-    // Attached Documents = the submitter's own OCR-attached file (Partnership
-    // Requests only) plus any supporting documents CIRL staff uploaded during
-    // review — both are already-archived Document Library entries.
-    // Used by the "View Details" modal's own docs list (2026-09-09: no
-    // longer duplicated as a table column — the table already links to this
-    // same detail view, so this is the one place it's shown). Reuses the
-    // "View Draft" collaboration timeline's item builders
-    // (buildDraftTimelineItems for Partnership Requests,
-    // buildDRDraftTimelineItems for Document Requests, defined further down
-    // this file) so every file gets the same real Preview (via the shared
-    // draft-preview-modal) and Download (original filename preserved)
-    // actions, not just a single bare icon-link. Items are cached under a
-    // key unique to this request (not the shared 'pr'/'dr' slot the draft
-    // modal uses) since the Partnership/Document Request detail modals for
-    // different rows can be opened one after another without colliding.
+    // Attached Documents = any supporting documents CIRL staff uploaded while
+    // processing a Document Request (already-archived Document Library
+    // entries). Used by the "View Details" modal's own docs list. Reuses the
+    // "View Draft" collaboration timeline's item builder
+    // (buildDRDraftTimelineItems, defined further down this file) so every
+    // file gets the same real Preview (via the shared draft-preview-modal)
+    // and Download (original filename preserved) actions, not just a single
+    // bare icon-link. Items are cached under a key unique to this request
+    // (not the shared 'dr' slot the draft modal uses) since the detail modals
+    // for different rows can be opened one after another without colliding.
     function renderAttachedDocs(r) {
-        var isDR = typeof r.documentType !== 'undefined';
-        var allItems = isDR ? buildDRDraftTimelineItems(r) : buildDraftTimelineItems(r);
+        var allItems = buildDRDraftTimelineItems(r);
         var items = allItems.filter(function (it) { return it.link; });
         if (!items.length) return '<span class="text-muted fs-12">—</span>';
-        var key = 'attach-' + (isDR ? 'dr' : 'pr') + '-' + r.id;
+        var key = 'attach-dr-' + r.id;
         DRAFT_TIMELINE_ITEMS[key] = items;
         return items.map(function (it, idx) {
             var kind = fileKind(it.filename, it.fileType);
@@ -572,14 +466,14 @@
         if (el) el.textContent = n;
     }
 
-    /* ─── DRAFT / DOCUMENT COLLABORATION (own requests only — the request's
-       own submittedByEmail is the ownership boundary, enforced server-side
-       on POST /api/requests/:id/documents; myRequests itself is already
-       scoped to "mine" by GET /api/requests/mine, so there is no way to
-       reach another user's request id from this page). ─── */
+    /* ─── DOCUMENT COLLABORATION (own requests only — the request's own
+       submittedByEmail is the ownership boundary, enforced server-side on
+       POST /api/document-requests/:id/documents; myDocRequests itself is
+       already scoped to "mine" by GET /api/document-requests/mine, so there
+       is no way to reach another user's request id from this page). ─── */
     var ROLE_LABEL = {
-        'Administrator': 'Administrator', 'Staff': 'Staff',
-        'Auth. Personnel': 'Auth. Personnel', 'potential_partner': 'Partner',
+        'Administrator': 'Administrator', 'Staff': 'CIRL Staff',
+        'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner',
         'Requester': 'You'
     };
 
@@ -596,7 +490,7 @@
     }
 
     // Every draft/version gets its own dedicated "Draft Preview" modal
-    // (opened on top of the pr-draft-modal/dr-draft-modal that's already
+    // (opened on top of the dr-draft-modal that's already
     // showing) rather than an inline expand — same-screen, never navigates
     // away, and carries uploader/date/note context alongside the file.
     var DRAFT_TIMELINE_ITEMS = {};
@@ -630,7 +524,6 @@
             }
         });
     }
-    wireDraftModalReturn('pr-draft-modal', 'pr-detail-modal');
     wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal');
 
     function openDraftPreviewModal(prefix, idx) {
@@ -656,7 +549,7 @@
         downloadBtn.href = safeLink || '#';
         downloadBtn.setAttribute('download', item.filename);
 
-        var sourceEl = document.getElementById((prefix || 'pr') + '-draft-modal');
+        var sourceEl = document.getElementById((prefix || 'dr') + '-draft-modal');
         var sourceInstance = sourceEl && bootstrap.Modal.getInstance(sourceEl);
         draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
         if (sourceInstance) sourceInstance.hide();
@@ -683,7 +576,7 @@
         var kind = fileKind(item.filename, item.fileType);
         var sizeStr = fmtFileSize(item.fileSize);
         var previewBtn = (kind === 'pdf' || kind === 'image')
-            ? '<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal(\'' + (prefix || 'pr') + '\', ' + idx + ')"><i class="ri-eye-line me-1"></i>Preview</button>'
+            ? '<button type="button" class="btn btn-sm btn-soft-primary" onclick="openDraftPreviewModal(\'' + (prefix || 'dr') + '\', ' + idx + ')"><i class="ri-eye-line me-1"></i>Preview</button>'
             : '<span class="text-muted fs-12 align-self-center">Preview not available for this file type</span>';
         var safeItemLink = sanitizeUrl(item.link);
         var downloadBtnHtml = safeItemLink
@@ -697,41 +590,11 @@
             '</div></div>';
     }
 
-    function buildDraftTimelineItems(r) {
-        var items = [];
-        if (r.attachmentLink) {
-            items.push({
-                uploadedBy: r.requestedBy || 'You', role: 'Requester', when: r.date || '—',
-                filename: String(r.attachmentLink).split('/').pop(), link: r.attachmentLink,
-                note: 'Initial submission', fileType: '', fileSize: 0
-            });
-        }
-        (r.supportingDocuments || []).forEach(function (d) {
-            items.push({
-                uploadedBy: d.uploadedBy || 'Unknown', role: d.uploaderRole || 'Reviewer',
-                when: d.uploadedAt ? new Date(d.uploadedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—',
-                filename: d.originalFilename || 'Document', link: d.fileLink,
-                note: d.note || '', fileType: d.fileType, fileSize: d.fileSize
-            });
-        });
-        return items;
-    }
-
-    function renderDraftTimeline(r) {
-        var items = buildDraftTimelineItems(r);
-        DRAFT_TIMELINE_ITEMS.pr = items;
-        var wrap = document.getElementById('pr-draft-timeline');
-        wrap.innerHTML = items.length
-            ? items.map(function (it, idx) { return draftItemHtml(it, idx, 'pr'); }).join('')
-            : '<p class="text-muted fs-13 mb-0">No draft documents yet.</p>';
-    }
-
     /* ─── DOCUMENT REQUEST DRAFT / DOCUMENT COLLABORATION ───
-       Mirrors the Partnership Request draft timeline above, sharing every
-       helper (fileKind, fmtFileSize, togglePreview, draftItemHtml,
-       ROLE_LABEL) — only the data source (myDocRequests) and the synthetic
-       first entry ("Request submitted", since Document Requests have no
-       attachmentLink-style original file) differ. */
+       The item builder feeds the shared helpers (fileKind, fmtFileSize,
+       draftItemHtml, ROLE_LABEL). The first entry is synthetic ("Request
+       submitted") since Document Requests have no attachmentLink-style
+       original file. */
     function buildDRDraftTimelineItems(r) {
         var items = [{
             uploadedBy: r.requestedBy || 'You', role: 'Requester',
@@ -803,83 +666,7 @@
             .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
     }
 
-    var currentDraftPRId = null;
-    function openDraftModal(id) {
-        var r = myRequests.find(function (x) { return x.id === id; });
-        if (!r) return;
-        currentDraftPRId = id;
-        document.getElementById('pr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
-        renderDraftTimeline(r);
-        var closed = ['Approved', 'Rejected', 'Withdrawn'].indexOf(r.status) !== -1;
-        document.getElementById('pr-draft-upload-wrap').style.display = closed ? 'none' : '';
-        document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
-        document.getElementById('pr-draft-file').value = '';
-        document.getElementById('pr-draft-note').value = '';
-        var prDetailInstance = bootstrap.Modal.getInstance(document.getElementById('pr-detail-modal'));
-        if (prDetailInstance) { draftDetailReturnTo = 'pr-detail-modal'; prDetailInstance.hide(); }
-        new bootstrap.Modal(document.getElementById('pr-draft-modal')).show();
-    }
-
-    function uploadDraftDocument() {
-        var fileInput = document.getElementById('pr-draft-file');
-        var noteInput = document.getElementById('pr-draft-note');
-        var file = fileInput.files[0];
-        if (!file || !currentDraftPRId) { showToast('Choose a file first.', '#f06548'); return; }
-        var btn = document.getElementById('pr-draft-upload-btn');
-        var originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
-        var formData = new FormData();
-        formData.append('document', file);
-        formData.append('note', noteInput.value.trim());
-        fetch('/api/requests/' + currentDraftPRId + '/documents', { method: 'POST', body: formData })
-            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-            .then(function (result) {
-                if (!result.ok) throw new Error(result.data.error || 'Upload failed.');
-                var idx = myRequests.findIndex(function (x) { return x.id === currentDraftPRId; });
-                if (idx !== -1 && result.data.request) myRequests[idx] = result.data.request;
-                renderDraftTimeline(myRequests.find(function (x) { return x.id === currentDraftPRId; }));
-                renderPRTable();
-                fileInput.value = '';
-                noteInput.value = '';
-                showToast('New draft version uploaded.', '#0ab39c');
-            })
-            .catch(function (e) { showToast(e.message, '#f06548'); })
-            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
-    }
-
-    var myRequests = [];
     var myDocRequests = [];
-
-    function renderPRTable() {
-        var body = document.getElementById('pr-monitor-body');
-        if (!myRequests.length) {
-            body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
-            return;
-        }
-        body.innerHTML = myRequests.map(function (r) {
-            var actions = '<button class="btn btn-sm btn-soft-secondary me-1" onclick="openPRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line"></i></button>';
-            if (r.status !== 'Draft') {
-                actions += '<button class="btn btn-sm btn-soft-info me-1" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line"></i></button>';
-            }
-            if (r.status === 'Draft') {
-                actions += '<a href="/personnel/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>';
-            } else if (r.status === 'Pending' || r.status === 'Under Review') {
-                actions += '<button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ')" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
-            }
-            return '<tr data-pr-id="' + r.id + '">' +
-                '<td class="text-muted">#' + r.id + '</td>' +
-                '<td>' + (escapeHtml(r.institution) || '<span class="text-muted">(untitled draft)</span>') + '</td>' +
-                '<td>' + (r.isRenewal ? 'Renewal' : 'Partnership') + '</td>' +
-                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
-                '<td>' + (r.date || '—') + '</td>' +
-                '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
-                '<td>' + (PR_STAGE_LABEL[r.status] || r.status) + '</td>' +
-                '<td>' + (r.decidedBy || '—') + '</td>' +
-                '<td class="fs-12" style="max-width:220px;">' + renderExpandable(r.notes, 60) + '</td>' +
-                '<td class="text-end text-nowrap">' + actions + '</td></tr>';
-        }).join('');
-    }
 
     function renderDRTable() {
         var body = document.getElementById('dr-monitor-body');
@@ -889,14 +676,9 @@
         }
         body.innerHTML = myDocRequests.map(function (r) {
             var cs = r.canonicalStatus || r.status;
-            var actions =
-                '<button class="btn btn-sm btn-soft-secondary me-1" onclick="openDRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line"></i></button>' +
-                '<button class="btn btn-sm btn-soft-info me-1" onclick="openDRDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line"></i></button>' +
-                '<a href="/document-requests/' + r.id + '/print" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary me-1" title="Print"><i class="ri-printer-line"></i></a>' +
-                '<a href="/api/document-requests/' + r.id + '/pdf" class="btn btn-sm btn-soft-info me-1" title="Download PDF"><i class="ri-file-download-line"></i></a>' +
-                (cs === 'Received'
-                    ? '<button class="btn btn-sm btn-soft-danger" onclick="cancelDocRequest(' + r.id + ')" title="Cancel"><i class="ri-close-circle-line"></i></button>'
-                    : '');
+            // Requester-facing Actions: View Details only. Draft history, Print,
+            // PDF download and Cancel remain reachable from the details modal.
+            var actions = '<button class="btn btn-sm btn-soft-secondary" onclick="openDRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line me-1"></i>View Details</button>';
             return '<tr data-dr-id="' + r.id + '">' +
                 '<td class="text-muted">#' + r.id + '</td>' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
@@ -909,34 +691,6 @@
                 '<td class="fs-12" style="max-width:220px;">' + renderExpandable(r.remark, 60) + '</td>' +
                 '<td class="text-end text-nowrap">' + actions + '</td></tr>';
         }).join('');
-    }
-
-    function openPRDetail(id) {
-        var r = myRequests.find(function (x) { return x.id === id; });
-        if (!r) return;
-        document.getElementById('prd-id').textContent = '#' + r.id;
-        document.getElementById('prd-type').textContent = r.isRenewal ? 'Renewal' : 'Partnership';
-        document.getElementById('prd-inst').textContent = r.institution || '(untitled draft)';
-        document.getElementById('prd-status').innerHTML = '<span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span>';
-        document.getElementById('prd-date').textContent = r.date || '—';
-        document.getElementById('prd-updated').textContent = fmtWhen(r.updatedAt, r.date);
-        document.getElementById('prd-stage').textContent = PR_STAGE_LABEL[r.status] || r.status;
-        document.getElementById('prd-admin').textContent = r.decidedBy || '—';
-        document.getElementById('prd-notes').textContent = r.notes || '—';
-        document.getElementById('prd-docs').innerHTML = renderAttachedDocs(r);
-
-        var footer = '<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>';
-        if (r.status !== 'Draft') {
-            footer = '<button class="btn btn-soft-info" onclick="openDraftModal(' + r.id + ')"><i class="ri-file-list-3-line me-1"></i>View Draft</button>' + footer;
-        }
-        if (r.status === 'Draft') {
-            footer = '<a href="/personnel/requests" class="btn btn-primary"><i class="ri-edit-line me-1"></i>Continue Draft</a>' + footer;
-        } else if (r.status === 'Pending' || r.status === 'Under Review') {
-            footer = '<button class="btn btn-danger" onclick="withdrawRequest(' + r.id + ')"><i class="ri-close-circle-line me-1"></i>Withdraw</button>' + footer;
-        }
-        document.getElementById('prd-footer').innerHTML = footer;
-
-        new bootstrap.Modal(document.getElementById('pr-detail-modal')).show();
     }
 
     function openDRDetail(id) {
@@ -968,17 +722,6 @@
         new bootstrap.Modal(document.getElementById('dr-detail-modal')).show();
     }
 
-    function withdrawRequest(id) {
-        if (!confirm('Withdraw this partnership request?')) return;
-        fetch('/api/requests/' + id + '/withdraw', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) {
-                showToast('Request withdrawn.', '#15803d');
-                bootstrap.Modal.getInstance(document.getElementById('pr-detail-modal'))?.hide();
-                loadPRRequests();
-            } else showToast(data.error || 'Failed to withdraw request.', '#f06548');
-        });
-    }
-
     function cancelDocRequest(id) {
         if (!confirm('Cancel this document request?')) return;
         fetch('/api/document-requests/' + id, { method: 'DELETE' }).then(function (r) { return r.json(); }).then(function (data) {
@@ -990,35 +733,21 @@
         });
     }
 
-    // Stat cards + Approval Progress cover "your own submitted requests,
-    // documents, and partnership record" (see the page intro text above),
-    // so they need BOTH request types combined. loadPRRequests and
-    // loadDRRequests fetch independently, so this reads from whatever's
-    // currently in myRequests/myDocRequests and is called again after
-    // either finishes — it self-corrects once both have loaded, and still
-    // shows an accurate (if partial) count if only one has loaded so far.
-    function renderCombinedRequestStats() {
-        var real = myRequests.filter(function (r) { return r.status !== 'Draft'; });
-        var prInProgress = real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length;
-        var prApproved = real.filter(function (r) { return r.status === 'Approved'; }).length;
+    // Stat cards + Approval Progress track the requester's own Document
+    // Requests. (The Partnership Requests section is not shown on this page,
+    // so no partnership-request counts are mixed in.) Document requests use
+    // the 6-stage workflow (see DR_WORKFLOW_STATUSES above) — "Approved" and
+    // everything after it (Release, Completed) counts toward Approved, since
+    // the request was approved and just continues through fulfillment.
+    var DR_APPROVED_IDX = DR_WORKFLOW_STATUSES.indexOf('Approved');
+    function drWorkflowIdx(r) { return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status); }
+    function drIsInProgress(r) { var idx = drWorkflowIdx(r); return idx > -1 && idx < DR_APPROVED_IDX; }
+    function drIsApproved(r) { return drWorkflowIdx(r) >= DR_APPROVED_IDX; }
 
-        // Document requests use the 6-stage workflow (see DR_WORKFLOW_STATUSES
-        // above) rather than PR's Pending/Approved/Rejected — "Approved" and
-        // everything after it (Release, Completed) counts toward Approved
-        // here, since the request was approved and just continues through
-        // fulfillment.
-        var drApprovedIdx = DR_WORKFLOW_STATUSES.indexOf('Approved');
-        var drInProgress = myDocRequests.filter(function (r) {
-            var idx = DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status);
-            return idx > -1 && idx < drApprovedIdx;
-        }).length;
-        var drApproved = myDocRequests.filter(function (r) {
-            return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status) >= drApprovedIdx;
-        }).length;
-
-        var total = real.length + myDocRequests.length;
-        var inProgress = prInProgress + drInProgress;
-        var approved = prApproved + drApproved;
+    function renderRequestStats() {
+        var total = myDocRequests.length;
+        var inProgress = myDocRequests.filter(drIsInProgress).length;
+        var approved = myDocRequests.filter(drIsApproved).length;
 
         setCount('cnt-total', total);
         setCount('cnt-progress', inProgress);
@@ -1036,10 +765,9 @@
     }
 
     // Stat cards are clickable: each one jumps to and highlights the
-    // matching rows across BOTH the Partnership and Document request
-    // tables (Total/In Progress/Approved use the same status definitions
-    // as renderCombinedRequestStats above), or the Document Verification
-    // table for Documents on File.
+    // matching Document Request rows (Total/In Progress/Approved use the same
+    // status definitions as renderRequestStats above), or the Document
+    // Verification table for Documents on File.
     function highlightRows(rows) {
         if (!rows.length) return false;
         rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1048,12 +776,8 @@
         return true;
     }
 
-    function highlightRequestRows(prIds, drIds) {
+    function highlightRequestRows(drIds) {
         var rows = [];
-        prIds.forEach(function (id) {
-            var el = document.querySelector('#pr-monitor-body tr[data-pr-id="' + id + '"]');
-            if (el) rows.push(el);
-        });
         drIds.forEach(function (id) {
             var el = document.querySelector('#dr-monitor-body tr[data-dr-id="' + id + '"]');
             if (el) rows.push(el);
@@ -1062,32 +786,15 @@
     }
 
     function goToTotal() {
-        var prIds = myRequests.filter(function (r) { return r.status !== 'Draft'; }).map(function (r) { return r.id; });
-        var drIds = myDocRequests.map(function (r) { return r.id; });
-        if (!highlightRequestRows(prIds, drIds)) showToast('No requests yet.', '#405189');
+        if (!highlightRequestRows(myDocRequests.map(function (r) { return r.id; }))) showToast('No document requests yet.', '#405189');
     }
 
     function goToInProgress() {
-        var prIds = myRequests
-            .filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; })
-            .map(function (r) { return r.id; });
-        var drApprovedIdx = DR_WORKFLOW_STATUSES.indexOf('Approved');
-        var drIds = myDocRequests
-            .filter(function (r) {
-                var idx = DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status);
-                return idx > -1 && idx < drApprovedIdx;
-            })
-            .map(function (r) { return r.id; });
-        if (!highlightRequestRows(prIds, drIds)) showToast('No in-progress requests right now.', '#405189');
+        if (!highlightRequestRows(myDocRequests.filter(drIsInProgress).map(function (r) { return r.id; }))) showToast('No in-progress document requests right now.', '#405189');
     }
 
     function goToApproved() {
-        var prIds = myRequests.filter(function (r) { return r.status === 'Approved'; }).map(function (r) { return r.id; });
-        var drApprovedIdx = DR_WORKFLOW_STATUSES.indexOf('Approved');
-        var drIds = myDocRequests
-            .filter(function (r) { return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status) >= drApprovedIdx; })
-            .map(function (r) { return r.id; });
-        if (!highlightRequestRows(prIds, drIds)) showToast('No approved requests yet.', '#405189');
+        if (!highlightRequestRows(myDocRequests.filter(drIsApproved).map(function (r) { return r.id; }))) showToast('No approved document requests yet.', '#405189');
     }
 
     function goToDocuments() {
@@ -1095,39 +802,27 @@
         if (!highlightRows(rows)) showToast('No documents on file yet.', '#405189');
     }
 
-    function loadPRRequests() {
-        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
-            myRequests = Array.isArray(requests) ? requests : [];
-            renderPRTable();
-            renderCombinedRequestStats();
-            return openFromQuery();
-        }).catch(function () {
-            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
-            document.getElementById('approval-progress-body').innerHTML = '';
-        });
-    }
-
     function loadDRRequests() {
         return fetch('/api/document-requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
             myDocRequests = Array.isArray(requests) ? requests : [];
             renderDRTable();
-            renderCombinedRequestStats();
+            renderRequestStats();
             return openFromQuery();
         }).catch(function () {
             document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+            document.getElementById('approval-progress-body').innerHTML = '';
         });
     }
 
-    // Deep-link support so a notification ("Partnership Request Approved",
-    // "Document Request Fulfilled", etc.) can jump straight to and highlight
-    // the matching row — `type` disambiguates Partnership vs Document Request
-    // ids, which are not unique with respect to each other.
+    // Deep-link support so a notification ("Document Request Fulfilled", etc.)
+    // can jump straight to and highlight the matching row. Notification links
+    // for Partnership Requests (type=pr) have no table here anymore and are
+    // simply ignored.
     function openFromQuery() {
         var params = new URLSearchParams(window.location.search);
         var id = params.get('id');
-        var type = params.get('type');
-        if (!id || !type) return;
-        var row = document.querySelector('#' + (type === 'dr' ? 'dr' : 'pr') + '-monitor-body tr[data-' + (type === 'dr' ? 'dr' : 'pr') + '-id="' + id + '"]');
+        if (!id || params.get('type') !== 'dr') return;
+        var row = document.querySelector('#dr-monitor-body tr[data-dr-id="' + id + '"]');
         if (!row) return;
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('table-warning');
@@ -1152,7 +847,8 @@
 
     var myPartnerships = [];
 
-    Promise.all([
+    function loadRenewalStatus() {
+    return Promise.all([
         fetch('/api/partnerships/mine').then(function (r) { return r.json(); }),
         fetch('/api/requests/mine').then(function (r) { return r.json(); })
     ]).then(function (results) {
@@ -1187,6 +883,7 @@
     }).catch(function () {
         document.getElementById('renewal-status-body').innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
     });
+    }
 
     var renewalModal = null;
     var renewingPartnershipId = null;
@@ -1232,7 +929,7 @@
             btn.innerHTML = orig;
             if (res.ok && res.data.success) {
                 renewalModal.hide();
-                loadPRRequests();
+                loadRenewalStatus();
                 showToast('Renewal request submitted.', '#15803d');
             } else {
                 errBox.textContent = res.data.error || 'Failed to submit renewal request.';
@@ -1246,7 +943,7 @@
         });
     }
 
-    loadPRRequests();
+    loadRenewalStatus();
     loadDRRequests();
 </script>
 </body>
