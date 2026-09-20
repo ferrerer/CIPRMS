@@ -359,44 +359,83 @@
     clearTimeout(t._to); t._to = setTimeout(() => t.style.opacity = '0', 3500);
   }
 
-  // ── Google Calendar integration (2026-08-02) ──────────────────────────────
+  // ── Google Calendar integration (2026-08-02; connection details 2026-09-20) ──
+  function gcEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  const GC_FAILURE_REASONS = {
+    denied: 'Google Calendar access was not granted. Click Connect again and choose Allow.',
+    state: 'The connection attempt could not be verified (it expired or was opened in another window). Please try again.',
+    google_error: 'Google reported a problem during sign-in. Please try again.',
+    no_refresh_token: 'Google did not issue a long-lived authorization. Remove "CIPRMS" from your Google Account → Security → Third-party access, then connect again.',
+    redirect_uri: 'Google rejected the redirect address. Add the exact redirect URI shown below to the OAuth client in Google Cloud, then try again.',
+    client: 'Google rejected the OAuth client ID/secret configured for CIPRMS.',
+    not_configured: 'Google credentials are not configured on this server (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and GOOGLE_TOKEN_ENCRYPTION_KEY).',
+    exchange: 'Google would not complete the connection. Please try again; if it keeps failing, check the server log.'
+  };
+
+  function gcRedirectUriHelp(data) {
+    return `<div class="mt-3 fs-12 text-muted">
+        Redirect URI for this address (register it under <em>Google Cloud → APIs &amp; Services → Credentials → your OAuth client → Authorized redirect URIs</em>):
+        <div><code class="user-select-all">${gcEsc(data.redirectUri)}</code></div>
+      </div>`;
+  }
+
   function renderGoogleCalendarStatus(data) {
     const box = document.getElementById('gc-status-box');
     if (data.connected) {
-      // lastSyncOk === false means the most recent real sync attempt against
-      // Google failed (e.g. a revoked grant) — event creation still succeeds
-      // in CIPRMS regardless, but this is otherwise a silent failure, so
-      // surface it here rather than leaving the Administrator unaware.
+      // lastSyncOk === false means the most recent real attempt against Google
+      // failed (revoked grant, API not enabled, …) — event creation still succeeds
+      // in CIPRMS regardless, but this is otherwise a silent failure.
       const syncWarning = data.lastSyncOk === false
         ? `<div class="alert alert-warning py-2 px-3 mt-2 mb-0 fs-13">
              <i class="ri-error-warning-line align-middle me-1"></i>
-             Last sync attempt failed${data.lastSyncAt ? ' at ' + new Date(data.lastSyncAt).toLocaleString() : ''}: ${data.lastSyncError || 'Unknown error'}.
-             Try disconnecting and reconnecting.
+             Last Google attempt failed${data.lastSyncAt ? ' at ' + gcEsc(new Date(data.lastSyncAt).toLocaleString()) : ''}: ${gcEsc(data.lastSyncError || 'Unknown error')}
            </div>`
         : '';
+      const account = data.googleAccountEmail
+        ? `Google account: <strong>${gcEsc(data.googleAccountEmail)}</strong> <span class="text-muted fs-12">(invitations are sent from this account)</span>`
+        : `Google account: <span class="text-muted">not confirmed yet — use Check connection</span>`;
       box.innerHTML = `
-        <div class="alert alert-success d-flex align-items-center justify-content-between mb-0" role="alert">
-          <div>
-            <i class="ri-checkbox-circle-line align-middle me-1"></i>
-            Connected as <strong>${data.connectedByEmail}</strong>
-            <div class="fs-12 text-muted">since ${data.connectedAt ? new Date(data.connectedAt).toLocaleString() : '—'}</div>
+        <div class="alert alert-success mb-0" role="alert">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div>
+              <i class="ri-checkbox-circle-line align-middle me-1"></i>Connected
+              <div class="mt-1">${account}</div>
+              <div class="fs-12 text-muted mt-1">Connected by ${gcEsc(data.connectedByEmail)} on ${data.connectedAt ? gcEsc(new Date(data.connectedAt).toLocaleString()) : '—'}
+                · meeting times are sent as ${gcEsc(data.timeZone)}${data.calendarTimeZone ? ' (calendar time zone: ' + gcEsc(data.calendarTimeZone) + ')' : ''}
+                ${data.verifiedAt ? '· last checked ' + gcEsc(new Date(data.verifiedAt).toLocaleString()) : ''}</div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+              <button type="button" class="btn btn-sm btn-outline-primary" id="gc-verify-btn" onclick="verifyGoogleCalendar()"><i class="ri-refresh-line me-1"></i>Check connection</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="disconnectGoogleCalendar()"><i class="ri-link-unlink-m me-1"></i>Disconnect</button>
+            </div>
           </div>
-          <button type="button" class="btn btn-sm btn-outline-danger" onclick="disconnectGoogleCalendar()">
-            <i class="ri-link-unlink-m me-1"></i>Disconnect
-          </button>
         </div>
         ${syncWarning}`;
     } else {
       box.innerHTML = `
-        <a href="/api/google-calendar/connect" class="btn btn-primary">
+        ${data.configured ? '' : '<div class="alert alert-danger py-2 px-3 fs-13">Google credentials are not configured on this server, so Google Calendar cannot be connected.</div>'}
+        <a href="/api/google-calendar/connect" class="btn btn-primary${data.configured ? '' : ' disabled'}">
           <i class="ri-google-fill me-1"></i>Connect Google Calendar
-        </a>`;
+        </a>
+        <div class="fs-12 text-muted mt-2">Google will ask you to sign in and allow CIPRMS to <em>view and edit events on all your calendars</em>. Invitations are then e-mailed by Google Calendar from the account you choose.</div>
+        ${gcRedirectUriHelp(data)}`;
     }
   }
 
   function loadGoogleCalendarStatus() {
     fetch('/api/google-calendar/status').then(r => r.json()).then(renderGoogleCalendarStatus)
       .catch(() => { document.getElementById('gc-status-box').innerHTML = '<p class="text-danger fs-13">Failed to load status.</p>'; });
+  }
+
+  function verifyGoogleCalendar() {
+    const btn = document.getElementById('gc-verify-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…'; }
+    fetch('/api/google-calendar/verify', { method: 'POST' }).then(r => r.json()).then(data => {
+      if (data.success) showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Calendar connection is working.', '#0ab39c');
+      else showToast('<i class="ri-error-warning-line me-1"></i>' + gcEsc(data.error || 'Connection check failed.'), '#f06548');
+      loadGoogleCalendarStatus();
+    }).catch(() => { showToast('Could not run the check.', '#f06548'); loadGoogleCalendarStatus(); });
   }
 
   function disconnectGoogleCalendar() {
@@ -418,8 +457,9 @@
     document.querySelectorAll('.tab-content .tab-pane').forEach(el => el.classList.remove('active', 'show'));
     document.querySelector('a[href="#tab-integrations"]').classList.add('active');
     document.getElementById('tab-integrations').classList.add('active', 'show');
-    if (result === 'connected') showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Calendar connected!', '#0ab39c');
-    else showToast('<i class="ri-error-warning-line me-1"></i>Could not connect Google Calendar. Please try again.', '#f06548');
+    if (result === 'connected') showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Calendar connected and checked.', '#0ab39c');
+    else if (result === 'connected_unverified') showToast('<i class="ri-error-warning-line me-1"></i>Connected, but the first check failed — see the message below.', '#f7b84b');
+    else showToast('<i class="ri-error-warning-line me-1"></i>' + gcEsc(GC_FAILURE_REASONS[params.get('reason')] || 'Could not connect Google Calendar. Please try again.'), '#f06548');
     window.history.replaceState({}, '', window.location.pathname);
   })();
 

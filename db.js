@@ -89,6 +89,30 @@ async function connectDB() {
         console.error(`⚠️  Could not create id index on ${coll} — nextId lookups on this collection remain unindexed:`, indexErr.message);
       }
     }
+    // 2026-09-20 calendar duplicate-event protection. Two writes that race
+    // each other (a double-clicked Save, a retried request, two Administrators
+    // creating an event in the same instant) used to be able to insert two
+    // calendar events — the "next id" lookup above is read-then-insert, so both
+    // saw the same max id. A unique `id` makes the second insert fail (the
+    // route retries with a fresh id), and a unique `clientRequestId` (a token
+    // the browser generates once per Save/drop) makes a repeated request for
+    // the SAME action return the event it already created instead of a second
+    // one. The clientRequestId index is partial: pre-existing events carry no
+    // token and are not indexed. Verified free of duplicate ids beforehand;
+    // same non-fatal precedent as the indexes above.
+    try {
+      await db.collection('calendarevents').createIndex({ id: 1 }, { unique: true, name: 'id_unique' });
+    } catch (indexErr) {
+      console.error('⚠️  Could not create unique index on calendarevents.id — concurrent-create duplicate protection is NOT active:', indexErr.message);
+    }
+    try {
+      await db.collection('calendarevents').createIndex(
+        { clientRequestId: 1 },
+        { unique: true, name: 'clientRequestId_unique', partialFilterExpression: { clientRequestId: { $type: 'string' } } }
+      );
+    } catch (indexErr) {
+      console.error('⚠️  Could not create unique index on calendarevents.clientRequestId — repeated-request duplicate protection is NOT active:', indexErr.message);
+    }
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);

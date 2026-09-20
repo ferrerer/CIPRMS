@@ -37,7 +37,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (createdEventIds.length) await db.collection('calendarevents').deleteMany({ id: { $in: createdEventIds } });
-  await db.collection('googleCalendarIntegration').deleteMany({});
+  await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({});
   await cleanupAll();
   await closeDB();
 });
@@ -146,7 +146,7 @@ describe('Staff actor identity is preserved (never impersonates Administrator)',
 });
 
 describe('Staff-created events go through the exact same shared Google Calendar integration as Administrator', () => {
-  afterEach(async () => { await db.collection('googleCalendarIntegration').deleteMany({}); });
+  afterEach(async () => { await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({}); });
 
   test('with no Google connection, a Staff-created event still succeeds with no googleEventId (same as Administrator)', async () => {
     const res = await staffAgent.post('/api/calendarevents').send({
@@ -165,7 +165,7 @@ describe('Staff-created events go through the exact same shared Google Calendar 
   // event: the sync is attempted and recorded, never silently skipped or
   // routed through a different/duplicate implementation for Staff.
   test('a Staff-created event with a connected (but invalid) Google account attempts sync exactly like Administrator, and fails gracefully', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: adminUser.email, encryptedRefreshToken: encrypt('jesttest-not-a-real-refresh-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -180,7 +180,7 @@ describe('Staff-created events go through the exact same shared Google Calendar 
     // still saves successfully even though the fake credentials fail.
     expect(res.body.event.googleEventId).toBeUndefined();
 
-    const integration = await db.collection('googleCalendarIntegration').findOne({});
+    const integration = await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).findOne({});
     expect(integration.lastSyncOk).toBe(false);
     expect(integration.lastSyncError).toBeTruthy();
   }, 20000);

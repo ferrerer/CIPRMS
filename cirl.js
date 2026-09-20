@@ -2639,12 +2639,21 @@ function renderDocumentRequestPdf(res, r) {
     y = rowTop + height;
   }
 
-  const text = (v) => (x, top, w) => doc.text(String(v == null || v === '' ? '—' : v), x, top, { width: w });
+  // A plain-text row grows with its value (never shorter than `minHeight`, the
+  // height the form has always used). Fixed-height boxes let a long institution
+  // name, purpose or e-mail wrap past the bottom border and print over the next
+  // row — the same measured-height approach the document list row below uses.
+  const textRow = (label, value, minHeight) => {
+    const v = String(value == null || value === '' ? '—' : value);
+    doc.font('Helvetica').fontSize(9.5);
+    const height = Math.max(minHeight, doc.heightOfString(v, { width: valueW - 16 }) + 12);
+    row(label, (x, top, w) => doc.text(v, x, top, { width: w }), height);
+  };
 
-  row('Name of Requestor', text(r.requestedBy), 26);
-  row('Office / College / Institution', text(r.institution), 26);
-  row('Date / Time Submitted', text(dateTimeStr), 26);
-  row('Contact No.', text(r.contactNumber), 26);
+  textRow('Name of Requestor', r.requestedBy, 26);
+  textRow('Office / College / Institution', r.institution, 26);
+  textRow('Date / Time Submitted', dateTimeStr, 26);
+  textRow('Contact No.', r.contactNumber, 26);
 
   // Document list can hold any number of free-form entries, some quite long,
   // so its row height (and each line's vertical position) is measured with
@@ -2665,7 +2674,7 @@ function renderDocumentRequestPdf(res, r) {
     });
   }, docItemsHeight);
 
-  row('Purpose', text(r.notes), 48);
+  textRow('Purpose', r.notes, 48);
   row('Document Form', (x, top) => {
     const printedChecked = r.documentForm === 'Printed Copy';
     const digitalChecked = r.documentForm === 'Digital Copy';
@@ -2677,7 +2686,7 @@ function renderDocumentRequestPdf(res, r) {
     if (digitalChecked) doc.fontSize(8).text('X', digitalX + 1.5, top + 1.5);
     doc.fontSize(9.5).text('Digital Copy', digitalX + 16, top);
   }, 26);
-  row('Email Address', text(r.requestedByEmail), 26);
+  textRow('Email Address', r.requestedByEmail, 26);
 
   doc.y = y + 30;
 
@@ -2691,14 +2700,36 @@ function renderDocumentRequestPdf(res, r) {
     { label: 'Released By:', name: r.releasedBy, date: fmtDate(r.releasedAt) },
     { label: 'Received By:', name: r.receivedBy, date: fmtDate(r.receivedAt) }
   ];
+  // Layout per column (mirrors the browser print view): label, the signatory's
+  // NAME sitting on the signature line, the signatory's TITLE under the line, then
+  // the DATE under the title. The title used to be drawn at the same height as the
+  // line and the DATE, so the Approver's two-line title ("Head, Center for
+  // International Relations and Linkages") was struck through by the line and
+  // printed on top of "DATE:". The name is kept on one line (shrunk, then
+  // truncated, if it would not fit) so it can never wrap down onto the line.
   const sigTop = doc.y;
+  const sigW = colW - 20;
+  const sigLineY = sigTop + 50;
   sigCols.forEach((col, i) => {
     const x = left + i * colW;
-    doc.font('Helvetica').fontSize(9).text(col.label, x, sigTop, { width: colW - 20 });
-    doc.font('Helvetica-Bold').fontSize(10).text(col.name || ' ', x, sigTop + 34, { width: colW - 20, align: 'center' });
-    if (col.sub) doc.font('Helvetica').fontSize(7.5).text(col.sub, x, sigTop + 47, { width: colW - 20, align: 'center' });
-    doc.moveTo(x, sigTop + 50).lineTo(x + colW - 20, sigTop + 50).stroke();
-    doc.font('Helvetica').fontSize(8).text('DATE: ' + (col.date || ''), x, sigTop + 54, { width: colW - 20, align: 'center' });
+    doc.font('Helvetica').fontSize(9).text(col.label, x, sigTop, { width: sigW });
+
+    let name = col.name || ' ';
+    let nameSize = 10;
+    doc.font('Helvetica-Bold');
+    while (nameSize > 7 && doc.fontSize(nameSize).widthOfString(name) > sigW) nameSize -= 0.5;
+    doc.fontSize(nameSize);
+    while (name.length > 1 && doc.widthOfString(name) > sigW) name = name.slice(0, -2) + '…';
+    doc.text(name, x, sigTop + 34 + (10 - nameSize), { width: sigW, align: 'center', lineBreak: false });
+
+    doc.moveTo(x, sigLineY).lineTo(x + sigW, sigLineY).stroke();
+
+    let dateY = sigTop + 54;
+    if (col.sub) {
+      doc.font('Helvetica').fontSize(7.5).text(col.sub, x, sigLineY + 3, { width: sigW, align: 'center' });
+      dateY = doc.y + 3;
+    }
+    doc.font('Helvetica').fontSize(8).text('DATE: ' + (col.date || ''), x, dateY, { width: sigW, align: 'center' });
   });
 
   // ── Footer ──
@@ -5459,6 +5490,107 @@ function pickCalendarEventFields(body) {
   return safe;
 }
 
+// ── Calendar meetings: participants, invitations and attendance (2026-09-20) ──
+// A CIPRMS calendar event of the "Meeting" type that has invited participants
+// is a meeting people can JOIN. What is stored per event, beyond the fields
+// the calendar UI has always saved:
+//   participantEmails   every CIPRMS user invited (in-app notification +
+//                       calendar visibility + the right to Join). Present
+//                       only when someone was invited.
+//   googleAttendeeEmails the subset with a valid address — the Google Calendar
+//                       attendees. (Google rejects a whole event for one bad
+//                       address, so invalid ones are reported and left out.)
+//   inviteSkipped       who was NOT e-mailed and why, shown to the Administrator.
+//   googleEventKey      a stable Google event id chosen up front, so a retried
+//                       create can never produce a second Google event.
+//   googleEventId / googleOrganizerEmail / googleSyncStatus — the sync result.
+//   attendance[]        who actually joined, with the SERVER's join time.
+const meetingTime = require('./services/meetingTime');
+
+const CALENDAR_RECIPIENT_ROLES = ['Administrator', 'Auth. Personnel', 'potential_partner', 'Staff'];
+
+function canManageCalendarRole(user) {
+  return !!user && (user.role === 'Administrator' || user.role === 'Staff');
+}
+
+// Only the Meeting event type (the default) takes attendance — a "Renewal" or
+// "Expiry / Deadline" marker with recipients is a reminder, not something to join.
+function isMeetingEvent(ev) {
+  return !ev.className || String(ev.className).includes('bg-primary-subtle');
+}
+
+function unionEmails(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const email of Array.isArray(list) ? list : []) {
+      const key = meetingTime.emailKey(email);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(email);
+    }
+  }
+  return out;
+}
+
+// Everyone invited to an event. Events created before this feature only have
+// recipientEmails / googleAttendeeEmails, so those are honoured as a fallback.
+function eventParticipantList(ev) {
+  if (Array.isArray(ev.participantEmails)) return ev.participantEmails;
+  return unionEmails(ev.recipientEmails, ev.googleAttendeeEmails);
+}
+function eventParticipantKeys(ev) {
+  return new Set(eventParticipantList(ev).map(meetingTime.emailKey).filter(Boolean));
+}
+
+function attendanceRecordFor(ev, email) {
+  const key = meetingTime.emailKey(email);
+  return (Array.isArray(ev.attendance) ? ev.attendance : []).find(a => a.emailKey === key) || null;
+}
+
+// What the signed-in user needs to render the Join control. `startsAt` and
+// `serverNow` come from the server: the browser counts down to `startsAt`
+// against the server's clock, and the server re-checks on the actual Join
+// request, so a wrong device clock can neither unlock nor block a join.
+function buildMyInvite(ev, user, now) {
+  if (!isMeetingEvent(ev)) return null;
+  if (!eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { invited: false };
+  const start = meetingTime.eventStartInstant(ev);
+  const record = attendanceRecordFor(ev, user.email);
+  return {
+    invited: true,
+    joined: !!record,
+    joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
+    joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
+    startsAt: start ? start.toISOString() : null,
+    serverNow: now.toISOString(),
+    canJoinNow: !!start && now >= start,
+    timeZone: meetingTime.appTimeZone()
+  };
+}
+
+// Invitee lists, attendance and Google identifiers are only for the people who
+// manage the calendar (Administrator/Staff). Everyone else gets the event plus
+// their OWN invitation state — a Partner must not receive every other invited
+// user's e-mail address just by loading the calendar.
+const CALENDAR_EVENT_PRIVATE_FIELDS = [
+  'recipientEmails', 'googleAttendeeEmails', 'participantEmails', 'attendance', 'inviteSkipped',
+  'googleEventKey', 'googleSyncStatus', 'googleSyncError', 'googleOrganizerEmail', 'googleHtmlLink',
+  'clientRequestId', 'createdByEmail'
+];
+function calendarEventView(ev, user, now) {
+  const view = { ...ev, myInvite: buildMyInvite(ev, user, now) };
+  if (canManageCalendarRole(user)) {
+    view.participantCount = eventParticipantKeys(ev).size;
+    view.joinedCount = Array.isArray(ev.attendance) ? ev.attendance.length : 0;
+    delete view.attendance;
+    delete view.clientRequestId;
+  } else {
+    for (const f of CALENDAR_EVENT_PRIVATE_FIELDS) delete view[f];
+  }
+  return view;
+}
+
 // Visibility: Administrators see every event (full oversight). Every other
 // role only sees events that either name them as a recipient or were never
 // scoped to specific recipients in the first place — events predating this
@@ -5473,40 +5605,168 @@ app.get('/api/calendarevents', requireAuth, async (req, res) => {
       ? {}
       : { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }] };
     const docs = await db.collection('calendarevents').find(filter).toArray();
-    res.json(docs);
+    const now = new Date();
+    res.json(docs.map(d => calendarEventView(d, user, now)));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-const CALENDAR_RECIPIENT_ROLES = ['Administrator', 'Auth. Personnel', 'potential_partner', 'Staff'];
-
 /**
  * Resolves the "recipients" the Administrator picked when creating a
- * calendar event into a concrete, de-duplicated list of target emails.
- * `recipients` is an array mixing role tokens (from CALENDAR_RECIPIENT_ROLES,
- * or 'all') and/or individual user emails — a user selected both by role and
- * individually (e.g. "Auth. Personnel" plus that same person's own email)
- * only ends up in the list once. Used both for who gets notified and — via
- * the caller — for who the event is visible to, so de-duping here matters
- * for both, not just for avoiding duplicate notifications.
+ * calendar event into the concrete people invited. `recipients` is an array
+ * mixing role tokens (from CALENDAR_RECIPIENT_ROLES, or 'all') and/or
+ * individual user emails — a user selected both by role and individually only
+ * ends up once. Returns:
+ *   users        the CIPRMS users invited (de-duplicated, case-insensitively)
+ *   emails       their addresses — drives notifications, visibility and Join
+ *   googleEmails the subset that is a valid address (lower-cased) — the Google
+ *                Calendar attendees, so no invalid or duplicate entry is sent
+ *   invalid      everyone who could NOT be e-mailed, with the reason, so the
+ *                Administrator is told instead of it failing silently
+ * Nothing the client sends is trusted as a person: an individual entry must
+ * match a registered user, otherwise it is reported as invalid.
  */
-async function resolveCalendarRecipients(db, recipients) {
-  if (!Array.isArray(recipients) || !recipients.length) return [];
+async function resolveCalendarParticipants(db, recipients) {
+  const result = { users: [], emails: [], googleEmails: [], invalid: [] };
+  if (!Array.isArray(recipients) || !recipients.length) return result;
+  let users = [];
   if (recipients.includes('all')) {
     // "All Users" only ever reaches active accounts — an Inactive/deactivated
     // user can't log in to see the notification anyway.
-    const all = await db.collection('users').find({ status: 'Active' }).toArray();
-    return [...new Set(all.map(u => u.email))];
+    users = await db.collection('users').find({ status: 'Active' }).toArray();
+  } else {
+    const roles = recipients.filter(r => CALENDAR_RECIPIENT_ROLES.includes(r));
+    const requested = [...new Set(recipients
+      .filter(r => typeof r === 'string' && !CALENDAR_RECIPIENT_ROLES.includes(r))
+      .map(r => r.trim()).filter(Boolean))];
+    if (roles.length) users.push(...await db.collection('users').find({ role: { $in: roles } }).toArray());
+    if (requested.length) {
+      const lookup = [...new Set([...requested, ...requested.map(meetingTime.emailKey)])];
+      const found = await db.collection('users').find({ email: { $in: lookup } }).toArray();
+      users.push(...found);
+      const foundKeys = new Set(found.map(u => meetingTime.emailKey(u.email)));
+      for (const r of requested) {
+        if (!foundKeys.has(meetingTime.emailKey(r))) {
+          result.invalid.push({ name: null, email: r, role: null, reason: 'Not a registered CIPRMS user' });
+        }
+      }
+    }
   }
-  const roles = recipients.filter(r => CALENDAR_RECIPIENT_ROLES.includes(r));
-  const emails = recipients.filter(r => !CALENDAR_RECIPIENT_ROLES.includes(r) && r !== 'all');
-  let roleEmails = [];
-  if (roles.length) {
-    const users = await db.collection('users').find({ role: { $in: roles } }).toArray();
-    roleEmails = users.map(u => u.email);
+  const seen = new Set();
+  for (const u of users) {
+    const key = meetingTime.emailKey(u.email);
+    if (!key) {
+      result.invalid.push({ name: u.name || null, email: '', role: u.role || null, reason: 'No email address on file' });
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.users.push({ name: u.name, email: u.email, role: u.role });
+    result.emails.push(u.email);
+    if (meetingTime.isValidEmail(u.email)) result.googleEmails.push(key);
+    else result.invalid.push({ name: u.name || null, email: u.email, role: u.role || null, reason: 'Email address is not valid, so no Google Calendar invitation can be sent to it' });
   }
-  return [...new Set([...roleEmails, ...emails])];
+  return result;
+}
+
+function newGoogleEventKey() {
+  // Google event ids: 5–1024 chars, lowercase a–v and 0–9 only.
+  return 'ciprms' + crypto.randomBytes(12).toString('hex');
+}
+
+function mergeSkipped(existing, added) {
+  const seen = new Set();
+  const out = [];
+  for (const s of [...(Array.isArray(existing) ? existing : []), ...(Array.isArray(added) ? added : [])]) {
+    const key = meetingTime.emailKey(s.email) || ('name:' + s.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
+// Server-side validation of the fields the calendar UI sends. Only the fields
+// actually present in the request are checked, so renaming a legacy event that
+// already has a bad end time is not blocked.
+function validateCalendarEventFields(fields, merged) {
+  if ('title' in fields && (typeof fields.title !== 'string' || !fields.title.trim())) return 'Event title is required.';
+  if ('title' in fields && fields.title.length > 200) return 'Event title is too long (200 characters maximum).';
+  if ('start' in fields || 'end' in fields || 'allDay' in fields) {
+    const start = meetingTime.eventStartInstant(merged);
+    if (!start) return 'A valid start date/time is required.';
+    if (!merged.allDay && merged.end) {
+      const end = meetingTime.eventEndInstant(merged);
+      if (!end) return 'The end time is not valid.';
+      if (end < start) return 'The end time cannot be before the start time.';
+    }
+  }
+  return null;
+}
+
+// Deep-link straight to the event on whichever calendar page the recipient's
+// role actually has (mirrors prLinkForRole's per-role navigation for
+// Partnership Request notifications) so a click opens the event detail modal
+// immediately instead of landing on a blank calendar.
+async function notifyCalendarParticipants(db, entry, users, actorName) {
+  const roleOfEmail = new Map(users.map(u => [u.email, u.role]));
+  const CALENDAR_LINK_BY_ROLE = {
+    'Administrator': '/calendar?id=' + entry.id,
+    'Auth. Personnel': '/personnel/calendar?id=' + entry.id,
+    'potential_partner': '/partner/calendar?id=' + entry.id,
+    'Staff': '/staff/calendar?id=' + entry.id
+  };
+  const emailsByLink = new Map();
+  for (const u of users) {
+    const link = CALENDAR_LINK_BY_ROLE[roleOfEmail.get(u.email)] || '/calendar';
+    if (!emailsByLink.has(link)) emailsByLink.set(link, []);
+    emailsByLink.get(link).push(u.email);
+  }
+  for (const [link, emails] of emailsByLink) {
+    await notifyUsers(db, emails, {
+      module: 'calendar',
+      tag: 'Calendar',
+      icon: 'ri-calendar-event-line',
+      color: 'primary',
+      title: `New event: ${entry.title}`,
+      desc: `${actorName} scheduled "${entry.title}"${entry.location ? ' at ' + entry.location : ''}.`,
+      link
+    });
+  }
+}
+
+// Plain-language result of a Google Calendar attempt, returned to the UI so an
+// Administrator sees whether invitation e-mails were actually requested.
+function describeGoogleSync(sync) {
+  if (sync.ok) return { google: 'sent', error: null };
+  if (sync.error === 'not_connected') {
+    return { google: 'not_connected', error: 'Google Calendar is not connected, so no invitation e-mails were sent. An Administrator can connect it under Settings → Integrations.' };
+  }
+  if (sync.error === 'invalid_start') return { google: 'failed', error: 'The event has no valid start time to send to Google Calendar.' };
+  return { google: 'failed', error: sync.error || 'Google Calendar rejected the request.' };
+}
+
+async function recordGoogleSyncOnEvent(db, ev, sync) {
+  const set = sync.ok
+    ? { googleSyncStatus: 'sent', googleSyncError: null }
+    : { googleSyncStatus: sync.error === 'not_connected' ? 'not_connected' : 'failed', googleSyncError: describeGoogleSync(sync).error };
+  if (sync.ok && sync.googleEventId) set.googleEventId = sync.googleEventId;
+  if (sync.ok && sync.organizerEmail) set.googleOrganizerEmail = sync.organizerEmail;
+  if (sync.ok && sync.htmlLink) set.googleHtmlLink = sync.htmlLink;
+  await db.collection('calendarevents').updateOne({ id: ev.id }, { $set: set });
+  Object.assign(ev, set);
+}
+
+function invitationSummary(ev, extra) {
+  return {
+    invited: eventParticipantList(ev).length,
+    googleAttendees: Array.isArray(ev.googleAttendeeEmails) ? ev.googleAttendeeEmails.length : 0,
+    google: ev.googleSyncStatus || (ev.googleEventId ? 'sent' : 'not_attempted'),
+    error: ev.googleSyncError || null,
+    skipped: Array.isArray(ev.inviteSkipped) ? ev.inviteSkipped : [],
+    ...(extra || {})
+  };
 }
 
 // The calendar itself is a shared institutional calendar, viewable by every
@@ -5523,21 +5783,38 @@ async function resolveCalendarRecipients(db, recipients) {
 app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
   try {
     const db = getDb();
-    const last = await db.collection('calendarevents').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length ? (last[0].id || 0) + 1 : 1;
+    const fields = pickCalendarEventFields(req.body);
+    // A new event needs a title and a valid start; validate every time field.
+    const invalid = validateCalendarEventFields({ title: fields.title === undefined ? '' : fields.title, start: null, end: null, allDay: null }, fields);
+    if (invalid) return res.status(400).json({ error: invalid });
+
+    // One token per Save / palette drop, generated by the browser. A repeated
+    // request for the SAME action (double click, retry, a doubled callback)
+    // returns the event already created instead of inserting a second one.
+    const clientRequestId = typeof req.body.clientRequestId === 'string' && /^[\w-]{8,64}$/.test(req.body.clientRequestId)
+      ? req.body.clientRequestId : null;
+    const duplicateResponse = async () => {
+      const prior = await db.collection('calendarevents').findOne({ clientRequestId });
+      return prior ? res.json({ success: true, duplicate: true, event: calendarEventView(prior, req.session.user, new Date()), invitations: invitationSummary(prior) }) : null;
+    };
+    if (clientRequestId && await duplicateResponse()) return;
 
     // Recipients are only meaningful at creation time — only the users
     // selected here are notified, per the recipient-targeting requirement.
     const rawRecipients = req.body.recipients;
-    const targetEmails = await resolveCalendarRecipients(db, rawRecipients);
+    const participants = await resolveCalendarParticipants(db, rawRecipients);
+    const targetEmails = participants.emails;
     // "All Users" (or no recipients picked at all) means the event is public/
     // system-wide — only a genuinely narrowed selection (specific roles
     // and/or specific individuals, not "all") restricts who can see it.
     const isScoped = Array.isArray(rawRecipients) && rawRecipients.length && !rawRecipients.includes('all');
-    const entry = {
-      id: nextId,
-      ...pickCalendarEventFields(req.body),
+    const base = {
+      ...fields,
       ...(isScoped ? { recipientEmails: targetEmails } : {}),
+      // Every invited CIPRMS user (visibility for a scoped event is
+      // recipientEmails; this is the always-populated "who was invited" list
+      // that the Join control and the attendance view rely on).
+      ...(targetEmails.length ? { participantEmails: targetEmails } : {}),
       // Separate from recipientEmails (which drives CIPRMS's own visibility
       // filter above, and is deliberately absent for "all users" events) —
       // this is the STABLE attendee list Google Calendar sync uses on every
@@ -5545,87 +5822,120 @@ app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
       // scoped or public. Without this, an "All Users" event's Google
       // attendees would silently be wiped on its first edit, since
       // recipientEmails never existed on that doc to fall back to.
-      ...(targetEmails.length ? { googleAttendeeEmails: targetEmails } : {})
+      ...(participants.googleEmails.length ? { googleAttendeeEmails: participants.googleEmails, googleEventKey: newGoogleEventKey() } : {}),
+      ...(participants.invalid.length ? { inviteSkipped: participants.invalid } : {}),
+      ...(clientRequestId ? { clientRequestId } : {}),
+      createdByEmail: req.session.user.email
     };
-    await db.collection('calendarevents').insertOne(entry);
 
-    // Deep-link straight to the event on whichever calendar page the
-    // recipient's role actually has (mirrors prLinkForRole's per-role
-    // navigation for Partnership Request notifications) so a click opens the
-    // event detail modal immediately instead of landing on a blank calendar.
-    const recipientUsers = targetEmails.length
-      ? await db.collection('users').find({ email: { $in: targetEmails } }).toArray()
-      : [];
-    const roleOfEmail = new Map(recipientUsers.map(u => [u.email, u.role]));
-    const CALENDAR_LINK_BY_ROLE = {
-      'Administrator': '/calendar?id=' + entry.id,
-      'Auth. Personnel': '/personnel/calendar?id=' + entry.id,
-      'potential_partner': '/partner/calendar?id=' + entry.id,
-      'Staff': '/staff/calendar?id=' + entry.id
-    };
-    const emailsByLink = new Map();
-    for (const email of targetEmails) {
-      const link = CALENDAR_LINK_BY_ROLE[roleOfEmail.get(email)] || '/calendar';
-      if (!emailsByLink.has(link)) emailsByLink.set(link, []);
-      emailsByLink.get(link).push(email);
+    let entry = null;
+    for (let attempt = 0; attempt < 5 && !entry; attempt++) {
+      const last = await db.collection('calendarevents').find({}).sort({ id: -1 }).limit(1).toArray();
+      const candidate = { id: last.length ? (last[0].id || 0) + 1 : 1, ...base };
+      try {
+        await db.collection('calendarevents').insertOne(candidate);
+        entry = candidate;
+      } catch (err) {
+        if (!err || err.code !== 11000) throw err;
+        if (clientRequestId && await duplicateResponse()) return; // lost a race with the identical request
+        // otherwise another event took this id in the same instant — retry with a fresh one
+      }
     }
-    for (const [link, emails] of emailsByLink) {
-      await notifyUsers(db, emails, {
-        module: 'calendar',
-        tag: 'Calendar',
-        icon: 'ri-calendar-event-line',
-        color: 'primary',
-        title: `New event: ${entry.title}`,
-        desc: `${req.session.user.name} scheduled "${entry.title}"${entry.location ? ' at ' + entry.location : ''}.`,
-        link
-      });
-    }
+    if (!entry) throw new Error('Could not allocate an id for the new event.');
+
+    await notifyCalendarParticipants(db, entry, participants.users, req.session.user.name);
 
     // Google Calendar sync (2026-08-02) — best-effort, alongside (not instead
     // of) the in-app notification above. Only attempted when there's a real
     // recipient list to invite; never blocks or fails the event's own save —
     // if the org hasn't connected Google Calendar, or the API call fails, the
-    // CIPRMS event still exists exactly as it did before this feature.
-    if (targetEmails.length) {
-      const sync = await googleCalendarService.createGoogleEvent(db, entry, targetEmails);
-      if (sync.ok) {
-        await db.collection('calendarevents').updateOne({ id: entry.id }, { $set: { googleEventId: sync.googleEventId } });
-        entry.googleEventId = sync.googleEventId;
+    // CIPRMS event still exists exactly as it did before this feature. Google
+    // itself e-mails the invitation (sendUpdates: 'all'), from the connected
+    // organizer account.
+    let invitations;
+    if (participants.googleEmails.length) {
+      const sync = await googleCalendarService.createGoogleEvent(db, entry, participants.googleEmails);
+      await recordGoogleSyncOnEvent(db, entry, sync);
+      invitations = invitationSummary(entry);
+    } else {
+      if (targetEmails.length) {
+        entry.googleSyncStatus = 'no_valid_attendees';
+        await db.collection('calendarevents').updateOne({ id: entry.id }, { $set: { googleSyncStatus: 'no_valid_attendees' } });
       }
+      invitations = invitationSummary(entry);
     }
 
-    res.json({ success: true, event: entry });
+    // Same shape as the calendar feed (adds participantCount/joinedCount/myInvite), so the page can show
+    // the invitation panel for a just-created event without a reload.
+    res.json({ success: true, event: calendarEventView(entry, req.session.user, new Date()), invitations });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.patch('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
   try {
     const db = getDb();
-    await db.collection('calendarevents').updateOne({ id }, { $set: pickCalendarEventFields(req.body) });
+    const existing = await db.collection('calendarevents').findOne({ id });
+    if (!existing) return res.status(404).json({ error: 'Event not found.' });
+
+    const fields = pickCalendarEventFields(req.body);
+    const invalid = validateCalendarEventFields(fields, { ...existing, ...fields });
+    if (invalid) return res.status(400).json({ error: invalid });
+    const set = { ...fields };
+
+    // Attendees can be ADDED to an existing meeting (never silently replaced):
+    // the new people are notified, added to the Google event, and Google
+    // e-mails them the invitation.
+    let addedGoogleAttendees = false;
+    let newlyInvited = [];
+    const rawRecipients = Array.isArray(req.body.recipients) ? req.body.recipients : [];
+    if (rawRecipients.length) {
+      const p = await resolveCalendarParticipants(db, rawRecipients);
+      if (p.emails.length || p.invalid.length) {
+        const already = eventParticipantKeys(existing);
+        newlyInvited = p.users.filter(u => !already.has(meetingTime.emailKey(u.email)));
+        set.participantEmails = unionEmails(eventParticipantList(existing), p.emails);
+        if (Array.isArray(existing.recipientEmails)) set.recipientEmails = unionEmails(existing.recipientEmails, p.emails);
+        const googleEmails = meetingTime.uniqueValidEmails([...(existing.googleAttendeeEmails || []), ...p.googleEmails]);
+        if (googleEmails.length) set.googleAttendeeEmails = googleEmails;
+        const before = new Set((existing.googleAttendeeEmails || []).map(meetingTime.emailKey));
+        addedGoogleAttendees = p.googleEmails.some(e => !before.has(e));
+        if (googleEmails.length && !existing.googleEventId && !existing.googleEventKey) set.googleEventKey = newGoogleEventKey();
+        if (p.invalid.length) set.inviteSkipped = mergeSkipped(existing.inviteSkipped, p.invalid);
+      }
+    }
+    if (!Object.keys(set).length) return res.status(400).json({ error: 'No valid fields to update.' });
+
+    await db.collection('calendarevents').updateOne({ id }, { $set: set });
     const updated = await db.collection('calendarevents').findOne({ id });
     if (!updated) return res.status(404).json({ error: 'Event not found.' });
+    if (newlyInvited.length) await notifyCalendarParticipants(db, updated, newlyInvited, req.session.user.name);
 
-    // Google Calendar sync — only events that were successfully created on
-    // Google in the first place (i.e. have a googleEventId) get updated;
-    // best-effort, same as create (see POST above). Uses googleAttendeeEmails
-    // (the stable attendee list captured at creation), never recipientEmails
-    // — the latter is absent entirely for "all users" events and would
-    // otherwise silently wipe every attendee off the Google event.
-    if (updated.googleEventId) {
-      await googleCalendarService.updateGoogleEvent(db, updated, updated.googleAttendeeEmails);
+    // Google Calendar sync — an edit or a drag updates the SAME Google event
+    // (patched by its id, never re-inserted), and Google e-mails the attendees
+    // the change (sendUpdates: 'all'). Uses googleAttendeeEmails (the stable
+    // attendee list), never recipientEmails — the latter is absent entirely
+    // for "all users" events and would otherwise silently wipe every attendee
+    // off the Google event. Best-effort, same as create (see POST above).
+    const googleRelevant = ['title', 'start', 'end', 'allDay', 'location', 'description'].some(k => k in fields) || addedGoogleAttendees;
+    const attendees = updated.googleAttendeeEmails || [];
+    if (googleRelevant && attendees.length && (updated.googleEventId || updated.googleEventKey)) {
+      const sync = await googleCalendarService.syncGoogleEvent(db, updated, attendees);
+      await recordGoogleSyncOnEvent(db, updated, sync);
     }
 
-    res.json({ success: true, event: updated });
+    res.json({ success: true, event: calendarEventView(updated, req.session.user, new Date()), invitations: invitationSummary(updated) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.delete('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
   try {
     const db = getDb();
     const existing = await db.collection('calendarevents').findOne({ id });
@@ -5634,6 +5944,107 @@ app.delete('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
     }
     await db.collection('calendarevents').deleteOne({ id });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Join a meeting. Everything that matters comes from the server, never the
+// request: who is joining (the session, re-read from the database), whether
+// they were invited (the stored participant list), when the meeting starts
+// (the stored event, in the application timezone) and WHEN they joined (the
+// server clock at the moment of this call). The request body is ignored, so a
+// tampered timestamp, user id, role or event time has nothing to act on.
+app.post('/api/calendarevents/:id/join', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
+  try {
+    const db = getDb();
+    const user = await db.collection('users').findOne({ email: req.session.user.email });
+    if (!user) return res.status(403).json({ error: 'Account not found.' });
+    const ev = await db.collection('calendarevents').findOne({ id });
+    if (!ev || !isMeetingEvent(ev)) return res.status(404).json({ error: 'Meeting not found.' });
+
+    const key = meetingTime.emailKey(user.email);
+    if (!eventParticipantKeys(ev).has(key)) {
+      return res.status(403).json({ error: 'You are not an invited participant of this meeting.' });
+    }
+    const start = meetingTime.eventStartInstant(ev);
+    if (!start) return res.status(409).json({ error: 'This meeting has no valid start time.' });
+    const now = new Date();
+    if (now < start) {
+      return res.status(403).json({
+        error: 'This meeting has not started yet. You can join when it starts.',
+        code: 'MEETING_NOT_STARTED',
+        startsAt: start.toISOString(),
+        serverNow: now.toISOString()
+      });
+    }
+
+    // Atomic and duplicate-proof: the filter only matches while nobody with
+    // this address has an attendance entry yet, so any number of simultaneous
+    // or repeated clicks record exactly one join — the first.
+    const result = await db.collection('calendarevents').updateOne(
+      { id, 'attendance.emailKey': { $ne: key } },
+      { $push: { attendance: { email: user.email, emailKey: key, userId: user.id, name: user.name, role: user.role, joinedAt: now } } }
+    );
+    const fresh = await db.collection('calendarevents').findOne({ id });
+    res.json({ success: true, alreadyJoined: result.modifiedCount === 0, myInvite: buildMyInvite(fresh, user, new Date()) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Administrator/Staff attendance view: every invited participant, with the
+// server-recorded join time formatted in the application timezone (so it
+// reads the same whatever the viewer's browser timezone is). "Invitation" and
+// "Attendance" are separate columns on purpose — being invited (or e-mailed an
+// invitation) is not the same as having joined.
+app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
+  try {
+    const db = getDb();
+    const ev = await db.collection('calendarevents').findOne({ id });
+    if (!ev) return res.status(404).json({ error: 'Event not found.' });
+
+    const invited = eventParticipantList(ev);
+    const lookup = [...new Set([...invited, ...invited.map(meetingTime.emailKey)])];
+    const users = lookup.length ? await db.collection('users').find({ email: { $in: lookup } }).toArray() : [];
+    const userByKey = new Map(users.map(u => [meetingTime.emailKey(u.email), u]));
+    const googleKeys = new Set((ev.googleAttendeeEmails || []).map(meetingTime.emailKey));
+    const emailed = !!ev.googleEventId;
+
+    const participants = invited.map(email => {
+      const u = userByKey.get(meetingTime.emailKey(email));
+      const record = attendanceRecordFor(ev, email);
+      const joinedAt = record ? new Date(record.joinedAt) : null;
+      return {
+        name: u ? u.name : email,
+        role: u ? displayRoleName(u.role) : '—',
+        email,
+        invitation: emailed && googleKeys.has(meetingTime.emailKey(email)) ? 'Emailed via Google Calendar' : 'In-app only',
+        status: record ? 'Joined' : 'Not Joined',
+        joinedAt: joinedAt ? joinedAt.toISOString() : null,
+        joinedAtDisplay: joinedAt ? meetingTime.formatTimeInTz(joinedAt) : null,
+        joinedDateDisplay: joinedAt ? meetingTime.formatDateTimeInTz(joinedAt) : null
+      };
+    }).sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
+
+    const start = meetingTime.eventStartInstant(ev);
+    res.json({
+      event: {
+        id: ev.id, title: ev.title, location: ev.location || '', isMeeting: isMeetingEvent(ev),
+        startsAt: start ? start.toISOString() : null,
+        startsAtDisplay: start ? meetingTime.formatDateTimeInTz(start) : null
+      },
+      timeZone: meetingTime.appTimeZone(),
+      serverNow: new Date().toISOString(),
+      summary: { invited: participants.length, joined: participants.filter(p => p.status === 'Joined').length },
+      google: { status: ev.googleSyncStatus || (ev.googleEventId ? 'sent' : 'not_attempted'), error: ev.googleSyncError || null, organizerEmail: ev.googleOrganizerEmail || null },
+      skipped: Array.isArray(ev.inviteSkipped) ? ev.inviteSkipped : [],
+      participants
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5663,27 +6074,46 @@ function getGoogleCalendarCallbackUrl(req) {
   return `${protocol}://${host}/api/google-calendar/callback`;
 }
 
+// Settings → Integrations reads this. Only non-secret facts are ever returned:
+// no access token, refresh token, authorization code or client secret. The
+// redirect URI is included because it must be registered — character for
+// character — under "Authorized redirect URIs" on the Google Cloud OAuth client,
+// and it depends on the address the Administrator is browsing from.
+function googleCalendarConfigured() {
+  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_TOKEN_ENCRYPTION_KEY);
+}
+
 app.get('/api/google-calendar/status', requireAdmin, async (req, res) => {
   try {
     const db = getDb();
     const integration = await googleCalendarService.getIntegration(db);
+    const common = {
+      configured: googleCalendarConfigured(),
+      redirectUri: getGoogleCalendarCallbackUrl(req),
+      timeZone: meetingTime.appTimeZone()
+    };
     res.json(integration
       ? {
+        ...common,
         connected: true,
         connectedByEmail: integration.connectedByEmail,
         connectedByName: integration.connectedByName,
         connectedAt: integration.connectedAt,
+        googleAccountEmail: integration.googleAccountEmail || null,
+        calendarTimeZone: integration.calendarTimeZone || null,
+        verifiedAt: integration.verifiedAt || null,
         lastSyncOk: integration.lastSyncOk === undefined ? null : integration.lastSyncOk,
         lastSyncError: integration.lastSyncError || null,
         lastSyncAt: integration.lastSyncAt || null
       }
-      : { connected: false });
+      : { ...common, connected: false });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/google-calendar/connect', requireAdmin, (req, res) => {
+  if (!googleCalendarConfigured()) return res.redirect('/admin/settings?googleCalendar=error&reason=not_configured');
   // CSRF protection on the callback: a random state tied to this session,
   // checked (and consumed) below before any token exchange happens.
   const state = crypto.randomBytes(16).toString('hex');
@@ -5692,21 +6122,52 @@ app.get('/api/google-calendar/connect', requireAdmin, (req, res) => {
   res.redirect(url);
 });
 
+function sameOAuthState(expected, received) {
+  if (typeof expected !== 'string' || typeof received !== 'string') return false;
+  const x = Buffer.from(expected), y = Buffer.from(received);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+// Every failure lands back on the Integrations tab with a short reason code (never
+// Google's raw message, which the Settings page must not have to trust).
+function googleCalendarFailure(res, reason) {
+  return res.redirect('/admin/settings?googleCalendar=error&reason=' + encodeURIComponent(reason));
+}
+
 app.get('/api/google-calendar/callback', requireAdmin, async (req, res) => {
   const { code, state, error } = req.query;
   const expectedState = req.session.googleCalendarOAuthState;
   delete req.session.googleCalendarOAuthState;
 
-  if (error) return res.redirect('/admin/settings?googleCalendar=error');
-  if (!code || !state || state !== expectedState) return res.redirect('/admin/settings?googleCalendar=error');
+  if (error) return googleCalendarFailure(res, error === 'access_denied' ? 'denied' : 'google_error');
+  if (typeof code !== 'string' || !code || !sameOAuthState(expectedState, state)) return googleCalendarFailure(res, 'state');
 
   try {
     const db = getDb();
-    await googleCalendarService.handleOAuthCallback(db, code, getGoogleCalendarCallbackUrl(req), req.session.user);
-    res.redirect('/admin/settings?googleCalendar=connected');
+    const { verification } = await googleCalendarService.handleOAuthCallback(db, code, getGoogleCalendarCallbackUrl(req), req.session.user);
+    // Stored either way; a failed verification (e.g. Calendar API not enabled) is
+    // shown on the Settings page instead of surfacing on the first meeting.
+    res.redirect('/admin/settings?googleCalendar=' + (verification && verification.ok ? 'connected' : 'connected_unverified'));
   } catch (err) {
-    console.error('Google Calendar: OAuth callback failed:', err.message);
-    res.redirect('/admin/settings?googleCalendar=error');
+    const message = googleCalendarService.describeGoogleError(err);
+    console.error('Google Calendar: OAuth callback failed:', message);
+    let reason = 'exchange';
+    if (/refresh token/i.test(message)) reason = 'no_refresh_token';
+    else if (/redirect URI/i.test(message)) reason = 'redirect_uri';
+    else if (/OAuth client ID\/secret/i.test(message)) reason = 'client';
+    googleCalendarFailure(res, reason);
+  }
+});
+
+// Re-runs the read-only connection check (refresh token → access token → Calendar API)
+// so the Administrator can confirm the connection still works at any time.
+app.post('/api/google-calendar/verify', requireAdmin, async (req, res) => {
+  try {
+    const result = await googleCalendarService.verifyConnection(getDb());
+    if (result.ok) return res.json({ success: true, googleAccountEmail: result.accountEmail, calendarTimeZone: result.calendarTimeZone });
+    res.json({ success: false, error: result.error === 'not_connected' ? 'Google Calendar is not connected.' : result.error });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

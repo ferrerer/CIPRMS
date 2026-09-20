@@ -110,6 +110,7 @@
             <div class="flex-shrink-0 me-3"><i class="ri-discuss-line text-muted fs-16"></i></div>
             <div class="flex-grow-1"><p class="text-muted mb-0" id="ev-desc">—</p></div>
         </div>
+        <div class="mt-3"><%- include('../partials/meeting_join') %></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
@@ -127,6 +128,9 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         var modal = new bootstrap.Modal(document.getElementById('event-view-modal'));
+        var openEvent = null;
+        document.getElementById('event-view-modal').addEventListener('hidden.bs.modal', function () { MeetingJoin.stop(); openEvent = null; });
+        MeetingJoin.onJoined(function (invite) { if (openEvent) openEvent.setExtendedProp('myInvite', invite); });
         var calEl = document.getElementById('calendar');
 
         function strDate(dt) {
@@ -165,6 +169,8 @@
             document.getElementById('ev-when').textContent = ev.allDay ? 'All day' : (strTime(ev.start) + (ev.end ? ' – ' + strTime(ev.end) : ''));
             document.getElementById('ev-location').textContent = ev.extendedProps.location || '—';
             document.getElementById('ev-desc').textContent = ev.extendedProps.description || '—';
+            openEvent = ev;
+            MeetingJoin.render(ev.id, ev.extendedProps.myInvite);
             modal.show();
         }
 
@@ -196,7 +202,7 @@
                     end: doc.end || undefined,
                     allDay: doc.allDay || false,
                     className: doc.className || 'bg-primary-subtle',
-                    extendedProps: { location: doc.location || '', description: doc.description || '' }
+                    extendedProps: { location: doc.location || '', description: doc.description || '', myInvite: doc.myInvite || null }
                 };
             },
             windowResize: function () {

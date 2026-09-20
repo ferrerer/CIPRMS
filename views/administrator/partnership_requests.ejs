@@ -339,7 +339,21 @@
       align-items: center;
       gap: .4rem;
     }
-  </style>
+  
+    /* ── View Draft timeline ──
+       Each version is a flex row (avatar + card). A flex child will not shrink below its
+       content's min-content width unless told it may, so one long UNBROKEN filename or note
+       ("Article_4_Duration_and_Termination_…") pushed the card — and its border — far past the
+       modal's edge, over the Requests page behind it. min-width:0 lets the card shrink to the
+       modal, and overflow-wrap:anywhere wraps the long token inside it. */
+    .draft-item { min-width: 0; }
+    .draft-card { min-width: 0; overflow-wrap: anywhere; }
+    .draft-item .draft-card .btn { overflow-wrap: normal; }
+    #draft-preview-modal .modal-body,
+    #pr-draft-modal .modal-body,
+    #dr-draft-modal .modal-body { overflow-wrap: anywhere; }
+    #draft-preview-modal .modal-body img { max-width: 100%; height: auto; }
+</style>
 </head>
 
 <body>
@@ -1157,7 +1171,7 @@
             <i class="ri-check-line me-1"></i>Approve</button>
         ` : ''}`;
 
-      new bootstrap.Modal(document.getElementById('pr-modal')).show();
+      modalInstance('pr-modal').show();
     }
 
     /* ─── DRAFT / DOCUMENT COLLABORATION TIMELINE ───
@@ -1186,27 +1200,57 @@
       return bytes > 1e6 ? (bytes / 1e6).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
     }
 
+    // ── Modal helpers ──────────────────────────────────────────────────────────────────────
+    // Bootstrap 5 does not support two modals open at once: the page's scroll lock belongs to
+    // whichever closes first (closing the top one unlocked the page while the other was still
+    // open) and each keeps its own backdrop. So the Request/Document detail modal, its View
+    // Draft modal and the Draft Preview modal SWAP — the one underneath is hidden, the next one
+    // shown, and closing it brings the previous one back — instead of stacking.
+    //
+    // Every modal here is also driven through getOrCreateInstance. `new bootstrap.Modal(el)` on
+    // an element that already has an instance made a second instance (with its own key/click
+    // handlers) on every open; now there is exactly one per modal, however often it is opened.
+    function modalInstance(id) { return bootstrap.Modal.getOrCreateInstance(document.getElementById(id)); }
+
+    var MODAL_RETURN_TO = {};   // modal id -> id of the modal to bring back when it closes
+    var MODAL_SWAPPING = {};    // modal id -> true while it is being hidden only to make way for the next one
+    // Reopening a detail modal through its own opener re-renders it, so it shows the
+    // version count / status as they are now (e.g. after a draft was uploaded meanwhile).
+    var MODAL_REOPEN = {
+      'pr-modal': function () { if (currentPRId) openPRDetail(currentPRId); else modalInstance('pr-modal').show(); },
+      'dr-modal': function () { if (currentDRId) openDRDetail(currentDRId); else modalInstance('dr-modal').show(); }
+    };
+
+    function swapToModal(toId, fromId) {
+      const fromEl = fromId && document.getElementById(fromId);
+      if (fromEl && fromEl.classList.contains('show')) {
+        MODAL_RETURN_TO[toId] = fromId;
+        MODAL_SWAPPING[fromId] = true;
+        fromEl.addEventListener('hidden.bs.modal', function () { modalInstance(toId).show(); }, { once: true });
+        modalInstance(fromId).hide();
+      } else {
+        delete MODAL_RETURN_TO[toId];
+        modalInstance(toId).show();
+      }
+    }
+
+    ['pr-draft-modal', 'dr-draft-modal', 'draft-preview-modal'].forEach(function (id) {
+      document.getElementById(id).addEventListener('hidden.bs.modal', function () {
+        if (MODAL_SWAPPING[id]) { delete MODAL_SWAPPING[id]; return; }   // hidden to make way for the next modal, not closed by the user
+        const back = MODAL_RETURN_TO[id];
+        delete MODAL_RETURN_TO[id];
+        if (back) (MODAL_REOPEN[back] || function () { modalInstance(back).show(); })();
+      });
+    });
+
     // Every draft/version gets its own dedicated "Draft Preview" modal —
     // same-screen, never navigates away, carries uploader/date/note context
-    // alongside the file. Bootstrap 5 doesn't reliably support two modals
-    // open at once (the second one's backdrop can render behind the first,
-    // eating clicks), so instead of stacking, this SWAPS: hide whichever
-    // draft-collaboration modal triggered it, show the preview modal, then
-    // restore the original one when the preview is closed.
+    // alongside the file (see the swap behaviour above).
     // DRAFT_TIMELINE_ITEMS keeps the last-rendered item list per timeline
     // (prefix 'pr'/'dr') so the modal can look an item up by index without
     // re-parsing anything out of the DOM or fighting HTML-attribute escaping
     // for arbitrary filenames/notes.
     var DRAFT_TIMELINE_ITEMS = {};
-    var draftPreviewReturnTo = null;
-
-    document.getElementById('draft-preview-modal').addEventListener('hidden.bs.modal', function () {
-      if (draftPreviewReturnTo) {
-        const returnEl = document.getElementById(draftPreviewReturnTo);
-        draftPreviewReturnTo = null;
-        if (returnEl) new bootstrap.Modal(returnEl).show();
-      }
-    });
 
     function openDraftPreviewModal(prefix, idx) {
       const item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
@@ -1231,15 +1275,8 @@
       downloadBtn.href = safeLink || '#';
       downloadBtn.setAttribute('download', item.filename);
 
-      // Hide whichever draft-collaboration modal called this (there's only
-      // ever one on screen at a time) and remember it, so closing the
-      // preview restores it — a swap, not a stack.
-      const sourceEl = document.getElementById((prefix || 'pr') + '-draft-modal');
-      const sourceInstance = sourceEl && bootstrap.Modal.getInstance(sourceEl);
-      draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
-      if (sourceInstance) sourceInstance.hide();
-
-      new bootstrap.Modal(document.getElementById('draft-preview-modal')).show();
+      // Swap from whichever draft-collaboration modal called this; closing the preview brings it back.
+      swapToModal('draft-preview-modal', (prefix || 'pr') + '-draft-modal');
     }
 
     // prefix namespaces DRAFT_TIMELINE_ITEMS/preview lookups so a Partnership
@@ -1264,9 +1301,9 @@
       // A link-less item is a system/status entry (e.g. "Request submitted")
       // rather than an uploaded file — no filename, preview, or download row.
       if (!item.link) {
-        return `<div class="d-flex gap-3 mb-3">
+        return `<div class="d-flex gap-3 mb-3 draft-item">
           ${avatar}
-          <div class="flex-grow-1 border rounded p-3">
+          <div class="flex-grow-1 border rounded p-3 draft-card">
             ${header}
             ${item.note ? `<div class="fs-13 text-muted mt-1">${escapeHtml(item.note)}</div>` : ''}
           </div>
@@ -1287,13 +1324,13 @@
       const downloadBtnHtml = safeItemLink
         ? `<a href="${safeItemLink}" download="${escapeHtml(item.filename)}" class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>`
         : `<span class="text-muted fs-12 align-self-center">Link unavailable</span>`;
-      return `<div class="d-flex gap-3 mb-3">
+      return `<div class="d-flex gap-3 mb-3 draft-item">
         ${avatar}
-        <div class="flex-grow-1 border rounded p-3">
+        <div class="flex-grow-1 border rounded p-3 draft-card">
           ${header}
           <div class="fs-13 fw-medium mt-1">${escapeHtml(item.filename)}${sizeStr ? ` <span class="text-muted fs-12">(${sizeStr})</span>` : ''}</div>
           ${item.note ? `<div class="fs-13 text-muted mt-1 fst-italic">"${escapeHtml(item.note)}"</div>` : ''}
-          <div class="d-flex align-items-center gap-2 mt-2">
+          <div class="d-flex align-items-center flex-wrap gap-2 mt-2">
             ${previewBtn}
             ${downloadBtnHtml}
           </div>
@@ -1381,7 +1418,7 @@
       document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('dr-draft-file').value = '';
       document.getElementById('dr-draft-note').value = '';
-      new bootstrap.Modal(document.getElementById('dr-draft-modal')).show();
+      swapToModal('dr-draft-modal', 'dr-modal');
     }
 
     async function uploadDRDraftDocument() {
@@ -1432,7 +1469,7 @@
       document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('pr-draft-file').value = '';
       document.getElementById('pr-draft-note').value = '';
-      new bootstrap.Modal(document.getElementById('pr-draft-modal')).show();
+      swapToModal('pr-draft-modal', 'pr-modal');
     }
 
     async function uploadDraftDocument() {
@@ -1636,7 +1673,7 @@
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
           <i class="ri-close-line me-1"></i>Close</button>`;
 
-      new bootstrap.Modal(document.getElementById('dr-modal')).show();
+      modalInstance('dr-modal').show();
     }
 
     // Backs the Update Status dropdown (any workflow stage) — a single PATCH

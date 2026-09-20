@@ -34,7 +34,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (createdEventIds.length) await db.collection('calendarevents').deleteMany({ id: { $in: createdEventIds } });
-  await db.collection('googleCalendarIntegration').deleteMany({});
+  await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({});
   await cleanupAll();
   await closeDB();
 });
@@ -75,19 +75,21 @@ describe('googleCalendarService payload mapping', () => {
       ['a@example.com']
     );
     expect(body.start).toEqual({ date: '2026-08-05' });
-    expect(body.end).toEqual({ date: '2026-08-05' });
+    // Google's all-day end date is EXCLUSIVE — an end equal to the start is an
+    // empty range Google rejects, so a one-day event ends on the next date.
+    expect(body.end).toEqual({ date: '2026-08-06' });
   });
 });
 
 describe('googleCalendarService "not connected" short-circuit (no network calls)', () => {
-  beforeEach(async () => { await db.collection('googleCalendarIntegration').deleteMany({}); });
+  beforeEach(async () => { await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({}); });
 
   test('isConnected is false with no integration doc', async () => {
     expect(await googleCalendarService.isConnected(db)).toBe(false);
   });
 
   test('isConnected is true once an integration doc exists', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -95,7 +97,7 @@ describe('googleCalendarService "not connected" short-circuit (no network calls)
   });
 
   test('createGoogleEvent short-circuits to not_connected', async () => {
-    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest' }, ['a@example.com']);
+    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest', start: '2026-09-05T09:00' }, ['a@example.com']);
     expect(result).toEqual({ ok: false, error: 'not_connected' });
   });
 
@@ -138,7 +140,7 @@ describe('New route RBAC (all requireAdmin)', () => {
 });
 
 describe('Existing calendar-event feature is unaffected when Google Calendar is not connected', () => {
-  beforeAll(async () => { await db.collection('googleCalendarIntegration').deleteMany({}); });
+  beforeAll(async () => { await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({}); });
 
   test('creating an event still succeeds and still has no googleEventId', async () => {
     const res = await adminAgent.post('/api/calendarevents').send({
@@ -218,7 +220,7 @@ describe('googleAttendeeEmails persistence (attendee-wipe-on-update bug fix)', (
 describe('updateGoogleEvent regression test: sends the real attendee list, never an empty one', () => {
   afterEach(async () => {
     jest.dontMock('googleapis');
-    await db.collection('googleCalendarIntegration').deleteMany({});
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({});
   });
 
   test('patch requestBody.attendees matches the passed recipientEmails exactly', async () => {
@@ -238,7 +240,7 @@ describe('updateGoogleEvent regression test: sends the real attendee list, never
       isolatedService = require('../services/googleCalendarService');
     });
 
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-fake-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -268,7 +270,7 @@ describe('updateGoogleEvent regression test: sends the real attendee list, never
       isolatedService = require('../services/googleCalendarService');
     });
 
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-fake-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -288,26 +290,26 @@ describe('updateGoogleEvent regression test: sends the real attendee list, never
 // failure path a revoked grant or corrupted stored token would hit in
 // production, not just a simulated one.
 describe('Failure handling — invalid/expired credentials against the real Google network', () => {
-  afterEach(async () => { await db.collection('googleCalendarIntegration').deleteMany({}); });
+  afterEach(async () => { await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).deleteMany({}); });
 
   test('createGoogleEvent fails gracefully with a garbage refresh token, and records the sync failure for the Integrations UI', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-not-a-real-refresh-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
 
-    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest' }, ['a@example.com']);
+    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest', start: '2026-09-05T09:00' }, ['a@example.com']);
     expect(result.ok).toBe(false);
     expect(result.error).toBeTruthy();
 
-    const integration = await db.collection('googleCalendarIntegration').findOne({});
+    const integration = await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).findOne({});
     expect(integration.lastSyncOk).toBe(false);
     expect(integration.lastSyncError).toBeTruthy();
     expect(integration.lastSyncAt).toBeTruthy();
   }, 20000);
 
   test('deleteGoogleEvent fails gracefully (never throws) with a garbage refresh token', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-not-a-real-refresh-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -316,11 +318,11 @@ describe('Failure handling — invalid/expired credentials against the real Goog
   }, 20000);
 
   test('a corrupted encryptedRefreshToken value (fails to decrypt) is caught, not thrown', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: 'not-even-a-valid-encrypted-payload',
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
-    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest' }, ['a@example.com']);
+    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest', start: '2026-09-05T09:00' }, ['a@example.com']);
     expect(result.ok).toBe(false);
     expect(result.error).toBeTruthy();
   });
@@ -328,7 +330,7 @@ describe('Failure handling — invalid/expired credentials against the real Goog
 
 describe('Disconnect lifecycle', () => {
   test('disconnect() removes the integration doc even when the stored token is garbage (best-effort revoke)', async () => {
-    await db.collection('googleCalendarIntegration').insertOne({
+    await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).insertOne({
       connectedByEmail: 'jesttest@example.com', encryptedRefreshToken: encrypt('jesttest-garbage-token'),
       calendarId: 'primary', connectedAt: new Date().toISOString()
     });
@@ -337,7 +339,7 @@ describe('Disconnect lifecycle', () => {
   }, 20000);
 
   test('after disconnect, sync calls short-circuit to not_connected again', async () => {
-    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest' }, ['a@example.com']);
+    const result = await googleCalendarService.createGoogleEvent(db, { title: 'jesttest', start: '2026-09-05T09:00' }, ['a@example.com']);
     expect(result).toEqual({ ok: false, error: 'not_connected' });
   });
 });
@@ -370,6 +372,6 @@ describe('handleOAuthCallback defensive check: missing refresh token', () => {
     ).rejects.toThrow(/refresh token/i);
 
     // Confirms nothing was persisted from the failed attempt.
-    expect(await db.collection('googleCalendarIntegration').findOne({ connectedByEmail: 'jesttest@example.com' })).toBeNull();
+    expect(await db.collection(process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION).findOne({ connectedByEmail: 'jesttest@example.com' })).toBeNull();
   });
 });

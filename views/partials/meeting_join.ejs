@@ -1,0 +1,119 @@
+<%# Join control for a calendar meeting the signed-in user is invited to. Shared by
+    the Administrator/CIRL Staff/College Staff calendar (administrator/calendar.ejs)
+    and the Partner calendar (potential_partner/partner_calendar.ejs) so there is one
+    implementation. A page shows it by calling MeetingJoin.render(eventId, event.myInvite).
+    The button is only a convenience: the server refuses a Join before the meeting
+    starts, and the join time it records is the server's clock, never this page's. %>
+<div id="mj-block" class="d-none mb-3">
+    <div class="d-flex align-items-start">
+        <div class="flex-shrink-0 me-3"><i class="ri-user-follow-line text-muted fs-16"></i></div>
+        <div class="flex-grow-1">
+            <h6 class="fw-semibold mb-2"><span class="badge bg-info-subtle text-info" id="mj-badge">You're invited</span></h6>
+            <button type="button" class="btn btn-success btn-sm" id="mj-btn" disabled>
+                <i class="ri-login-box-line align-bottom me-1"></i><span id="mj-btn-label">Join</span>
+            </button>
+            <div class="text-muted fs-12 mt-2" id="mj-hint" aria-live="polite"></div>
+        </div>
+    </div>
+</div>
+<script>
+window.MeetingJoin = (function () {
+    var state = null, timer = null, busy = false, joinedListener = null;
+    function el(id) { return document.getElementById(id); }
+
+    function duration(ms) {
+        var s = Math.max(0, Math.ceil(ms / 1000)), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+        s = s % 60;
+        if (d) return d + 'd ' + h + 'h ' + m + 'm';
+        if (h) return h + 'h ' + m + 'm ' + s + 's';
+        return m + 'm ' + s + 's';
+    }
+
+    // The server's "now", as best the browser can tell: the device clock shifted by
+    // the difference measured against the server when the event was loaded.
+    function serverNow() { return Date.now() + state.offset; }
+
+    function paint() {
+        if (!state) return;
+        var btn = el('mj-btn'), label = el('mj-btn-label'), hint = el('mj-hint'), badge = el('mj-badge');
+        if (state.joined) {
+            badge.className = 'badge bg-success-subtle text-success';
+            badge.textContent = 'Joined';
+            btn.disabled = true;
+            label.textContent = 'Joined';
+            hint.textContent = 'You joined at ' + state.joinedAtDisplay + ' (' + state.timeZone + ').';
+            return;
+        }
+        badge.className = 'badge bg-info-subtle text-info';
+        badge.textContent = "You're invited";
+        if (state.startsMs === null) {
+            btn.disabled = true; label.textContent = 'Join'; hint.textContent = 'This meeting has no valid start time.';
+            return;
+        }
+        var remaining = state.startsMs - serverNow();
+        if (remaining > 0) {
+            btn.disabled = true;
+            label.textContent = 'Join';
+            hint.textContent = 'Joining opens when the meeting starts, in ' + duration(remaining) + '.';
+        } else {
+            btn.disabled = busy;
+            label.textContent = 'Join';
+            if (!state.message) hint.textContent = 'The meeting has started. Join to record your attendance.';
+        }
+    }
+
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    function hide() { stop(); state = null; el('mj-block').classList.add('d-none'); }
+
+    function load(invite) {
+        state = {
+            joined: !!invite.joined,
+            joinedAtDisplay: invite.joinedAtDisplay,
+            timeZone: invite.timeZone || '',
+            startsMs: invite.startsAt ? Date.parse(invite.startsAt) : null,
+            offset: invite.serverNow ? Date.parse(invite.serverNow) - Date.now() : 0,
+            message: ''
+        };
+    }
+
+    function render(eventId, invite) {
+        stop();
+        if (!invite || !invite.invited) { hide(); return; }
+        load(invite);
+        state.eventId = eventId;
+        el('mj-block').classList.remove('d-none');
+        el('mj-hint').textContent = '';
+        paint();
+        timer = setInterval(paint, 1000);
+    }
+
+    function join() {
+        if (!state || busy) return;
+        busy = true; state.message = ''; paint();
+        fetch('/api/calendarevents/' + encodeURIComponent(state.eventId) + '/join', { method: 'POST' })
+            .then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); })
+            .then(function (res) {
+                if (res.data && res.data.success) {
+                    var eventId = state.eventId;
+                    load(res.data.myInvite); state.eventId = eventId;
+                    if (joinedListener) joinedListener(res.data.myInvite);
+                } else if (res.data && res.data.code === 'MEETING_NOT_STARTED') {
+                    // Our clock said "started" but the server's says not yet — trust the server and re-sync.
+                    state.startsMs = Date.parse(res.data.startsAt);
+                    state.offset = Date.parse(res.data.serverNow) - Date.now();
+                    state.message = 'not-started';
+                    el('mj-hint').textContent = 'The meeting has not started yet on the server clock. Try again in a moment.';
+                } else {
+                    state.message = 'error';
+                    el('mj-hint').textContent = (res.data && res.data.error) || 'Could not record your attendance.';
+                }
+            })
+            .catch(function () { state.message = 'error'; el('mj-hint').textContent = 'Could not reach the server. Try again.'; })
+            .then(function () { busy = false; paint(); });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () { el('mj-btn').addEventListener('click', join); });
+    return { render: render, hide: hide, stop: stop, onJoined: function (fn) { joinedListener = fn; } };
+})();
+</script>

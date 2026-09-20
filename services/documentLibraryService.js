@@ -8,7 +8,8 @@ const DOCUMENTS_DIR = path.join(__dirname, '..', 'uploads', 'documents');
 if (!fs.existsSync(DOCUMENTS_DIR)) fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
 
 // Maps the free-form OCR document-type guess down to the short codes the
-// Document Library UI filters by (All / MOA / MOU / Accreditation / Other).
+// Document Library UI filters by (All / MOA / MOU / Other). Accreditation records keep their
+// "Accreditation" type (and still show under All) — only its filter button was removed (2026-09-20).
 function shortDocType(documentType) {
   if (!documentType) return 'Other';
   if (/agreement/i.test(documentType)) return 'MOA';

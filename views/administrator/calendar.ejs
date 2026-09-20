@@ -13,6 +13,29 @@
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet"/>
     <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
+    <style>
+        /* ── Calendar page layout ──
+           The calendar card used to be stretched (.card-h-100 = height:100%) to the height of
+           the left column, and the left column's height came from a FIXED 400px "Upcoming
+           Events" box even when it held a single event. The month grid is only ~650px tall, so
+           the card kept ~300px of empty space under it.
+           Now the calendar card is exactly as tall as its calendar, and on wide screens the left
+           column is a flex column that FILLS that height: the Upcoming Events list takes
+           whatever is left and scrolls inside it when there are more events than fit. The list's
+           minimum height is kept small on purpose: the left column can never be taller than the
+           calendar, or it would set the row height and bring the empty space back.
+           The short List view is the one view that is shorter than the left column, so there the
+           card is stretched to match it (.cal-card-fill, toggled from datesSet below) rather than
+           leaving the page ending under a half-empty card. */
+        .cal-card { height: auto; }
+        .cal-upcoming-scroll { max-height: 320px; overflow-y: auto; }     /* stacked (narrow) layout */
+        @media (min-width: 1200px) {
+            .cal-side { display: flex; flex-direction: column; }
+            .cal-side > .cal-upcoming { flex: 1 1 0; min-height: 130px; display: flex; flex-direction: column; margin-bottom: 1.5rem; }
+            .cal-side > .cal-upcoming .cal-upcoming-scroll { flex: 1 1 0; min-height: 0; max-height: none; }
+            .cal-card.cal-card-fill { height: calc(100% - 1.5rem); }
+        }
+    </style>
 </head>
 <body>
 <div id="layout-wrapper">
@@ -43,7 +66,7 @@
 
                             <!-- col-xl-3 sidebar â€” exact from apps-calendar.html -->
                             <% var canManageCalendar = typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff'); %>
-                            <div class="col-xl-3">
+                            <div class="col-xl-3 cal-side">
                                 <% if (canManageCalendar) { %>
                                 <div class="card">
                                     <div class="card-body">
@@ -63,10 +86,10 @@
                                 </div>
                                 <% } %>
 
-                                <div>
+                                <div class="cal-upcoming">
                                     <h5 class="mb-1">Upcoming Events</h5>
                                     <p class="text-muted">Don't miss scheduled events</p>
-                                    <div class="pe-2 me-n1 mb-3" data-simplebar style="height:400px">
+                                    <div class="cal-upcoming-scroll pe-2 me-n1">
                                         <div id="upcoming-event-list"></div>
                                     </div>
                                 </div>
@@ -92,7 +115,8 @@
 
                             <!-- col-xl-9 main calendar â€” exact from apps-calendar.html -->
                             <div class="col-xl-9">
-                                <div class="card card-h-100">
+                                <div id="cal-notice"></div>
+                                <div class="card cal-card">
                                     <div class="card-body">
                                         <div id="calendar"></div>
                                     </div>
@@ -129,6 +153,17 @@
                                             <div class="d-flex mb-3">
                                                 <div class="flex-shrink-0 me-3"><i class="ri-discuss-line text-muted fs-16"></i></div>
                                                 <div class="flex-grow-1"><p class="text-muted mb-0" id="v-desc"></p></div>
+                                            </div>
+                                            <%- include('../partials/meeting_join') %>
+                                            <div class="d-none mb-3" id="v-invites">
+                                                <div class="d-flex align-items-start">
+                                                    <div class="flex-shrink-0 me-3"><i class="ri-team-line text-muted fs-16"></i></div>
+                                                    <div class="flex-grow-1">
+                                                        <h6 class="fw-semibold mb-1" id="v-invite-summary"></h6>
+                                                        <div class="alert alert-warning py-2 px-3 fs-12 mb-2 d-none" id="v-invite-warning"></div>
+                                                        <button type="button" class="btn btn-sm btn-soft-primary" id="btn-attendance"><i class="ri-list-check-2 align-bottom me-1"></i>View attendance</button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                         <!-- Edit/Add form -->
@@ -171,7 +206,7 @@
                                                 <textarea class="form-control" id="f-desc" rows="2" placeholder="Additional notes..."></textarea>
                                             </div>
                                             <div class="mb-3" id="f-recipients-wrap">
-                                                <label class="form-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
+                                                <label class="form-label" id="f-recipients-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
                                                 <select class="form-select" id="f-recipients" multiple size="6">
                                                     <optgroup label="Roles">
                                                         <option value="all">All Users</option>
@@ -182,7 +217,7 @@
                                                     </optgroup>
                                                     <optgroup label="Individual Users" id="f-recipients-individuals"></optgroup>
                                                 </select>
-                                                <div class="form-text">Ctrl/Cmd-click to select multiple. Only the users selected here will be notified. Leave blank to create the event without notifying anyone.</div>
+                                                <div class="form-text" id="f-recipients-help">Ctrl/Cmd-click to select multiple. Only the users selected here will be notified and e-mailed a Google Calendar invitation. Leave blank to create the event without notifying anyone.</div>
                                             </div>
                                         </div>
                                     </div>
@@ -194,6 +229,29 @@
                                 </div>
                             </div>
                         </div><!-- end modal -->
+
+                        <!-- Attendance modal: who was invited and who actually joined (server-recorded time) -->
+                        <div class="modal fade" id="attendance-modal" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered modal-lg">
+                                <div class="modal-content border-0">
+                                    <div class="modal-header p-3 bg-info-subtle">
+                                        <h5 class="modal-title" id="attendance-title">Attendance</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4">
+                                        <p class="text-muted fs-13 mb-3" id="attendance-meta"></p>
+                                        <div class="alert alert-warning py-2 px-3 fs-12 d-none" id="attendance-warning"></div>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm align-middle mb-0">
+                                                <thead class="table-light"><tr><th>Name</th><th>Role</th><th>Email</th><th>Invitation</th><th>Status</th><th>Time Joined</th></tr></thead>
+                                                <tbody id="attendance-body"></tbody>
+                                            </table>
+                                        </div>
+                                        <p class="text-muted fs-12 mt-3 mb-0">Invited means the user was added to the meeting; Joined means they clicked Join once the meeting started. The join time is recorded by the server.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div><!-- end attendance modal -->
 
                     </div>
                 </div>
@@ -229,7 +287,7 @@
 // now gates the create/edit/delete API routes too — see cirl.js).
 var CAN_MANAGE = <%- JSON.stringify(canManageCalendar) %>;
 
-var cal, bsModal, currentEv = null, isAdding = false;
+var cal, bsModal, attendanceModal, currentEv = null, isAdding = false, saving = false, dropBusy = false, pendingRequestId = null;
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function str_dt(dt){
@@ -243,6 +301,118 @@ function str_tm(dt){
 function str_tm_input(dt){
   if(!dt) return '';
   return String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+}
+// Local calendar date for a date <input>. (toISOString().slice(0,10) gave the
+// UTC date, which is the PREVIOUS day for any event before 08:00 Manila time —
+// editing such an event silently moved it a day earlier.)
+function str_date_input(dt){
+  if(!dt) return '';
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+// The month grid's height comes from FullCalendar's aspectRatio (width / height), so it shrinks
+// with the window while the sidebar next to it keeps a fixed minimum height. From 1366px up the
+// default (1.35) already matches that height; on narrower desktop widths (1200-1365px, where the
+// two-column layout is still used) a lower ratio keeps the grid as tall as the sidebar instead
+// of leaving the page ending under a short calendar.
+function calendarAspect(w){ return w >= 1366 ? 1.35 : w >= 1280 ? 1.15 : w >= 1200 ? 0.95 : 1.35; }
+
+// Wall-clock string in the SAME shape the Add/Edit form saves ("2026-09-29T21:44"
+// or "2026-09-29" for all-day). Drag-and-drop used to save toISOString() (a UTC
+// instant) instead, so one event could end up stored in two different formats.
+function fc_wall(dt, allDay){
+  var date = str_date_input(dt);
+  return allDay ? date : date + 'T' + str_tm_input(dt);
+}
+function esc(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// One token per Save / palette drop, so a repeated request for the same action
+// is recognised by the server and cannot create a second event.
+function newRequestId(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+// Result of a create/update: what Google Calendar did, and anyone who could not be e-mailed.
+function reportInvitations(inv, doneText){
+  var toast = doneText;
+  var lines = [];
+  if(inv && inv.invited){
+    if(inv.google === 'sent') toast += ' Google Calendar is e-mailing the invitation to ' + inv.googleAttendees + ' attendee' + (inv.googleAttendees === 1 ? '' : 's') + '.';
+    else if(inv.google === 'not_connected') lines.push('Google Calendar is not connected, so no invitation e-mails were sent. Connect it under Settings \u2192 Integrations.');
+    else if(inv.google === 'failed') lines.push('Google Calendar did not send the invitation: ' + esc(inv.error || 'unknown error'));
+    else if(inv.google === 'no_valid_attendees') lines.push('None of the invited users has a valid e-mail address, so no Google Calendar invitation was sent.');
+  }
+  ((inv && inv.skipped) || []).forEach(function(s){
+    lines.push('Not e-mailed: <strong>' + esc(s.name || s.email || 'Unknown user') + '</strong>' + (s.name && s.email ? ' (' + esc(s.email) + ')' : '') + ' \u2014 ' + esc(s.reason));
+  });
+  showToast('<i class="ri-checkbox-circle-line me-1"></i>' + esc(toast));
+  var box = document.getElementById('cal-notice');
+  if(!box) return;
+  box.innerHTML = lines.length
+    ? '<div class="alert alert-warning alert-dismissible fade show" role="alert"><strong>' + esc(doneText.replace(/\.$/, '')) + ', but:</strong><br>' + lines.join('<br>') + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>'
+    : '';
+}
+
+function renderInvitationPanel(ev){
+  var ep = ev.extendedProps, box = document.getElementById('v-invites');
+  var count = CAN_MANAGE ? (ep.participantCount || 0) : 0;
+  box.classList.toggle('d-none', !count);
+  if(!count) return;
+  document.getElementById('v-invite-summary').textContent = count + ' invited' + (ep.joinedCount ? ' \u00b7 ' + ep.joinedCount + ' joined' : '');
+  var warn = [];
+  if(!ep.googleEventId){
+    var st = ep.googleSyncStatus;
+    warn.push(st === 'not_connected' ? 'Google Calendar is not connected \u2014 no invitation e-mails were sent.'
+      : st === 'failed' ? 'Google Calendar did not send the invitation: ' + esc(ep.googleSyncError || 'unknown error')
+      : st === 'no_valid_attendees' ? 'No invited user has a valid e-mail address \u2014 no Google Calendar invitation was sent.'
+      : 'No Google Calendar invitation was sent for this event.');
+  }
+  (ep.inviteSkipped || []).forEach(function(s){
+    warn.push('Not e-mailed: ' + esc(s.name || s.email || 'Unknown user') + (s.name && s.email ? ' (' + esc(s.email) + ')' : '') + ' \u2014 ' + esc(s.reason));
+  });
+  var w = document.getElementById('v-invite-warning');
+  w.innerHTML = warn.join('<br>');
+  w.classList.toggle('d-none', !warn.length);
+}
+
+function saveMove(dbId, updates, info){
+  apiPatch(dbId, updates).then(function(data){
+    if(!data.success){ info.revert(); showToast(data.error || 'Could not move the event.', '#f06548'); return; }
+    syncFromServer(info.event, data.event);
+    reportInvitations(data.invitations, 'Event updated.');
+    upcomingEvent();
+  }).catch(function(){ info.revert(); showToast('Error saving event.', '#f06548'); });
+}
+
+function openAttendance(){
+  if(!currentEv) return;
+  var id = currentEv.extendedProps.dbId || currentEv.id;
+  fetch('/api/calendarevents/' + id + '/attendance').then(function(r){ return r.json(); }).then(function(d){
+    if(d.error){ showToast(d.error, '#f06548'); return; }
+    document.getElementById('attendance-title').textContent = d.event.title + ' \u2014 Attendance';
+    document.getElementById('attendance-meta').textContent = (d.event.startsAtDisplay ? 'Starts ' + d.event.startsAtDisplay + ' (' + d.timeZone + '). ' : '') + d.summary.joined + ' of ' + d.summary.invited + ' invited participant' + (d.summary.invited === 1 ? '' : 's') + ' joined.';
+    var warn = [];
+    if(d.google.status !== 'sent') warn.push(d.google.status === 'not_connected' ? 'Google Calendar is not connected \u2014 no invitation e-mails were sent.' : d.google.status === 'failed' ? 'Google Calendar did not send the invitation: ' + esc(d.google.error || 'unknown error') : 'No Google Calendar invitation was sent for this event.');
+    (d.skipped || []).forEach(function(s){ warn.push('Not e-mailed: ' + esc(s.name || s.email || 'Unknown user') + (s.name && s.email ? ' (' + esc(s.email) + ')' : '') + ' \u2014 ' + esc(s.reason)); });
+    var w = document.getElementById('attendance-warning'); w.innerHTML = warn.join('<br>'); w.classList.toggle('d-none', !warn.length);
+    document.getElementById('attendance-body').innerHTML = d.participants.length ? d.participants.map(function(p){
+      var joined = p.status === 'Joined';
+      return '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.role) + '</td><td class="text-break">' + esc(p.email) + '</td><td>' + esc(p.invitation) + '</td>'
+        + '<td><span class="badge ' + (joined ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary') + '">' + esc(p.status) + '</span></td>'
+        + '<td' + (joined ? ' title="' + esc(p.joinedDateDisplay) + ' (' + esc(d.timeZone) + ')"' : '') + '>' + (joined ? esc(p.joinedAtDisplay) : '\u2014') + '</td></tr>';
+    }).join('') : '<tr><td colspan="6" class="text-muted text-center">Nobody was invited to this event.</td></tr>';
+    bsModal.hide();
+    attendanceModal.show();
+  }).catch(function(){ showToast('Could not load the attendance list.', '#f06548'); });
+}
+
+// After the server answers a move/edit, keep the calendar's copy of the event in step.
+function syncFromServer(fcEvent, doc){
+  if(!doc) return;
+  fcEvent.setExtendedProp('googleEventId', doc.googleEventId || null);
+  fcEvent.setExtendedProp('googleSyncStatus', doc.googleSyncStatus || null);
+  fcEvent.setExtendedProp('googleSyncError', doc.googleSyncError || null);
+  fcEvent.setExtendedProp('inviteSkipped', doc.inviteSkipped || []);
+  fcEvent.setExtendedProp('participantCount', (doc.participantEmails || []).length || fcEvent.extendedProps.participantCount || 0);
 }
 
 // â”€â”€ Upcoming events sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -282,6 +452,8 @@ function showView(ev){
   document.getElementById('v-location').textContent = ev.extendedProps.location || 'â€”';
   document.getElementById('v-desc').textContent     = ev.extendedProps.description || 'â€”';
   document.getElementById('v-gcal-badge').classList.toggle('d-none', !ev.extendedProps.googleEventId);
+  MeetingJoin.render(ev.extendedProps.dbId || ev.id, ev.extendedProps.myInvite);
+  renderInvitationPanel(ev);
   document.getElementById('btn-delete').classList.toggle('d-none', !CAN_MANAGE);
   document.getElementById('btn-edit-toggle').classList.toggle('d-none', !CAN_MANAGE);
   document.getElementById('btn-save').classList.add('d-none');
@@ -289,7 +461,9 @@ function showView(ev){
 }
 
 function showAdd(dateStr){
-  currentEv = null; isAdding = true;
+  currentEv = null; isAdding = true; pendingRequestId = newRequestId();
+  document.getElementById('f-recipients-label').innerHTML = 'Notify Recipients <span class="text-muted fw-normal">(Optional)</span>';
+  document.getElementById('f-recipients-help').textContent = 'Ctrl/Cmd-click to select multiple. Only the users selected here will be notified and e-mailed a Google Calendar invitation. Leave blank to create the event without notifying anyone.';
   document.getElementById('modal-title').textContent = 'Add Event';
   document.getElementById('view-mode').classList.add('d-none');
   document.getElementById('edit-mode').classList.remove('d-none');
@@ -315,14 +489,18 @@ function showEdit(){
   document.getElementById('view-mode').classList.add('d-none');
   document.getElementById('edit-mode').classList.remove('d-none');
   document.getElementById('f-title').value    = currentEv.title;
-  document.getElementById('f-date').value     = currentEv.start ? currentEv.start.toISOString().slice(0,10) : '';
+  document.getElementById('f-date').value     = str_date_input(currentEv.start);
   document.getElementById('f-start').value    = currentEv.allDay ? '' : str_tm_input(currentEv.start);
   document.getElementById('f-end').value      = currentEv.end && !currentEv.allDay ? str_tm_input(currentEv.end) : '';
   document.getElementById('f-location').value = currentEv.extendedProps.location    || '';
   document.getElementById('f-desc').value     = currentEv.extendedProps.description || '';
   document.getElementById('f-type').value     = currentEv.classNames[0] || 'bg-primary-subtle';
-  // Recipients only apply at creation time — editing an existing event never re-notifies.
-  document.getElementById('f-recipients-wrap').classList.add('d-none');
+  // Editing never re-notifies the people already invited; anyone selected here is ADDED
+  // (notified, added to the Google event, and e-mailed the invitation).
+  document.getElementById('f-recipients-wrap').classList.remove('d-none');
+  Array.from(document.getElementById('f-recipients').options).forEach(function(o){ o.selected = false; });
+  document.getElementById('f-recipients-label').innerHTML = 'Add attendees <span class="text-muted fw-normal">(Optional)</span>';
+  document.getElementById('f-recipients-help').textContent = 'Already-invited people are kept. Anyone selected here is added and sent a Google Calendar invitation. Leave blank to change nothing.';
   document.getElementById('btn-delete').classList.remove('d-none');
   document.getElementById('btn-edit-toggle').classList.add('d-none');
   document.getElementById('btn-save').classList.remove('d-none');
@@ -341,7 +519,13 @@ function docToFcEvent(doc){
       location:    doc.location    || '',
       description: doc.description || '',
       dbId:        doc.id,
-      googleEventId: doc.googleEventId || null
+      googleEventId: doc.googleEventId || null,
+      googleSyncStatus: doc.googleSyncStatus || null,
+      googleSyncError:  doc.googleSyncError || null,
+      inviteSkipped:    doc.inviteSkipped || [],
+      participantCount: doc.participantCount || 0,
+      joinedCount:      doc.joinedCount || 0,
+      myInvite:         doc.myInvite || null
     }
   };
 }
@@ -349,6 +533,11 @@ function docToFcEvent(doc){
 // â”€â”€ DOMContentLoaded â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 document.addEventListener('DOMContentLoaded', function(){
   bsModal = new bootstrap.Modal(document.getElementById('event-modal'));
+  attendanceModal = new bootstrap.Modal(document.getElementById('attendance-modal'));
+  document.getElementById('event-modal').addEventListener('hidden.bs.modal', MeetingJoin.stop);
+  document.getElementById('btn-attendance').addEventListener('click', openAttendance);
+  // If this user joins from the modal, keep the calendar's copy of the event current.
+  MeetingJoin.onJoined(function(invite){ if(currentEv) currentEv.setExtendedProp('myInvite', invite); });
   var calEl = document.getElementById('calendar');
 
   // Deep-link support so a "New event" notification can jump straight to that
@@ -377,6 +566,7 @@ document.addEventListener('DOMContentLoaded', function(){
     timeZone:    'local',
     headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay,listMonth' },
     initialView: 'dayGridMonth',
+    aspectRatio: calendarAspect(window.innerWidth),
     editable:    CAN_MANAGE,
     droppable:   CAN_MANAGE,
     selectable:  CAN_MANAGE,
@@ -389,43 +579,52 @@ document.addEventListener('DOMContentLoaded', function(){
 
     windowResize: function(){
       var w = window.innerWidth;
+      cal.setOption('aspectRatio', calendarAspect(w));
       cal.changeView(w < 768 ? 'listMonth' : w < 1200 ? 'timeGridWeek' : 'dayGridMonth');
     },
     select:      function(info){ showAdd(info.startStr.slice(0,10)); },
     eventClick:  function(info){ showView(info.event); },
 
-    // Drag-drop updates end date in DB
+    // Drag-drop moves the event: exactly one PATCH per gesture, in the same
+    // wall-clock format the Add/Edit form saves. The server patches the SAME
+    // Google Calendar event (never inserts a new one) and Google e-mails the
+    // attendees the change.
     eventDrop: function(info){
-      var dbId = info.event.extendedProps.dbId || info.event.id;
-      var updates = { start: info.event.start.toISOString() };
-      if(info.event.end) updates.end = info.event.end.toISOString();
-      updates.allDay = info.event.allDay;
-      apiPatch(dbId, updates).catch(function(){ info.revert(); });
-      upcomingEvent();
+      var ev = info.event, dbId = ev.extendedProps.dbId || ev.id;
+      saveMove(dbId, { start: fc_wall(ev.start, ev.allDay), end: ev.end ? fc_wall(ev.end, ev.allDay) : null, allDay: ev.allDay }, info);
     },
 
     // Resize updates end time in DB
     eventResize: function(info){
-      var dbId = info.event.extendedProps.dbId || info.event.id;
-      var updates = {};
-      if(info.event.end) updates.end = info.event.end.toISOString();
-      apiPatch(dbId, updates).catch(function(){ info.revert(); });
-      upcomingEvent();
+      var ev = info.event, dbId = ev.extendedProps.dbId || ev.id;
+      saveMove(dbId, { end: ev.end ? fc_wall(ev.end, ev.allDay) : null }, info);
     },
 
-    // Drag external event tile onto calendar
+    // Drag an external event tile onto the calendar. The tile's Draggable is
+    // configured with create:false (below), so FullCalendar does NOT add its own
+    // event on drop — this handler saves it once and adds the saved event once.
+    // (Before, FullCalendar added a phantom event AND this handler added the real
+    // one, so every palette drop showed two events, only one of them saved.)
     drop: function(info){
+      if(dropBusy) return;
+      dropBusy = true;
       var cls   = info.draggedEl.dataset.class || 'bg-primary-subtle';
       var title = info.draggedEl.innerText.trim();
-      var payload = { title: title, start: info.dateStr, allDay: true, className: cls, location: '', description: '' };
+      var payload = { title: title, start: info.dateStr, allDay: true, className: cls, location: '', description: '', clientRequestId: newRequestId() };
       apiPost(payload).then(function(data){
         if(data.success){
-          cal.addEvent(docToFcEvent(data.event));
+          if(!cal.getEventById(String(data.event.id))) cal.addEvent(docToFcEvent(data.event));
           upcomingEvent();
-        }
-      });
+        } else { showToast(data.error || 'Could not create the event.', '#f06548'); }
+      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); })
+        .then(function(){ dropBusy = false; });
     },
 
+    // List view is much shorter than the sidebar next to it: let its card fill the row.
+    datesSet: function(info){
+      var card = document.querySelector('.cal-card');
+      if (card) card.classList.toggle('cal-card-fill', info.view.type === 'listMonth');
+    },
     eventDidMount: function(){ upcomingEvent(); },
     loading: function(isLoading){ if (!isLoading) openFromQuery(); }
   });
@@ -436,7 +635,7 @@ document.addEventListener('DOMContentLoaded', function(){
   if(CAN_MANAGE && typeof FullCalendar.Draggable !== 'undefined'){
     new FullCalendar.Draggable(document.getElementById('external-events'),{
       itemSelector: '.external-event',
-      eventData: function(el){ return { title: el.innerText.trim(), className: el.dataset.class }; }
+      eventData: function(el){ return { title: el.innerText.trim(), className: el.dataset.class, create: false }; }
     });
   }
 
@@ -446,6 +645,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // â”€â”€ Save (add or edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   document.getElementById('btn-save').addEventListener('click', function(){
+    if(saving) return; // a second click while the first request is in flight would be a second Save
     var title  = document.getElementById('f-title').value.trim();
     var date   = document.getElementById('f-date').value;
     var tinput = document.getElementById('f-title');
@@ -456,37 +656,44 @@ document.addEventListener('DOMContentLoaded', function(){
     var et    = document.getElementById('f-end').value;
     var start = st ? date + 'T' + st : date;
     var end   = et ? date + 'T' + et : null;
+    if(st && et && et < st){ showToast('The end time cannot be before the start time.', '#f06548'); return; }
     var cls   = document.getElementById('f-type').value;
     var loc   = document.getElementById('f-location').value.trim();
     var desc  = document.getElementById('f-desc').value.trim();
+    var recipients = Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
+    var saveBtn = document.getElementById('btn-save');
+    function finish(){ saving = false; saveBtn.disabled = false; }
+    saving = true; saveBtn.disabled = true;
 
     if(currentEv && !isAdding){
-      // EDIT â€” persist to MongoDB then update FC event
+      // EDIT — persist to MongoDB then update FC event (the same event; never a new one)
       var dbId   = currentEv.extendedProps.dbId || currentEv.id;
       var updates = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc };
+      if(recipients.length) updates.recipients = recipients;
       apiPatch(dbId, updates).then(function(data){
         if(data.success){
           currentEv.setProp('title', title);
           currentEv.setProp('classNames', [cls]);
           currentEv.setStart(start);
-          if(end) currentEv.setEnd(end);
+          currentEv.setEnd(end);
           currentEv.setExtendedProp('location', loc);
           currentEv.setExtendedProp('description', desc);
+          syncFromServer(currentEv, data.event);
           bsModal.hide(); upcomingEvent();
-          showToast('<i class="ri-checkbox-circle-line me-1"></i>Event updated.');
+          reportInvitations(data.invitations, 'Event updated.');
         } else { showToast(data.error || 'Could not save the event.', '#f06548'); }
-      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); });
+      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); }).then(finish);
     } else {
-      // ADD â€” persist to MongoDB then add to FC
-      var recipients = Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
-      var payload = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc, recipients:recipients };
+      // ADD — persist to MongoDB then add to FC
+      var payload = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc, recipients:recipients, clientRequestId: pendingRequestId };
       apiPost(payload).then(function(data){
         if(data.success){
-          cal.addEvent(docToFcEvent(data.event));
+          if(!cal.getEventById(String(data.event.id))) cal.addEvent(docToFcEvent(data.event));
+          pendingRequestId = newRequestId();
           bsModal.hide(); upcomingEvent();
-          showToast('<i class="ri-checkbox-circle-line me-1"></i>Event created.');
+          reportInvitations(data.invitations, data.duplicate ? 'Event already created.' : 'Event created.');
         } else { showToast(data.error || 'Could not create the event.', '#f06548'); }
-      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); });
+      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); }).then(finish);
     }
   });
 
