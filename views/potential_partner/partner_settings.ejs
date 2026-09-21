@@ -258,10 +258,12 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
         }).then(function (r) { return r.json(); }).then(function (data) {
             if (data.success) {
-                showToast('Password updated.', '#0ab39c');
                 document.getElementById('pw-old').value = '';
                 document.getElementById('pw-new').value = '';
                 document.getElementById('pw-confirm').value = '';
+                // The server ended this session with the password change: sign in again with the new password.
+                showToast('Password changed. Please log in again with your new password…', '#0ab39c');
+                setTimeout(function () { window.location.href = '/?passwordChanged=1'; }, 2500);
             } else showToast(data.error || 'Failed to update password.', '#f06548');
         });
     }

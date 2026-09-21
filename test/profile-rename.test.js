@@ -159,3 +159,53 @@ describe('Department / Institution / Position are fixed at registration', () => 
     expect(edited.body.user).toMatchObject({ unit: 'CEA', institution: 'CSPC Naga', position: 'Dean' });
   });
 });
+
+describe('Changing the password ends the session — the person signs in again with the new password', () => {
+  test.each([
+    ['Administrator', 'Administrator', '/api/admin/password'],
+    ['CIRL Staff', 'Staff', '/api/staff/password'],
+    ['College Staff', 'Auth. Personnel', '/api/personnel/password'],
+    ['Partner', 'potential_partner', '/api/partner/password']
+  ])('%s: the session is ended, the old password stops working and the new one signs in', async (_label, role, url) => {
+    const { agent, user } = await agentFor(role);
+    expect((await agent.get('/api/me')).status).toBe(200);            // signed in before
+
+    const res = await agent.post(url).send({ oldPassword: user.password, newPassword: 'BrandNew123' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, reloginRequired: true });
+
+    // this browser is signed out now: an authenticated route sends it back to the login page
+    const after = await agent.get('/api/me');
+    expect(after.status).toBe(302);
+    expect(after.headers.location).toBe('/');
+
+    // the old password no longer signs in, the new one does
+    const oldLogin = await request(app).post('/login').type('form').send({ username: user.email, password: user.password });
+    expect(oldLogin.status).toBe(200);                                // the login page again, not a redirect
+    expect(oldLogin.text).toContain('Invalid email or password.');
+    const fresh = request.agent(app);
+    const newLogin = await fresh.post('/login').type('form').send({ username: user.email, password: 'BrandNew123' });
+    expect(newLogin.status).toBe(302);
+    expect((await fresh.get('/api/me')).status).toBe(200);
+  });
+
+  test('a wrong current password does NOT end the session', async () => {
+    const { agent } = await agentFor('Auth. Personnel');
+    const res = await agent.post('/api/personnel/password').send({ oldPassword: 'not-my-password', newPassword: 'BrandNew123' });
+    expect(res.status).toBe(400);
+    expect((await agent.get('/api/me')).status).toBe(200);
+  });
+
+  test('the Settings pages tell the person to log in again and go to the login page, which confirms it', async () => {
+    for (const [role, path] of [['Administrator', '/admin/settings'], ['Staff', '/staff/settings'], ['Auth. Personnel', '/personnel/settings'], ['potential_partner', '/partner/settings']]) {
+      const { agent } = await agentFor(role);
+      const html = (await agent.get(path)).text;
+      expect(html).toContain('Please log in again');
+      expect(html).toContain("/?passwordChanged=1");
+    }
+    const login = await request(app).get('/?passwordChanged=1');
+    expect(login.status).toBe(200);
+    expect(login.text).toContain('Please log in again with your new password.');
+    expect((await request(app).get('/')).text).not.toContain('Please log in again with your new password.');
+  });
+});

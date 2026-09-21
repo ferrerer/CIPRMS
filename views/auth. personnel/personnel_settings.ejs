@@ -331,6 +331,7 @@
     const isStrongPassword = pw => pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
     if (!isStrongPassword(newP)) return showToast('<i class="ri-error-warning-line me-1"></i>Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.', '#f06548');
     const btn = document.getElementById('pwd-btn');
+    let relogin = false;
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Updating…';
     try {
       const res = await fetch('/api/personnel/password', {
@@ -339,12 +340,15 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Update failed.');
-      showToast('<i class="ri-lock-line me-1"></i>Password changed!', '#0ab39c');
       ['oldpasswordInput','newpasswordInput','confirmpasswordInput'].forEach(id => document.getElementById(id).value = '');
+      // The server ended this session with the password change: sign in again with the new password.
+      relogin = true;
+      showToast('<i class="ri-lock-line me-1"></i>Password changed. Please log in again with your new password…', '#0ab39c');
+      setTimeout(() => { window.location.href = '/?passwordChanged=1'; }, 2500);
     } catch(err) {
       showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');
     } finally {
-      btn.disabled = false; btn.innerHTML = '<i class="ri-lock-line me-1"></i>Update Password';
+      if (!relogin) { btn.disabled = false; btn.innerHTML = '<i class="ri-lock-line me-1"></i>Update Password'; }
     }
   }
 

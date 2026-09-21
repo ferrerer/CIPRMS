@@ -417,7 +417,11 @@ app.get('/', (req, res) => {
   if (req.session && req.session.user) {
     return res.redirect(homeForRole(req.session.user.role));
   }
-  res.render('index', { activePage: '', error: undefined });
+  res.render('index', {
+    activePage: '', error: undefined,
+    // set by the Settings pages after a password change, which ends the session
+    notice: req.query.passwordChanged === '1' ? 'Your password was changed. Please log in again with your new password.' : undefined
+  });
 });
 
 app.get('/signup', (req, res) => {
@@ -6561,6 +6565,18 @@ async function saveOwnName(req, res) {
   }
 }
 
+// After the password is changed the current session ends: the person has to sign in again with the new password.
+// (Same teardown as POST /logout — the session is destroyed, its live connections closed and the cookie cleared.)
+function endSessionAfterPasswordChange(req, res) {
+  const endingSession = req.sessionID;
+  req.session.destroy((err) => {
+    realtime.disconnectSession(endingSession);
+    if (err) console.error('❌ Session destroy after password change failed:', err);
+    res.clearCookie('connect.sid', { path: '/' });
+    res.json({ success: true, reloginRequired: true });
+  });
+}
+
 // Admin profile GET / POST
 app.get('/api/admin/profile', requireAdmin, readOwnProfile);
 app.post('/api/admin/profile', requireAdmin, saveOwnName);
@@ -6581,7 +6597,7 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     // 2026-09-06 security hardening (Finding #6): every real validation
     // failure already returns its own clean message above — this only
@@ -6612,7 +6628,7 @@ app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Personnel password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
@@ -6639,7 +6655,7 @@ app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Staff password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
@@ -7396,7 +7412,7 @@ app.post('/api/partner/password', partnerPasswordLimiter, requirePartner, async 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Partner password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });

@@ -63,6 +63,13 @@
                                     <p class="text-muted">Sign in to continue to CIPRMS.</p>
                                 </div>
 
+                                <% if (typeof notice !== 'undefined' && notice) { %>
+                                <div class="alert alert-success alert-dismissible alert-label-icon rounded-label fade show mt-3" role="alert">
+                                    <i class="ri-checkbox-circle-line label-icon"></i><strong>Password changed</strong> – <%= notice %>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                                <% } %>
+
                                 <% if (typeof error !== 'undefined' && error) { %>
                                 <div class="alert alert-danger alert-dismissible alert-label-icon rounded-label fade show mt-3" role="alert">
                                     <i class="ri-error-warning-line label-icon"></i><strong>Error</strong> – <%= error %>
