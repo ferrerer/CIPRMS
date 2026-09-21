@@ -122,6 +122,19 @@ describe('Department / Institution / Position are fixed at registration', () => 
     }
   });
 
+  test('every Settings page still builds the profile card in updateCard() — typing a name must not throw (regression: "initials is not defined")', async () => {
+    for (const [role, path] of [['Auth. Personnel', '/personnel/settings'], ['Staff', '/staff/settings'], ['Administrator', '/admin/settings']]) {
+      const { agent } = await agentFor(role);
+      const html = (await agent.get(path)).text;
+      const start = html.indexOf('function updateCard()');
+      expect(start).toBeGreaterThan(-1);
+      const body = html.slice(start, html.indexOf('function applyPhoto', start));
+      // every variable the function reads must be declared inside it
+      for (const v of ['name', 'dept', 'pos', 'inst', 'parts', 'initials']) expect(body).toContain(`const ${v} =`);
+      expect(body).toContain('av.textContent = initials');
+    }
+  });
+
   test('College Staff Settings: Cancel is hidden until something is changed, and the save button reads "Saved Changes" after saving', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const html = (await agent.get('/personnel/settings')).text;

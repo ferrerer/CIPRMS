@@ -210,9 +210,11 @@
 
   function updateCard() {
     const name = document.getElementById('s-name').value.trim();
-    // Only the name is editable: department, position and institution are fixed when the account is registered.
-    if (!name)
-      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
+    const dept = document.getElementById('s-dept').value;
+    const pos  = document.getElementById('s-position').value.trim();
+    const inst = document.getElementById('s-institution').value.trim();
+    const parts = name.split(' ').filter(Boolean);
+    const initials = parts.length >= 2 ? (parts[0][0]+parts[parts.length-1][0]).toUpperCase() : (parts[0] ? parts[0][0].toUpperCase() : '?');
     const av = document.getElementById('hero-avatar');
     if (!av.dataset.hasPhoto) { av.textContent = initials; av.style.backgroundImage = ''; }
     document.getElementById('hero-name').textContent = name || '—';
