@@ -288,6 +288,19 @@
       font-size: 1.6rem;
     }
 
+    /* Ribbon colors are per theme: pastel fill + deep text in light mode,
+       translucent fill + brighter text in dark mode. */
+    .status-ribbon { --rb-bg: #fef3c7; --rb-fg: #d97706; background: var(--rb-bg); border: 1.5px solid color-mix(in srgb, var(--rb-fg) 20%, transparent); }
+    .status-ribbon i, .status-ribbon .ribbon-title { color: var(--rb-fg); }
+    .ribbon-pending  { --rb-bg: #fef3c7; --rb-fg: #d97706; }
+    .ribbon-review   { --rb-bg: #dbeafe; --rb-fg: #1e40af; }
+    .ribbon-approved { --rb-bg: #dcfce7; --rb-fg: #15803d; }
+    .ribbon-rejected { --rb-bg: #fee2e2; --rb-fg: #b91c1c; }
+    [data-bs-theme="dark"] .ribbon-pending  { --rb-bg: rgba(245, 158, 11, .14); --rb-fg: #fbbf24; }
+    [data-bs-theme="dark"] .ribbon-review   { --rb-bg: rgba(59, 130, 246, .16); --rb-fg: #7aa7ff; }
+    [data-bs-theme="dark"] .ribbon-approved { --rb-bg: rgba(34, 197, 94, .14);  --rb-fg: #4ade80; }
+    [data-bs-theme="dark"] .ribbon-rejected { --rb-bg: rgba(239, 68, 68, .15);  --rb-fg: #f87171; }
+
     /* ── Dark mode overrides ──────────────────────────────────────────────
        This page's own light-only inline colors above (section tabs, detail
        box/value) had no [data-bs-theme="dark"] counterpart, so they stayed
@@ -331,6 +344,31 @@
     [data-bs-theme="dark"] .section-tab[id="tab-dr"]:not(.active) .tab-count {
       background: rgba(10, 179, 156, .18);
       color: #3bc2b0;
+    }
+    [data-bs-theme="dark"] .pr-hero {
+      background: #1e2533;
+      border-color: rgba(255, 255, 255, .12);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+    }
+    [data-bs-theme="dark"] .pr-hero-icon {
+      background: rgba(112, 148, 245, .15);
+      color: #7094f5;
+    }
+    [data-bs-theme="dark"] .section-tab.active .tab-count,
+    [data-bs-theme="dark"] .section-tab.active .section-tab-icon {
+      background: #405189;
+      color: #fff;
+    }
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"].active .tab-count,
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"].active .section-tab-icon {
+      background: #0ab39c;
+      color: #fff;
+    }
+    [data-bs-theme="dark"] .empty-state {
+      color: #6c7a91;
+    }
+    [data-bs-theme="dark"] .stat-card:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
     }
     [data-bs-theme="dark"] .detail-box {
       background: #262d3d;
@@ -1089,10 +1127,10 @@
       const isReview = IS_ADMIN && (r.status === 'Pending' || r.status === 'Under Review');
 
       const scMap = {
-        'Pending': { bg: '#fef3c7', border: '#d97706', icon: 'ri-time-line', color: '#d97706' },
-        'Under Review': { bg: '#dbeafe', border: '#1e40af', icon: 'ri-search-eye-line', color: '#1e40af' },
-        'Approved': { bg: '#dcfce7', border: '#15803d', icon: 'ri-checkbox-circle-line', color: '#15803d' },
-        'Rejected': { bg: '#fee2e2', border: '#b91c1c', icon: 'ri-close-circle-line', color: '#b91c1c' }
+        'Pending': { cls: 'ribbon-pending', icon: 'ri-time-line' },
+        'Under Review': { cls: 'ribbon-review', icon: 'ri-search-eye-line' },
+        'Approved': { cls: 'ribbon-approved', icon: 'ri-checkbox-circle-line' },
+        'Rejected': { cls: 'ribbon-rejected', icon: 'ri-close-circle-line' }
       };
       const sc = scMap[r.status] || scMap['Pending'];
 
@@ -1173,11 +1211,10 @@
           </button>
         </div>
         ${!isReview ? `
-          <div class="status-ribbon"
-            style="background:${sc.bg};border:1.5px solid ${sc.border}33;">
-            <i class="${sc.icon} fs-3" style="color:${sc.color}"></i>
+          <div class="status-ribbon ${sc.cls}">
+            <i class="${sc.icon} fs-3"></i>
             <div>
-              <div class="fw-semibold" style="color:${sc.color}">Request ${r.status}</div>
+              <div class="fw-semibold ribbon-title">Request ${r.status}</div>
               <div class="fs-12 text-muted">This request has been processed and is now read-only.</div>
             </div>
           </div>
