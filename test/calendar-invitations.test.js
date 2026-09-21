@@ -366,15 +366,15 @@ describe('Google Meet room', () => {
     expect(args.conferenceDataVersion).toBeUndefined();
   });
 
-  test('an older meeting with no Meet room gets one on its next edit', async () => {
-    const created = await createEvent(agents.admin, { title: title('Meet Backfill'), start: '2026-12-03T09:00', end: '2026-12-03T10:00', recipients: [users.collegeA.email] });
-    await db.collection('calendarevents').updateOne({ id: created.body.event.id }, { $unset: { googleMeetLink: '' } });
+  test('an older meeting with no Meet room is NOT given one when it is edited — previous meetings stay as they were', async () => {
+    const created = await createEvent(agents.admin, { title: title('Meet No Backfill'), start: '2026-12-03T09:00', end: '2026-12-03T10:00', recipients: [users.collegeA.email] });
+    await db.collection('calendarevents').updateOne({ id: created.body.event.id }, { $unset: { googleMeetLink: '' } });   // as a meeting from before Meet existed
     resetGoogle();
-    expect((await agents.admin.patch('/api/calendarevents/' + created.body.event.id).send({ title: title('Meet Backfill Renamed') })).status).toBe(200);
+    expect((await agents.admin.patch('/api/calendarevents/' + created.body.event.id).send({ title: title('Meet No Backfill Renamed') })).status).toBe(200);
     const { args } = callsOf('patch')[0];
-    expect(args.conferenceDataVersion).toBe(1);
-    expect(args.requestBody.conferenceData.createRequest.conferenceSolutionKey.type).toBe('hangoutsMeet');
-    expect((await db.collection('calendarevents').findOne({ id: created.body.event.id })).googleMeetLink).toBe(MOCK_MEET_LINK);
+    expect(args.requestBody.conferenceData).toBeUndefined();
+    expect(args.conferenceDataVersion).toBeUndefined();
+    expect((await db.collection('calendarevents').findOne({ id: created.body.event.id })).googleMeetLink).toBeUndefined();
   });
 });
 

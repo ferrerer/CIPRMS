@@ -347,9 +347,8 @@ async function updateGoogleEvent(db, cirlEvent, recipientEmails) {
   if (!cirlEvent.googleEventId) return { ok: false, error: 'no_google_event' };
   const { client, failure } = await clientOrFailure(db);
   if (failure) return failure;
-  // An event that has no Meet room yet (created before Meet was added, or Google was slow to attach one) gets one on
-  // its next edit; an event that already has one is left alone so its link never changes under the attendees.
-  const wantMeet = !cirlEvent.googleMeetLink;
+  // An edit never asks Google for a Meet room: meetings created before Meet was added stay as they are (no link is
+  // added to them), and one that already has a room keeps the same link.
   try {
     const res = await client.calendar.events.patch({
       calendarId: client.calendarId,
@@ -359,8 +358,7 @@ async function updateGoogleEvent(db, cirlEvent, recipientEmails) {
       // never the visibility-driving recipientEmails, which is absent
       // entirely for "all users" events and would otherwise silently wipe
       // every attendee off the Google event on the very first edit.
-      requestBody: buildGoogleEventBody(cirlEvent, recipientEmails, wantMeet ? { meetRequestId: newMeetRequestId(cirlEvent) } : undefined),
-      ...(wantMeet ? { conferenceDataVersion: 1 } : {}),
+      requestBody: buildGoogleEventBody(cirlEvent, recipientEmails),
       sendUpdates: SEND_UPDATES
     });
     await recordSyncResult(db, true, null);

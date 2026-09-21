@@ -1445,6 +1445,15 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
     const last = await db.collection('documentrequests').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length > 0 ? (last[0].id + 1) : 1;
 
+    // A College Dean's contact number is the one entered when the account was registered — the request form shows it
+    // read-only, and whatever the client sends is ignored here too. (An account registered without a number can still
+    // type one on the request, as before.)
+    let requestContactNumber = contactNumber || '';
+    if (req.session.user && req.session.user.role === 'Auth. Personnel') {
+      const me = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { contactNumber: 1 } });
+      if (me && me.contactNumber) requestContactNumber = me.contactNumber;
+    }
+
     const entry = {
       id: nextId,
       institution: institution.trim(),
@@ -1457,7 +1466,7 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       // Contact Number and Document Form (Printed/Digital Copy) exist solely to
       // populate the official CSPC-F-CIRL-04 printable form — no other part of
       // the app reads them.
-      contactNumber: contactNumber || '',
+      contactNumber: requestContactNumber,
       documentForm: documentForm || '',
       requestedBy: req.session.user ? req.session.user.name : 'Unknown',
       requestedByEmail: req.session.user ? req.session.user.email : '',
@@ -5054,6 +5063,9 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     if (!VALID_USER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Invalid status.' });
     }
+    // Optional; validated so a College Dean's request forms always carry a real number.
+    const contact = parseContactNumber(req.body.contactNumber);
+    if (contact.error) return res.status(400).json({ error: contact.error });
 
     const db = getDb();
     const existing = await db.collection('users').findOne({ email });
@@ -5087,7 +5099,7 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // account owner cannot change them from Settings (only User Management edits them).
     const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(),
       institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
-      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
+      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
     await db.collection('users').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
     const { password: _, ...safeEntry } = entry; // don't return the password hash
@@ -5165,6 +5177,12 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     }
     for (const field of ['institution', 'position']) {
       if (updateData[field] !== undefined) updateData[field] = typeof updateData[field] === 'string' ? updateData[field].trim() : '';
+    }
+    // Contact number: validated like at registration; a non-string is dropped rather than stored.
+    if (updateData.contactNumber !== undefined) {
+      const contact = parseContactNumber(updateData.contactNumber);
+      if (contact.error) return res.status(400).json({ error: contact.error });
+      if (contact.value === undefined) delete updateData.contactNumber; else updateData.contactNumber = contact.value;
     }
 
     // Never let an admin lock everyone out: block deactivating your own account,
@@ -6560,9 +6578,10 @@ async function propagateRequestorName(db, email, name) {
   await db.collection('documentrequests').updateMany({ requestedByEmail: email }, { $set: { requestedBy: name } });
 }
 
-// Department/College, Institution/School and Designation/Position are set once, when the account is registered in User
-// Management (users.unit / users.institution / users.position), and cannot be changed from Settings. The Settings
-// profile endpoints therefore read them from the account itself and accept ONLY the person's own name.
+// Department/College, Institution/School, Designation/Position and the Contact Number are set once, when the account is
+// registered in User Management (users.unit / institution / position / contactNumber), and cannot be changed from
+// Settings. The Settings profile endpoints therefore read them from the account itself and accept ONLY the person's
+// own name.
 function registeredProfile(userDoc) {
   if (!userDoc) return {};
   return {
@@ -6572,7 +6591,7 @@ function registeredProfile(userDoc) {
   };
 }
 
-// The contact number is the one thing besides the name that a person edits in Settings. Digits and the usual phone
+// The contact number entered when an account is registered / edited in User Management. Digits and the usual phone
 // punctuation only, at least 7 digits when one is given; empty clears it. Returns { value } (undefined = not sent, so
 // the stored number is left alone) or { error }.
 const CONTACT_NUMBER_RE = /^[0-9+()\-\s]{1,25}$/;
@@ -6598,21 +6617,17 @@ async function readOwnProfile(req, res) {
 
 // Email is intentionally NOT accepted from the client (2026-09-06 security hardening): it is the authenticated
 // identity, not an editable profile field, and almost every ownership check in this app is keyed on
-// req.session.user.email. Any `email` — and any dept/position/institution — in the request body is ignored.
-// Only the name and the contact number are saved.
+// req.session.user.email. Any `email` — and any dept/position/institution/contact number — in the request body is
+// ignored. Only the name is saved.
 async function saveOwnName(req, res) {
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
   if (!name) return res.status(400).json({ error: 'Name is required.' });
-  const contact = parseContactNumber(req.body.contactNumber);
-  if (contact.error) return res.status(400).json({ error: contact.error });
   const email = req.session.user.email;
   try {
     const db = getDb();
     // The per-request session sync re-reads users.name, so the rename must be stored on the users document —
     // otherwise it reverts on the next page.
-    await db.collection('users').updateOne({ id: req.session.user.id }, {
-      $set: { name, ...(contact.value !== undefined ? { contactNumber: contact.value } : {}) }
-    });
+    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
     await propagateRequestorName(db, email, name);
     req.session.user.name = name;
     const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
@@ -7185,11 +7200,20 @@ app.get('/personnel/dashboard', requirePersonnel, (req, res) => {
   res.redirect(homeForRole(req.session.user.role));
 });
 
-app.get('/personnel/requests', requirePersonnel, (req, res) => {
+app.get('/personnel/requests', requirePersonnel, async (req, res) => {
+  // The request form's Contact No. starts as the number saved in Settings (still editable for this one request).
+  let contactNumber = '';
+  try {
+    const doc = await getDb().collection('users').findOne({ id: req.session.user.id }, { projection: { contactNumber: 1 } });
+    contactNumber = (doc && doc.contactNumber) || '';
+  } catch (err) {
+    console.error('Request form: could not read the saved contact number:', err.message);
+  }
   res.render('auth. personnel/personnel_requests', {
     activePage: 'requests',
     sidebarPartial: 'sidebar_personnel',
-    user: req.session.user
+    user: req.session.user,
+    contactNumber
   });
 });
 

@@ -98,3 +98,62 @@ test('Clear on the College Dean request form is hidden until something is entere
   // clearing and a successful submit both hide it again
   expect(html.match(/syncClearButton\(\);/g).length).toBeGreaterThanOrEqual(2);
 });
+
+describe('College Dean request form: Contact No. is the number registered with the account', () => {
+  const REGISTERED = '0917-123-4567';
+  const formHtml = async (agent) => (await agent.get('/personnel/requests')).text;
+
+  // A College Dean registered with a number (User Management → Add User / Edit User stores users.contactNumber).
+  async function registeredAgent(number) {
+    const user = await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' });
+    const agent = request.agent(app);
+    await loginAs(agent, user);
+    if (number) await (await connectDB()).collection('users').updateOne({ email: user.email }, { $set: { contactNumber: number } });
+    return { agent, user };
+  }
+
+  test('with a registered number the form shows it read-only — no field to type in — and Settings cannot change it', async () => {
+    const { agent } = await registeredAgent(REGISTERED);
+    const html = await formHtml(agent);
+    expect(html).toContain(`<div class="dr-readonly">${REGISTERED}<small>Set when your account was registered</small></div>`);
+    expect(html).toContain(`<input type="hidden" id="f-contact" value="${REGISTERED}">`);
+    expect(html).not.toMatch(/<input[^>]*type="tel"[^>]*id="f-contact"/);            // nothing editable
+
+    // a save from Settings that tries to change it is ignored, so the form still shows the registered one
+    await agent.post('/api/personnel/profile').send({ name: 'jesttest Registered Number', contactNumber: '0999-999-9999' });
+    expect(await formHtml(agent)).toContain(`<input type="hidden" id="f-contact" value="${REGISTERED}">`);
+  });
+
+  test('without a registered number the field is still a normal, empty input (nobody is blocked from submitting)', async () => {
+    const { agent } = await registeredAgent('');
+    const html = await formHtml(agent);
+    const tag = html.match(/<input[^>]*id="f-contact"[^>]*>/)[0];
+    expect(tag).toContain('type="tel"');
+    expect(tag).not.toContain('value=');
+    expect(html).not.toContain('Set when your account was registered</small>');
+  });
+
+  test('it is only ever the signed-in person\'s own number', async () => {
+    const { agent } = await registeredAgent(REGISTERED);
+    expect(await formHtml(personnelAgent)).not.toContain(REGISTERED);
+    expect(await formHtml(agent)).toContain(REGISTERED);
+  });
+
+  test('the server enforces it: a submitted request carries the registered number whatever the client sends', async () => {
+    const { agent } = await registeredAgent(REGISTERED);
+    const res = await agent.post('/api/document-requests').send({ institution: 'CCS', documentTypes: ['jesttest doc'], notes: 'jesttest', contactNumber: '0999-000-0000' });
+    expect(res.status).toBe(200);
+    createdIds.push(res.body.request.id);
+    expect(res.body.request.contactNumber).toBe(REGISTERED);
+
+    const noNumber = await registeredAgent('');
+    const typed = await noNumber.agent.post('/api/document-requests').send({ institution: 'CCS', documentTypes: ['jesttest doc'], notes: 'jesttest', contactNumber: '0918-111-2222' });
+    createdIds.push(typed.body.request.id);
+    expect(typed.body.request.contactNumber).toBe('0918-111-2222');                   // an account with none registered can still type one
+  });
+
+  test('the pre-filled number is not "input": Clear stays hidden until something else on the form is filled in', async () => {
+    const { agent } = await registeredAgent(REGISTERED);
+    expect(await formHtml(agent)).toContain("contact.value.trim() !== (contact.defaultValue || '').trim()");
+  });
+});

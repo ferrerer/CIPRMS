@@ -259,7 +259,13 @@
                                             <div class="dr-row">
                                                 <div class="dr-label">Contact No.</div>
                                                 <div class="dr-value" style="flex-direction:column; align-items:flex-start; gap:4px;">
-                                                    <input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000">
+                                                    <% if (typeof contactNumber !== 'undefined' && contactNumber) { %>
+                                                        <%# The number entered when the account was registered — fixed, like the office above. %>
+                                                        <div class="dr-readonly"><%= contactNumber %><small>Set when your account was registered</small></div>
+                                                        <input type="hidden" id="f-contact" value="<%= contactNumber %>">
+                                                    <% } else { %>
+                                                        <input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000">
+                                                    <% } %>
                                                     <div class="form-text text-danger fs-12 mb-0" id="f-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
                                                 </div>
                                             </div>
@@ -472,13 +478,15 @@
     // Clear only exists while someone is filling the form in: it appears as soon as anything is entered (a picked or
     // typed document, purpose, contact number, document form, or an office the person typed themselves) and goes away
     // again when the form is empty — after Clear, after a successful submit, or when they delete what they typed. The
-    // office pre-filled from the profile is not something they entered, so it never counts.
+    // office pre-filled from the profile and the contact number pre-filled from Settings are not something they entered
+    // here, so they never count (a contact number only counts once it differs from the pre-filled one).
     function formHasInput() {
         var inst = document.getElementById('f-inst');
+        var contact = document.getElementById('f-contact');
         return fTypeCombo.getValues().length > 0
             || fTypeCombo.hasText()
             || !!(inst && inst.type !== 'hidden' && inst.value.trim())
-            || !!document.getElementById('f-contact').value.trim()
+            || contact.value.trim() !== (contact.defaultValue || '').trim()
             || !!document.getElementById('f-notes').value.trim()
             || !!document.querySelector('input[name="f-form"]:checked');
     }

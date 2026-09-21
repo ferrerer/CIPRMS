@@ -118,7 +118,7 @@ describe('Department / Institution / Position are fixed at registration', () => 
         expect(tag[0]).toContain(' readonly ');
       }
       expect(html).not.toContain('<select class="form-select" id="s-dept"');
-      expect(html).toContain("body: JSON.stringify({ name, contactNumber })");   // the name and the contact number are all Settings sends
+      expect(html).toContain("body: JSON.stringify({ name })");
     }
   });
 
@@ -161,73 +161,82 @@ describe('Department / Institution / Position are fixed at registration', () => 
   });
 });
 
-describe('Contact Number in Settings (Administrator, CIRL Staff, College Dean)', () => {
+describe('Contact Number is fixed at registration (Administrator, CIRL Staff, College Dean)', () => {
   const CASES = [
     ['Administrator', 'Administrator', '/api/admin/profile', '/admin/settings'],
     ['CIRL Staff', 'Staff', '/api/staff/profile', '/staff/settings'],
     ['College Dean', 'Auth. Personnel', '/api/personnel/profile', '/personnel/settings']
   ];
+  const REGISTERED_NUMBER = '0917-123-4567';
 
-  test.each(CASES)('%s: the number is saved with the name, comes back on the profile, and is stored on the account', async (_label, role, url) => {
+  test.each(CASES)('%s: Settings shows the registered number and ignores any attempt to change it', async (_label, role, url) => {
     const { agent, user } = await agentFor(role);
-    expect((await agent.get(url)).body.contactNumber).toBe('');                       // nothing yet
+    expect((await agent.get(url)).body.contactNumber).toBe('');                       // registered without one
+    await getDb().collection('users').updateOne({ email: user.email }, { $set: { contactNumber: REGISTERED_NUMBER } });
+    expect((await agent.get(url)).body.contactNumber).toBe(REGISTERED_NUMBER);
 
-    const save = await agent.post(url).send({ name: 'Has A Number', contactNumber: '  0917-123-4567 ' });
+    const save = await agent.post(url).send({ name: 'Only The Name Changes', contactNumber: '0999-999-9999' });
     expect(save.status).toBe(200);
-    expect(save.body.profile).toMatchObject({ name: 'Has A Number', contactNumber: '0917-123-4567' });   // trimmed
-    expect((await agent.get(url)).body.contactNumber).toBe('0917-123-4567');
-    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber).toBe('0917-123-4567');
-
-    // a save that does not mention the number leaves it alone (an older page, a script)
-    expect((await agent.post(url).send({ name: 'Still Has A Number' })).body.profile.contactNumber).toBe('0917-123-4567');
-    // an empty one clears it
-    const cleared = await agent.post(url).send({ name: 'Still Has A Number', contactNumber: '   ' });
-    expect(cleared.body.profile.contactNumber).toBe('');
-    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber).toBe('');
+    expect(save.body.profile).toMatchObject({ name: 'Only The Name Changes', contactNumber: REGISTERED_NUMBER });
+    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber).toBe(REGISTERED_NUMBER);
+    expect((await agent.get(url)).body.contactNumber).toBe(REGISTERED_NUMBER);
   });
 
-  test.each([['letters', '0917-ABC-4567'], ['too short', '12345'], ['script', '<script>1234567</script>'], ['too long', '1'.repeat(30)]])(
-    'a %s number is refused with a plain message and nothing (not even the name) is saved', async (_why, bad) => {
-      const { agent, user } = await agentFor('Auth. Personnel');
-      const before = await getDb().collection('users').findOne({ email: user.email });
-      const res = await agent.post('/api/personnel/profile').send({ name: 'Should Not Save', contactNumber: bad });
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/valid contact number/i);
-      const after = await getDb().collection('users').findOne({ email: user.email });
-      expect(after.name).toBe(before.name);
-      expect(after.contactNumber || '').toBe('');
-    });
-
-  test('a non-string number is ignored, not stored', async () => {
-    const { agent, user } = await agentFor('Staff');
-    const res = await agent.post('/api/staff/profile').send({ name: 'Numeric', contactNumber: 9171234567 });
-    expect(res.status).toBe(200);
-    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber || '').toBe('');
-  });
-
-  test.each(CASES)('%s Settings page has the Contact Number field, warns about letters, shows it on the profile card and sends it on save', async (_label, role, _url, page) => {
+  test.each(CASES)('%s Settings page shows the number read-only, on the profile card too, and never sends it on save', async (_label, role, _url, page) => {
     const { agent } = await agentFor(role);
     const html = (await agent.get(page)).text;
     const tag = html.match(/<input[^>]*id="s-contact"[^>]*>/);
     expect(tag).not.toBeNull();
-    expect(tag[0]).toContain('type="tel"');
-    expect(tag[0]).not.toContain('readonly');                                          // unlike department/position/institution, this one is editable
-    expect(tag[0]).not.toContain('disabled');
-    expect(html).toContain('id="s-contact-warn"');
+    expect(tag[0]).toContain(' readonly ');                                            // like department / position / institution
     expect(html).toContain('id="info-phone"');
     expect(html).toContain("data.contactNumber || ''");
+    expect(html).not.toContain('onContactInput');                                      // nothing to type here any more
+    expect(html).not.toContain('savedContact');
   });
 
-  test('College Dean: changing only the number counts as a change (Cancel appears, Saved Changes goes back to Update Settings)', async () => {
-    const { agent } = await agentFor('Auth. Personnel');
-    const html = (await agent.get('/personnel/settings')).text;
-    expect(html).toContain("var savedContact = ''");
-    expect(html).toContain("document.getElementById('s-contact').value.trim() !== savedContact");
-    expect(html).toContain('savedContact = contactNumber;');                            // only after the server accepted the save
-    expect(html).toContain('oninput="onContactInput()"');
-    // the number input is what runs syncButtons() for this page
-    const fn = html.slice(html.indexOf('function onContactInput()'), html.indexOf('function applyPhoto'));
-    expect(fn).toContain('syncButtons();');
+  test('User Management: Add User registers the number (trimmed) and Edit User can correct it', async () => {
+    const { agent: admin } = await agentFor('Administrator');
+    const email = `jesttest.phone.${Date.now()}@example.com`;
+    const created = await admin.post('/api/users').send({ name: 'jesttest Phone', email, role: 'Auth. Personnel', password: 'TestPass123', unit: 'CAS', contactNumber: '  0917-123-4567 ' });
+    expect(created.status).toBe(200);
+    expect(created.body.user.contactNumber).toBe('0917-123-4567');
+    expect((await getDb().collection('users').findOne({ email })).contactNumber).toBe('0917-123-4567');
+
+    const edited = await admin.patch('/api/users/' + created.body.user.id).send({ contactNumber: '+63 917 555 0000' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.user.contactNumber).toBe('+63 917 555 0000');
+
+    // an edit that does not mention it leaves it alone; an empty one clears it
+    expect((await admin.patch('/api/users/' + created.body.user.id).send({ unit: 'CEA' })).body.user.contactNumber).toBe('+63 917 555 0000');
+    expect((await admin.patch('/api/users/' + created.body.user.id).send({ contactNumber: '' })).body.user.contactNumber).toBe('');
+
+    // registered without one
+    const bare = await admin.post('/api/users').send({ name: 'jesttest No Phone', email: `jesttest.nophone.${Date.now()}@example.com`, role: 'Auth. Personnel', password: 'TestPass123' });
+    expect(bare.body.user.contactNumber).toBe('');
+  });
+
+  test.each([['letters', '0917-ABC-4567'], ['too short', '12345'], ['script', '<script>1234567</script>'], ['too long', '1'.repeat(30)]])(
+    'User Management refuses a %s number with a plain message and saves nothing', async (_why, bad) => {
+      const { agent: admin } = await agentFor('Administrator');
+      const email = `jesttest.badphone.${Date.now()}@example.com`;
+      const add = await admin.post('/api/users').send({ name: 'jesttest Bad Phone', email, role: 'Auth. Personnel', password: 'TestPass123', contactNumber: bad });
+      expect(add.status).toBe(400);
+      expect(add.body.error).toMatch(/valid contact number/i);
+      expect(await getDb().collection('users').findOne({ email })).toBeNull();
+
+      const ok = await admin.post('/api/users').send({ name: 'jesttest Ok Phone', email: `jesttest.okphone.${Date.now()}@example.com`, role: 'Auth. Personnel', password: 'TestPass123', contactNumber: '0917-123-4567' });
+      const patch = await admin.patch('/api/users/' + ok.body.user.id).send({ contactNumber: bad });
+      expect(patch.status).toBe(400);
+      expect((await getDb().collection('users').findOne({ id: ok.body.user.id })).contactNumber).toBe('0917-123-4567');
+    });
+
+  test('the Add / Edit User form has the Contact Number field, sends it, and warns about letters', async () => {
+    const { agent: admin } = await agentFor('Administrator');
+    const html = (await admin.get('/users')).text;
+    expect(html).toContain('id="u-contact"');
+    expect(html).toContain('id="u-contact-warn"');
+    expect(html).toContain('contactNumber });');                                        // both payloads carry it
+    expect(html).toContain("u.contactNumber || ''");                                    // Edit User loads it
   });
 });
 

@@ -116,8 +116,7 @@
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-contact">Contact Number</label>
-                          <input type="tel" inputmode="numeric" class="form-control" id="s-contact" maxlength="25" placeholder="e.g. 0917-123-4567" autocomplete="tel" oninput="onContactInput()">
-                          <div class="form-text text-danger" id="s-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                          <input type="text" class="form-control" id="s-contact" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-dept">Department / College</label>
@@ -132,7 +131,7 @@
                           <input type="text" class="form-control" id="s-institution" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-12">
-                          <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position and institution are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
+                          <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position, institution and contact number are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
                         </div>
                       </div>
                       <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
@@ -258,15 +257,6 @@
     document.getElementById('info-phone').textContent = phone || '—';
   }
 
-  // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
-  function onContactInput() {
-    const el = document.getElementById('s-contact');
-    const cleaned = el.value.replace(/[^0-9+()\-\s]/g, '');
-    document.getElementById('s-contact-warn').style.display = cleaned !== el.value ? '' : 'none';
-    el.value = cleaned;
-    updateCard();
-  }
-
   function applyPhoto(dataUrl) {
     const el = document.getElementById('hero-avatar');
     if (dataUrl) {
@@ -310,12 +300,9 @@
 
   async function saveSettings() {
     const name = document.getElementById('s-name').value.trim();
-    const contactNumber = document.getElementById('s-contact').value.trim();
-    // The name and the contact number are editable: department, position and institution are fixed when the account is registered.
+    // Only the name is editable: department, position, institution and contact number are fixed when the account is registered.
     if (!name)
       return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
-    if (contactNumber && contactNumber.replace(/\D/g, '').length < 7)
-      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter a valid contact number (at least 7 digits).', '#f06548');
     const btn = document.getElementById('save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
     try {
@@ -323,7 +310,7 @@
       // and cannot be changed from this form (server ignores it either way).
       const res = await fetch('/api/admin/profile', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, contactNumber })
+        body: JSON.stringify({ name })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');

@@ -250,7 +250,14 @@
                     <div class="col-md-6">
                         <label class="form-label">Designation / Position</label>
                         <input type="text" class="form-control" id="u-position" placeholder="e.g. Director, Coordinator">
-                        <div class="form-text">Department, institution and position are set here when the account is registered. The user cannot change them from Settings.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Contact Number</label>
+                        <input type="tel" inputmode="numeric" class="form-control" id="u-contact" maxlength="25" placeholder="e.g. 0917-123-4567" autocomplete="off" oninput="onContactInput()">
+                        <div class="form-text text-danger" id="u-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-text mt-0">Department, institution, position and contact number are set here when the account is registered. The user cannot change them from Settings, and a College Dean's request forms use this contact number.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
@@ -378,10 +385,19 @@
     else { inp.type = 'password'; eye.className = 'ri-eye-fill'; }
   }
 
+  // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
+  function onContactInput() {
+    const el = document.getElementById('u-contact');
+    const cleaned = el.value.replace(/[^0-9+()\-\s]/g, '');
+    document.getElementById('u-contact-warn').style.display = cleaned !== el.value ? '' : 'none';
+    el.value = cleaned;
+  }
+
   function openAddUser() {
     editingId = null;
     document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
-    ['u-name','u-email','u-unit','u-institution','u-position','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-role').value = 'Auth. Personnel';
     document.getElementById('u-pwd-required').style.display = '';
     document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
@@ -401,11 +417,13 @@
     document.getElementById('u-unit').value  = u.unit || '';
     document.getElementById('u-institution').value = u.institution || '';
     document.getElementById('u-position').value = u.position || '';
+    document.getElementById('u-contact').value = u.contactNumber || '';
+    document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-password').value = '';
     document.getElementById('u-pwd-required').style.display = 'none';
     document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
     document.getElementById('u-password').placeholder = 'New password (optional)';
-    ['u-name','u-email','u-unit','u-institution','u-position','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
     getModal().show();
   }
 
@@ -422,6 +440,7 @@
     const unit     = document.getElementById('u-unit').value.trim();
     const institution = document.getElementById('u-institution').value.trim();
     const position = document.getElementById('u-position').value.trim();
+    const contactNumber = document.getElementById('u-contact').value.trim();
     const password = document.getElementById('u-password').value;
     let valid = true;
 
@@ -430,6 +449,15 @@
       if (!val) { el.classList.add('is-invalid'); valid = false; }
       else el.classList.remove('is-invalid');
     });
+
+    // Contact number is optional, but when given it must be a real one (the server checks the same rule).
+    const contactEl = document.getElementById('u-contact');
+    if (contactNumber && contactNumber.replace(/\D/g, '').length < 7) {
+      contactEl.classList.add('is-invalid'); valid = false;
+      showToast('<i class="ri-error-warning-line me-1"></i>Enter a valid contact number (at least 7 digits).', '#f06548');
+    } else {
+      contactEl.classList.remove('is-invalid');
+    }
 
     // Password required on Add; optional on Edit. Must satisfy the same policy the server enforces.
     const pwdEl = document.getElementById('u-password');
@@ -447,12 +475,12 @@
 
     if (editingId) {
       // EDIT — only send password if the admin typed a new one
-      const payload = { name, email, role, unit, institution, position };
+      const payload = { name, email, role, unit, institution, position, contactNumber };
       if (password) payload.password = password;
       apiPatch(editingId, payload)
         .then(data => {
           if (data.success) {
-            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit, institution, position });
+            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit, institution, position, contactNumber });
             getModal().hide();
             renderUsers();
             showToast(`<i class="ri-checkbox-circle-fill me-1"></i>${name} updated.`, '#405189');
@@ -463,7 +491,7 @@
     } else {
       // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
       const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-      apiPost({ name, email, role, unit, institution, position, password, login: 'Never', status: 'Active', createdAt: today })
+      apiPost({ name, email, role, unit, institution, position, contactNumber, password, login: 'Never', status: 'Active', createdAt: today })
         .then(data => {
           if (data.success) {
             users.unshift(data.user);
