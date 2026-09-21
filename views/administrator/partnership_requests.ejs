@@ -350,6 +350,33 @@
       border-color: rgba(255, 255, 255, .12);
       box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
     }
+    /* Text legibility in dark mode: Bootstrap's .text-dark resolves to a
+       near-black (unreadable on the dark "Release" badge), and the default
+       muted grey (#878a99) is too dim on the dark card surfaces. */
+    [data-bs-theme="dark"] .text-dark {
+      color: #e9ecef !important;
+    }
+    [data-bs-theme="dark"] .text-muted {
+      color: #b4bccb !important;
+    }
+    [data-bs-theme="dark"] .pr-hero h4 {
+      color: #f1f3f5;
+    }
+    [data-bs-theme="dark"] .pr-hero p {
+      color: #b4bccb;
+    }
+    [data-bs-theme="dark"] .section-tab-desc {
+      opacity: .9;
+    }
+    [data-bs-theme="dark"] .table td,
+    [data-bs-theme="dark"] .table th {
+      color: #dee2e6;
+    }
+    [data-bs-theme="dark"] .badge.bg-light {
+      background-color: rgba(255, 255, 255, .1) !important;
+      color: #dee2e6 !important;
+      border-color: rgba(255, 255, 255, .2) !important;
+    }
     [data-bs-theme="dark"] .pr-hero-icon {
       background: rgba(112, 148, 245, .15);
       color: #7094f5;
