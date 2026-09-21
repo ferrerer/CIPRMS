@@ -6488,6 +6488,9 @@ app.post('/api/admin/profile', requireAdmin, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
+    // The per-request session sync above re-reads users.name, so the rename must
+    // be stored on the users document too — otherwise it reverts on the next page.
+    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
@@ -6548,6 +6551,8 @@ app.post('/api/personnel/profile', requirePersonnel, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
+    // Persist the rename on the users document (see /api/admin/profile above).
+    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
@@ -6605,6 +6610,8 @@ app.post('/api/staff/profile', requireStaffAccess, async (req, res) => {
       { $set: { profile: { name, email, dept, position, institution } } },
       { upsert: true }
     );
+    // Persist the rename on the users document (see /api/admin/profile above).
+    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
     req.session.user.name = name;
     res.json({ success: true, profile: { name, email, dept, position, institution } });
   } catch (err) {
