@@ -289,6 +289,8 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');
       updateCard();
+      // Header/sidebar name is server-rendered; refresh it now instead of on the next page load.
+      document.querySelectorAll('.user-name-text, .sidebar-user-name-text').forEach(el => el.textContent = name);
       showToast('<i class="ri-checkbox-circle-line me-1"></i>Settings saved!', '#0ab39c');
     } catch(err) {
       showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');

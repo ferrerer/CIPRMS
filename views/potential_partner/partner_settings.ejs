@@ -237,7 +237,14 @@
         fetch('/api/partner/profile', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) { showToast('Saved.', '#0ab39c'); loadProfile(); }
+            if (data.success) {
+                // Header/sidebar name is server-rendered; refresh it now instead of on the next page load.
+                // (The server only renames the account when a contact name is given.)
+                if (payload.contactName) {
+                    document.querySelectorAll('.user-name-text, .sidebar-user-name-text').forEach(function (el) { el.textContent = payload.contactName; });
+                }
+                showToast('Saved.', '#0ab39c'); loadProfile();
+            }
             else showToast(data.error || 'Failed to save.', '#f06548');
         });
     }
