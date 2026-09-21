@@ -209,6 +209,9 @@
 
     <script>
         let allNotifs = [];
+        const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        // paints the header bell too (defined by the header partial)
+        const paintBell = (n) => { if (typeof paintNotifBadge === 'function') paintNotifBadge(n); };
 
         const tagColor = {
             lifecycle: 'warning', calendar: 'primary', request: 'info', requests: 'info',
@@ -221,9 +224,9 @@
 
         // â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         function apiPatchNotif(id, payload) {
-            return fetch('/api/notifications/' + id, {
-                method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
-            });
+            // keepalive: opening a notification marks it read AND navigates away in the same click; without it the
+            // browser can cancel this request mid-flight, leaving the notification unread
+            return CIPRMS.api('/api/notifications/' + id, { method: 'PATCH', json: payload, keepalive: true, quiet: true });
         }
 
         // â”€â”€ Summary tiles â€” real counts from allNotifs, no hardcoded values â”€â”€â”€â”€
@@ -248,15 +251,18 @@
         // â”€â”€ Load from MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Always the caller's own notifications — GET /api/notifications is
         // own-scoped by targetEmail server-side regardless of role.
-        function loadNotifs() {
-            fetch('/api/notifications')
-                .then(r => r.json())
-                .then(data => {
-                    allNotifs = Array.isArray(data) ? data : [];
-                    render();
-                    updateSummaryTiles();
-                })
-                .catch(err => console.error('Failed to load notifications:', err));
+        // live=true: a background refresh after a live update - a failed read leaves the list as it is.
+        function loadNotifs(live) {
+            return CIPRMS.api('/api/notifications', { quiet: true }).then(res => {
+                if (!res.ok || !Array.isArray(res.data)) {
+                    if (!live) CIPRMS.toast(res.error || 'Could not load notifications.', 'error');
+                    return live ? false : undefined;
+                }
+                allNotifs = res.data;
+                render();
+                updateSummaryTiles();
+                paintBell(allNotifs.filter(n => n.unread).length);
+            });
         }
 
         function goToPage(p) { currentPage = p; render(); }
@@ -315,17 +321,17 @@
         }
 
         // â”€â”€ Mark all read â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        let markingAll = false;
         function markAllRead() {
-            fetch('/api/notifications/markallread/mine', { method: 'PATCH', headers: {'Content-Type':'application/json'} })
-                .then(r => r.json())
-                .then(() => {
-                    allNotifs.forEach(n => n.unread = false);
-                    const badge = document.getElementById('notif-badge');
-                    if (badge) badge.style.display = 'none';
-                    render();
-                    updateSummaryTiles();
-                })
-                .catch(err => console.error('markAllRead failed:', err));
+            if (markingAll) return;
+            markingAll = true;
+            return CIPRMS.api('/api/notifications/markallread/mine', { method: 'PATCH', json: {} }).then(res => {
+                if (!res.ok) return;                       // the toast already said why; nothing changed on screen
+                allNotifs.forEach(n => n.unread = false);
+                paintBell(0);
+                render();
+                updateSummaryTiles();
+            }).finally(() => { markingAll = false; });
         }
 
         // â”€â”€ Mark single read â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -333,14 +339,13 @@
             const n = allNotifs.find(x => x.id === id);
             if (n && n.unread) {
                 apiPatchNotif(id, { unread: false })
-                    .then(() => {
+                    .then(res => {
+                        if (!res.ok) return;
                         n.unread = false;
-                        const cnt = allNotifs.filter(x => x.unread).length;
-                        if (cnt === 0) { const b = document.getElementById('notif-badge'); if (b) b.style.display = 'none'; }
+                        paintBell(allNotifs.filter(x => x.unread).length);
                         render();
                         updateSummaryTiles();
-                    })
-                    .catch(err => console.error('markRead failed:', err));
+                    });
             }
         }
 
@@ -351,32 +356,28 @@
             if (evt && evt.target.closest('.notif-download-btn,.notif-delete-btn')) return;
             const n = allNotifs.find(x => x.id === id);
             markRead(id);
-            if (n && n.link) window.location.href = n.link;
+            // n.href = the destination resolved server-side for this role; n.link is the stored original
+            const dest = n && (n.href || n.link);
+            if (dest) window.location.href = dest;
         }
 
+        const deleting = new Set();
         // ── Delete a single notification (own only) ───────────────────────
         function deleteNotif(id, evt) {
             if (evt) evt.stopPropagation();
             if (!confirm('Delete this notification? This cannot be undone.')) return;
-            fetch('/api/notifications/' + id, { method: 'DELETE' })
-                .then(r => r.json())
-                .then(d => {
-                    if (d.success || d.message === 'Notification deleted') {
-                        allNotifs = allNotifs.filter(x => x.id !== id);
-                        // Update header bell badge
-                        const unreadLeft = allNotifs.filter(x => x.unread).length;
-                        const badge = document.getElementById('notif-badge');
-                        if (badge) {
-                            if (unreadLeft > 0) { badge.textContent = unreadLeft; badge.style.display = ''; }
-                            else { badge.style.display = 'none'; }
-                        }
-                        render();
-                        updateSummaryTiles();
-                    } else {
-                        alert(d.error || 'Could not delete notification.');
-                    }
-                })
-                .catch(() => alert('Network error. Please try again.'));
+            if (deleting.has(id)) return;
+            deleting.add(id);
+            return CIPRMS.api('/api/notifications/' + id, { method: 'DELETE' }).then(res => {
+                if (res.ok) {
+                    allNotifs = allNotifs.filter(x => x.id !== id);
+                    paintBell(allNotifs.filter(x => x.unread).length);
+                    render();
+                    updateSummaryTiles();
+                } else if (res.status === 404) {
+                    loadNotifs(true);                       // already gone (deleted in another tab): show the real list
+                }
+            }).finally(() => deleting.delete(id));
         }
 
         function render() {
@@ -407,7 +408,7 @@
             });
 
             let html = Object.entries(groups).map(([date, items], index) => `
-      <p class="text-uppercase fw-semibold text-muted fs-11 mb-2 ${index === 0 ? 'mt-0' : 'mt-3'}">${date}</p>
+      <p class="text-uppercase fw-semibold text-muted fs-11 mb-2 ${index === 0 ? 'mt-0' : 'mt-3'}">${esc(date)}</p>
       <div class="card mb-0">
         <ul class="list-group list-group-flush">
           ${items.map(n => {
@@ -421,12 +422,12 @@
                 </div>
                 <div class="flex-grow-1">
                   <div class="d-flex justify-content-between align-items-start flex-wrap gap-1 mb-1">
-                    <span class="fw-semibold fs-13 ${n.unread ? 'text-dark' : 'text-muted'}">${n.title}</span>
-                    <span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>${n.time}</span>
+                    <span class="fw-semibold fs-13 ${n.unread ? 'text-dark' : 'text-muted'}">${esc(n.title)}</span>
+                    <span class="text-muted fs-11 text-nowrap"><i class="ri-time-line me-1"></i>${esc(n.time)}</span>
                   </div>
-                  <p class="text-muted fs-12 mb-1">${n.desc}</p>
-                  <span class="badge bg-${tagColor[n.module]}-subtle text-${tagColor[n.module]}">${n.tag}</span>
-                  ${n.downloadLink ? `<a href="${n.downloadLink}" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm ms-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>` : ''}
+                  <p class="text-muted fs-12 mb-1">${esc(n.desc)}</p>
+                  <span class="badge bg-${tagColor[n.module]}-subtle text-${tagColor[n.module]}">${esc(n.tag)}</span>
+                  ${n.downloadLink ? `<a href="${esc(n.downloadLink)}" target="_blank" rel="noopener" class="btn btn-soft-info btn-sm ms-1 notif-download-btn"><i class="ri-download-2-line me-1"></i>Download</a>` : ''}
                 </div>
                 <div class="flex-shrink-0 d-flex flex-column align-items-end gap-1">
                   ${n.unread ? '<span class="badge bg-primary rounded-circle" style="width:8px;height:8px;padding:0;"></span>' : ''}
@@ -445,7 +446,11 @@
             document.getElementById('notif-pagination').innerHTML = buildPaginationHtml(currentPage, totalPages, 'goToPage');
         }
 
-        document.addEventListener('DOMContentLoaded', loadNotifs);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadNotifs();
+            // a new / read / removed notification (this tab, another tab, or a reconnect): re-read the real list
+            if (window.CIPRMS && CIPRMS.live) CIPRMS.live(['notification.created', 'notification.read', 'notification.deleted'], () => loadNotifs(true), { debounce: 250 });
+        });
     </script>
 
 <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>

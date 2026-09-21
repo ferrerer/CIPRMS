@@ -16,6 +16,7 @@ const { connectDB, getDb } = require('./db');
 const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
+const realtime = require('./services/realtime');
 const geocoding = require('./services/geocodingService');
 const uploadAvatar = require('./middleware/avatarUploadMiddleware');
 const uploadDoc = require('./middleware/uploadMiddleware');
@@ -146,7 +147,9 @@ app.use('/velzon/assets', express.static(path.join(__dirname, 'assets')));
 if (!process.env.SESSION_SECRET) {
   console.warn('⚠️  SESSION_SECRET is not set in .env — using an insecure generated fallback for this run only.');
 }
+const sessionStore = new session.MemoryStore();
 app.use(session({
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: true,
   saveUninitialized: false,
@@ -231,11 +234,26 @@ passport.deserializeUser(function (user, done) {
 // ── RBAC MIDDLEWARE ───────────────────────────────────────────────────────────
 
 /**
+ * A guard that turns a request away normally redirects (to the login page, or to the caller's own home). A page script
+ * that called the API with fetch() would then be handed that HTML page and fail to parse it, so scripts identify
+ * themselves with X-Requested-With: ciprms (views' CIPRMS.api helper) and get a JSON 401/403 they can show instead.
+ * Every other caller — page navigation, tests, anything else — keeps the redirect exactly as before.
+ */
+function denyAccess(req, res, status, redirectTo) {
+  if (req.get('X-Requested-With') === 'ciprms') {
+    return res.status(status).json(status === 401
+      ? { error: 'Your session has expired. Please sign in again.', code: 'UNAUTHENTICATED' }
+      : { error: 'You do not have permission to do this.', code: 'FORBIDDEN' });
+  }
+  return res.redirect(redirectTo);
+}
+
+/**
  * Requires ANY authenticated user (any role).
  */
 function requireAuth(req, res, next) {
   if (req.session && req.session.user) return next();
-  res.redirect('/');
+  return denyAccess(req, res, 401, '/');
 }
 
 /**
@@ -243,9 +261,9 @@ function requireAuth(req, res, next) {
  */
 function requirePersonnel(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (user.role === 'Administrator' || user.role === 'Auth. Personnel') return next();
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
 }
 
 /**
@@ -262,7 +280,7 @@ function requirePersonnel(req, res, next) {
  */
 function denyDepartmentPage(req, res, next) {
   const user = req.session && req.session.user;
-  if (user && user.role === 'Auth. Personnel') return res.redirect(homeForRole(user.role));
+  if (user && user.role === 'Auth. Personnel') return denyAccess(req, res, 403, homeForRole(user.role));
   return next();
 }
 
@@ -277,9 +295,26 @@ function denyDepartmentPage(req, res, next) {
  */
 function requireRequester(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (['Administrator', 'Auth. Personnel', 'potential_partner'].includes(user.role)) return next();
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
+}
+
+/**
+ * Chained AFTER requireRequester on the Partnership Request routes (/api/requests: create, edit a draft,
+ * submit a draft, delete a draft, withdraw). requireRequester also admits College Staff (backend role
+ * "Auth. Personnel") because the Document Request routes share it — but College Staff no longer has a
+ * Partnership Request workflow (its page and form were removed; Document Requests are all it submits), so
+ * the API is closed to it here on the server rather than left to a hidden button. A JSON 403, not a
+ * redirect: this is an API refusal. Administrator and Partner pass unchanged; Staff never reaches this
+ * (requireRequester already redirects it).
+ */
+function denyCollegeStaffPartnershipRequests(req, res, next) {
+  const user = req.session && req.session.user;
+  if (user && user.role === 'Auth. Personnel') {
+    return res.status(403).json({ error: 'College Staff cannot submit Partnership Requests. Use a Document Request instead.' });
+  }
+  return next();
 }
 
 /**
@@ -287,10 +322,10 @@ function requireRequester(req, res, next) {
  */
 function requireAdmin(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (user.role === 'Administrator') return next();
   // Non-admin users get redirected to their own dashboard
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
 }
 
 /**
@@ -298,9 +333,9 @@ function requireAdmin(req, res, next) {
  */
 function requirePartner(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (user.role === 'potential_partner') return next();
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
 }
 
 /**
@@ -310,9 +345,9 @@ function requirePartner(req, res, next) {
  */
 function requireUploader(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (['Administrator', 'Auth. Personnel', 'potential_partner', 'Staff'].includes(user.role)) return next();
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
 }
 
 /**
@@ -336,9 +371,9 @@ function requireUploader(req, res, next) {
  */
 function requireStaffAccess(req, res, next) {
   const user = req.session && req.session.user;
-  if (!user) return res.redirect('/');
+  if (!user) return denyAccess(req, res, 401, '/');
   if (user.role === 'Administrator' || user.role === 'Staff') return next();
-  return res.redirect(homeForRole(user.role));
+  return denyAccess(req, res, 403, homeForRole(user.role));
 }
 
 // ── HELPER: role → home URL ───────────────────────────────────────────────────
@@ -585,7 +620,9 @@ app.post('/signup', signupLimiter, async (req, res) => {
 // (deliberately out of scope here — see the Phase 0 report) — this closes
 // only the one concretely reachable gap.
 app.post('/logout', (req, res) => {
+  const endingSession = req.sessionID;
   req.session.destroy((err) => {
+    realtime.disconnectSession(endingSession);
     if (err) console.error('❌ Logout session destroy error:', err);
     // Clear the session cookie from the browser so it cannot reuse the old ID
     res.clearCookie('connect.sid', { path: '/' });
@@ -634,13 +671,11 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   }
 });
 
-// Shared read-only partnership directory — intentionally visible to Administrator,
-// Auth. Personnel, potential_partner, AND Staff (partner_dashboard.ejs's
-// map/insights panels depend on the full list, not just their own — see /mine
-// below for the org-scoped variant; Staff's Partnership Registry/DSS pages
-// depend on it too). requireUploader (already used for the OCR upload routes)
-// is reused here rather than requireAuth, keeping this scoped to the same
-// four internal/uploading roles.
+// Partnership registry feed. Administrator and Staff (their Registry / Monitoring / DSS pages) and
+// Auth. Personnel receive the full registry; a potential_partner receives ONLY the rows tied to its own
+// approved requests (the same set as /mine below) — decided by the session role on the server, with no
+// query parameter, id or institution name that can widen it. requireUploader (already used for the OCR
+// upload routes) is reused here rather than requireAuth, keeping this to the four internal/uploading roles.
 app.get('/api/partnerships', requireUploader, async (req, res) => {
   try {
     const db = getDb();
@@ -654,6 +689,12 @@ app.get('/api/partnerships', requireUploader, async (req, res) => {
     // lifecycle-gridjs.init.js) renders rows in the order returned here with
     // no client-side re-sort, so this one server-side sort is what keeps all
     // of them consistently newest-first.
+    // A Partner never receives other organizations' registry rows (this feed is the whole registry):
+    // it is limited to the partnerships tied to that Partner's own approved requests — exactly the
+    // /api/partnerships/mine set — enforced here on the server, not by what a page chooses to show.
+    if (req.session.user.role === 'potential_partner') {
+      return res.json(await partnershipsOwnedBy(db, req.session.user.email));
+    }
     const docs = await db.collection('partnerships').find({}).sort({ id: -1 }).toArray();
     res.json(docs);
   } catch (err) {
@@ -666,16 +707,18 @@ app.get('/api/partnerships', requireUploader, async (req, res) => {
 // user's own APPROVED requests only — used by the potential_partner Monitoring
 // and Reports pages so they never receive other organizations' registry data,
 // unlike the full /api/partnerships feed above.
+async function partnershipsOwnedBy(db, email) {
+  const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
+  const names = [...new Set(myApproved.map(r => r.institution).filter(Boolean))];
+  if (names.length === 0) return [];
+  const patterns = names.map(name => new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'));
+  return db.collection('partnerships').find({ inst: { $in: patterns } }).toArray();
+}
 app.get('/api/partnerships/mine', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const email = req.session.user ? req.session.user.email : '';
-    const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
-    const names = [...new Set(myApproved.map(r => r.institution).filter(Boolean))];
-    if (names.length === 0) return res.json([]);
-    const patterns = names.map(name => new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'));
-    const matches = await db.collection('partnerships').find({ inst: { $in: patterns } }).toArray();
-    res.json(matches);
+    res.json(await partnershipsOwnedBy(db, email));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to retrieve partnerships' });
@@ -726,7 +769,7 @@ function computePartnershipStatus(endDateStr) {
 // Creates a normal `requests` entry marked isRenewal — it's reviewed through the
 // exact same admin queue as any other partnership request; approving it is what
 // actually extends the underlying partnership record (see PATCH /api/requests/:id).
-app.post('/api/partnerships/:id/renew-request', requireAuth, async (req, res) => {
+app.post('/api/partnerships/:id/renew-request', requireAuth, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   const { proposedEndDate, notes } = req.body;
   if (!proposedEndDate || isNaN(new Date(proposedEndDate))) {
@@ -798,7 +841,7 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, async (req, res) =>
 // used by the potential_partner Partnership Request module so an applicant
 // can start a request and finish it later (see the /edit and /submit routes
 // below for the rest of the draft lifecycle).
-app.post('/api/requests', requireRequester, async (req, res) => {
+app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
   const {
     institution, country, type, nature, notes, requestedBy, isDraft,
     category, region, unit, startDate, endDate, attachmentLink,
@@ -809,6 +852,12 @@ app.post('/api/requests', requireRequester, async (req, res) => {
   // Drafts are allowed to be incomplete — only a real submission requires the core fields.
   if (!draft && (!institution || !country || !type || !nature)) {
     return res.status(400).json({ error: 'Missing required fields: institution, country, type, nature.' });
+  }
+  // The Partner form offers only MOA and MOU (the only agreement types the partnership registry accepts —
+  // VALID_PARTNERSHIP_TYPES). Older requests/partnerships that carry another type are left exactly as they
+  // are; only a NEW request is held to the two supported choices.
+  if (type && !VALID_PARTNERSHIP_TYPES.includes(type)) {
+    return res.status(400).json({ error: 'Agreement type must be one of: ' + VALID_PARTNERSHIP_TYPES.join(', ') + '.' });
   }
   try {
     const db = getDb();
@@ -894,7 +943,7 @@ app.post('/api/requests', requireRequester, async (req, res) => {
 // Edit a request that is still a Draft — self-service, ownership-checked.
 // Once a request is submitted (Pending/Under Review/etc.) it can no longer be
 // edited this way, only withdrawn.
-app.patch('/api/requests/:id/edit', requireRequester, async (req, res) => {
+app.patch('/api/requests/:id/edit', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -909,6 +958,9 @@ app.patch('/api/requests/:id/edit', requireRequester, async (req, res) => {
       return res.status(400).json({ error: 'Only draft requests can be edited. Withdraw a submitted request instead.' });
     }
 
+    if (req.body.type !== undefined && req.body.type !== '' && !VALID_PARTNERSHIP_TYPES.includes(req.body.type)) {
+      return res.status(400).json({ error: 'Agreement type must be one of: ' + VALID_PARTNERSHIP_TYPES.join(', ') + '.' });
+    }
     const allowed = ['institution', 'country', 'type', 'nature', 'category', 'region', 'unit', 'startDate', 'endDate', 'notes', 'attachmentLink'];
     const patch = { updatedAt: new Date().toISOString() };
     for (const key of allowed) {
@@ -923,7 +975,7 @@ app.patch('/api/requests/:id/edit', requireRequester, async (req, res) => {
 });
 
 // Submit a previously-saved Draft for review — self-service, ownership-checked.
-app.post('/api/requests/:id/submit', requireRequester, async (req, res) => {
+app.post('/api/requests/:id/submit', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -939,6 +991,10 @@ app.post('/api/requests/:id/submit', requireRequester, async (req, res) => {
     }
     if (!target.institution || !target.country || !target.type || !target.nature) {
       return res.status(400).json({ error: 'Please complete institution, country, agreement type, and nature before submitting.' });
+    }
+    if (!VALID_PARTNERSHIP_TYPES.includes(target.type)) {
+      // an older draft saved with a type the form no longer offers (LOI / JVA / Other): pick MOA or MOU, then submit
+      return res.status(400).json({ error: 'Agreement type must be MOA or MOU. Edit the draft and choose one before submitting.' });
     }
 
     const existing = await db.collection('requests').findOne({
@@ -972,7 +1028,7 @@ app.post('/api/requests/:id/submit', requireRequester, async (req, res) => {
 
 // Delete a Draft outright — self-service, ownership-checked. Submitted
 // requests must be withdrawn instead (see /withdraw below), not deleted.
-app.delete('/api/requests/:id', requireRequester, async (req, res) => {
+app.delete('/api/requests/:id', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -1019,7 +1075,7 @@ const UNDECIDED_REQUEST_STATUSES = ['Pending', 'Under Review'];
 
 // Update partnership request status (approve / reject) — Administrator and
 // Staff share this exact review authority as of 2026-08-27 (full parity).
-app.patch('/api/requests/:id', requireStaffAccess, async (req, res) => {
+app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   const { status, notes } = req.body;
   const validStatuses = ['Pending', 'Under Review', 'Approved', 'Rejected'];
@@ -1028,12 +1084,15 @@ app.patch('/api/requests/:id', requireStaffAccess, async (req, res) => {
   }
   try {
     const db = getDb();
-    if (['Approved', 'Rejected'].includes(status)) {
-      const current = await db.collection('requests').findOne({ id });
-      if (!current) return res.status(404).json({ error: 'Request not found.' });
-      if (!UNDECIDED_REQUEST_STATUSES.includes(current.status)) {
-        return res.status(400).json({ error: `This request has already been decided (current status: ${current.status}) and cannot be changed.` });
-      }
+    // EVERY status change needs a request that is still open - not only a decision. Without this, a stale review dialog
+    // (or a direct call) could move a Rejected / Withdrawn / Approved request back to Under Review or Pending.
+    const current = await db.collection('requests').findOne({ id });
+    if (!current) return res.status(404).json({ error: 'Request not found.' });
+    if (current.status === 'Draft') {
+      return res.status(400).json({ error: 'This request is still a draft that its owner has not submitted, so it cannot be reviewed yet.' });
+    }
+    if (!UNDECIDED_REQUEST_STATUSES.includes(current.status)) {
+      return res.status(400).json({ error: `This request has already been decided (current status: ${current.status}) and cannot be changed.` });
     }
     await db.collection('requests').updateOne(
       { id },
@@ -1113,7 +1172,7 @@ app.patch('/api/requests/:id', requireStaffAccess, async (req, res) => {
 // requester (and both reviewer roles) open any version — no changes needed
 // there. Every version is pushed, never replaced — supportingDocuments is a
 // running history, not a single current file.
-app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
+app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, res) => {
   uploadDoc.single('document')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10MB.' : err.message;
@@ -1245,7 +1304,7 @@ app.post('/api/requests/:id/documents', requireAuth, (req, res) => {
 
 // Withdraw own request — self-service, any authenticated user (not admin-gated like the route above).
 // Only the original submitter may withdraw, and only while it's still Pending/Under Review.
-app.post('/api/requests/:id/withdraw', requireRequester, async (req, res) => {
+app.post('/api/requests/:id/withdraw', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -1327,7 +1386,7 @@ function withDrCanonicalStatus(requests) {
   return requests.map(r => ({ ...r, canonicalStatus: canonicalDrStatus(r.status) }));
 }
 
-app.post('/api/document-requests', requireRequester, async (req, res) => {
+app.post('/api/document-requests', requireRequester, announce('documentRequest'), async (req, res) => {
   const { institution, notes, contactNumber, documentForm } = req.body;
   // Accept the new documentTypes array; fall back to the legacy singular
   // documentType string so older API callers/tests keep working unchanged.
@@ -1418,7 +1477,7 @@ app.get('/api/document-requests/mine', requireRequester, async (req, res) => {
 // Cancel own document request — self-service, ownership-checked, allowed
 // only at the pipeline's starting stage (Received, or its legacy equivalent
 // Pending) before any reviewer has begun acting on it.
-app.delete('/api/document-requests/:id', requireRequester, async (req, res) => {
+app.delete('/api/document-requests/:id', requireRequester, announce('documentRequest'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -1476,7 +1535,7 @@ const DR_STATUS_NOTIFICATION_COPY = {
 // names and any pre-2026-09-04 legacy name (Pending/Under Review/Fulfilled),
 // which is normalized to its canonical equivalent before validation/storage
 // so every write from here on uses only the canonical vocabulary.
-app.patch('/api/document-requests/:id', requireStaffAccess, async (req, res) => {
+app.patch('/api/document-requests/:id', requireStaffAccess, announce('documentRequest'), async (req, res) => {
   const id = parseInt(req.params.id);
   const { remark, receivedBy } = req.body;
   const status = canonicalDrStatus(req.body.status);
@@ -1585,7 +1644,7 @@ app.patch('/api/document-requests/:id', requireStaffAccess, async (req, res) => 
 // GET /uploads/documents/:filename ownership check already lets the true
 // requester and both reviewer roles open any version — no changes needed
 // there. Every version is pushed, never replaced.
-app.post('/api/document-requests/:id/documents', requireAuth, (req, res) => {
+app.post('/api/document-requests/:id/documents', requireAuth, announce('documentRequest'), (req, res) => {
   uploadDoc.single('document')(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10MB.' : err.message;
@@ -1807,7 +1866,7 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
       .find({ targetEmail: req.session.user.email })
       .sort({ id: -1 })
       .toArray();
-    res.json(docs);
+    res.json(withNotificationHref(docs, req.session.user.role));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1841,7 +1900,7 @@ app.get('/api/notifications/mine', requireAuth, async (req, res) => {
       .find({ targetEmail: email })
       .sort({ id: -1 })
       .toArray();
-    res.json(docs);
+    res.json(withNotificationHref(docs, req.session.user.role));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2134,7 +2193,7 @@ function sanitizePartnershipFields(body, { requireCore }) {
 // reviewer actually saves a partnership here. This keeps ONE creation path
 // (this endpoint) for both a manually-added partnership and a
 // request-approval conversion — no second Registry-writing code path.
-app.post('/api/partnerships', requireStaffAccess, async (req, res) => {
+app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async (req, res) => {
   try {
     const { sourceRequestId, ...partnershipBody } = req.body;
     const unknown = Object.keys(partnershipBody).filter(k => !(k in PARTNERSHIP_FIELDS));
@@ -2229,7 +2288,7 @@ app.post('/api/partnerships', requireStaffAccess, async (req, res) => {
   }
 });
 
-app.patch('/api/partnerships/:id', requireStaffAccess, async (req, res) => {
+app.patch('/api/partnerships/:id', requireStaffAccess, announce('partnership', { prior: priorPartnership }), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const unknown = Object.keys(req.body).filter(k => !(k in PARTNERSHIP_FIELDS));
@@ -2283,7 +2342,7 @@ app.post('/api/geocode/preview', requireStaffAccess, geocodePreviewLimiter, asyn
   res.json(geocoding.toPublicLocation(location));
 });
 
-app.delete('/api/partnerships/:id', requireStaffAccess, async (req, res) => {
+app.delete('/api/partnerships/:id', requireStaffAccess, announce('partnership', { prior: priorPartnership }), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -5196,6 +5255,7 @@ async function notifyUsers(db, emails, payload) {
     ...payload
   }));
   await db.collection('notifications').insertMany(docs);
+  publishNewNotifications(db, docs).catch(err => console.error('realtime notification publish failed:', err.message));
 }
 
 // Reviewer broadcasts (REQUEST_REVIEWER_ROLES = Administrator + Staff) can't
@@ -5215,6 +5275,151 @@ async function notifyReviewers(db, reviewers, payloadBase, linkForRole) {
     await notifyUsers(db, emails, { ...payloadBase, link: linkForRole(role) });
   }
 }
+
+// ── REALTIME (Server-Sent Events) ─────────────────────────────────────────────
+// Routes below carry announce('<topic>'): once the handler has answered SUCCESSFULLY (so the database change is already
+// committed) the change is published to exactly the connected users allowed to know about it. See services/realtime.js
+// for the transport rules. Events are small hints ({ id, status, action }); a page re-reads the data it shows through the
+// normal RBAC-checked endpoints, so this channel can never show anyone more than they could already fetch.
+const REQUEST_EVENT_ACTIONS = {           // [action, is it a status transition?]
+  'POST /api/requests': ['created', true],
+  'PATCH /api/requests/:id/edit': ['edited', false],
+  'POST /api/requests/:id/submit': ['submitted', true],
+  'DELETE /api/requests/:id': ['draftDeleted', false],
+  'PATCH /api/requests/:id': ['reviewed', true],
+  'POST /api/requests/:id/documents': ['documentAdded', false],
+  'POST /api/requests/:id/withdraw': ['withdrawn', true],
+  'POST /api/partnerships/:id/renew-request': ['renewalRequested', true]
+};
+const DOCUMENT_REQUEST_EVENT_ACTIONS = {
+  'POST /api/document-requests': ['created', true],
+  'DELETE /api/document-requests/:id': ['deleted', false],
+  'PATCH /api/document-requests/:id': ['statusChanged', true],
+  'POST /api/document-requests/:id/documents': ['documentAdded', false]
+};
+const PARTNERSHIP_EVENT_ACTIONS = { 'POST': 'created', 'PATCH': 'updated', 'DELETE': 'deleted' };
+
+// Who may know about a partnership change: the reviewers/registry managers, plus the accounts whose own APPROVED request
+// is tied to that institution — the same ownership rule as GET /api/partnerships/mine.
+async function partnershipAudience(db, institution) {
+  const staff = realtime.audience.roles(REQUEST_REVIEWER_ROLES);
+  if (!institution) return staff;
+  const pattern = new RegExp('^' + String(institution).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+  const owners = await db.collection('requests').find({ status: 'Approved', institution: pattern }).project({ submittedByEmail: 1 }).toArray();
+  return realtime.audience.merge(staff, realtime.audience.emails(owners.map(o => o.submittedByEmail)));
+}
+
+// Mirrors GET /api/calendarevents: Administrator sees every event; everybody else sees an event with no recipient list, one
+// that names them, or one they created.
+function calendarAudience(ev) {
+  if (!ev) return realtime.audience.roles(['Administrator']);
+  if (!Array.isArray(ev.recipientEmails)) return realtime.audience.all();
+  return realtime.audience.merge(realtime.audience.roles(['Administrator']), realtime.audience.emails([...ev.recipientEmails, ev.createdByEmail]));
+}
+
+async function publishChange(topic, req, body, prior) {
+  if (!realtime.hasClients()) return;
+  const db = getDb();
+  const actor = req.session && req.session.user;
+  const key = req.method + ' ' + (req.route && req.route.path);
+  const paramId = parseInt(req.params && req.params.id, 10);
+  const reviewers = realtime.audience.roles(REQUEST_REVIEWER_ROLES);
+
+  if (topic === 'request') {
+    const [action, isStatus] = REQUEST_EVENT_ACTIONS[key] || ['updated', false];
+    const doc = body && body.request ? body.request : null;
+    const owner = doc ? doc.submittedByEmail : (actor && actor.email);
+    realtime.publish(isStatus ? 'request.statusChanged' : 'request.updated',
+      { id: doc ? doc.id : paramId, status: doc ? doc.status : null, action, renewal: !!(doc && doc.isRenewal) },
+      realtime.audience.merge(reviewers, realtime.audience.emails([owner])));
+    // approving a renewal request extends the linked partnership
+    if (key === 'PATCH /api/requests/:id' && doc && doc.status === 'Approved' && doc.isRenewal && doc.renewalPartnershipId) {
+      realtime.publish('partnership.statusChanged', { id: doc.renewalPartnershipId, action: 'renewed' }, await partnershipAudience(db, doc.institution));
+    }
+  } else if (topic === 'documentRequest') {
+    const [action, isStatus] = DOCUMENT_REQUEST_EVENT_ACTIONS[key] || ['updated', false];
+    const doc = body && body.request ? body.request : null;
+    const owner = doc ? doc.requestedByEmail : (actor && actor.email);
+    realtime.publish(isStatus ? 'documentRequest.statusChanged' : 'documentRequest.updated',
+      { id: doc ? doc.id : paramId, status: doc ? doc.status : null, action },
+      realtime.audience.merge(reviewers, realtime.audience.emails([owner])));
+  } else if (topic === 'partnership') {
+    const doc = (body && body.partnership) || prior;
+    const action = PARTNERSHIP_EVENT_ACTIONS[req.method] || 'updated';
+    realtime.publish('partnership.updated', { id: doc ? doc.id : paramId, action },
+      realtime.audience.merge(await partnershipAudience(db, doc && doc.inst), prior && prior.inst !== (doc && doc.inst) ? await partnershipAudience(db, prior.inst) : null));
+    // "Add to Registry" from an approved request also finalises that request
+    if (req.method === 'POST' && req.body && req.body.sourceRequestId) {
+      const src = await db.collection('requests').findOne({ id: parseInt(req.body.sourceRequestId, 10) });
+      if (src) realtime.publish('request.statusChanged', { id: src.id, status: src.status, action: 'convertedToRegistry', renewal: !!src.isRenewal },
+        realtime.audience.merge(reviewers, realtime.audience.emails([src.submittedByEmail])));
+    }
+  } else if (topic === 'calendar') {
+    if (key === 'POST /api/calendarevents/:id/join') {
+      realtime.publish('calendar.updated', { id: paramId, action: 'joined' }, realtime.audience.merge(reviewers, realtime.audience.emails([actor && actor.email])));
+    } else if (req.method === 'DELETE') {
+      realtime.publish('calendar.deleted', { id: paramId }, calendarAudience(prior));
+    } else {
+      const id = body && body.event ? body.event.id : paramId;
+      const ev = await db.collection('calendarevents').findOne({ id });
+      realtime.publish('calendar.updated', { id, action: req.method === 'POST' ? 'created' : 'updated' }, calendarAudience(ev));
+    }
+  } else if (topic === 'notificationState' && actor) {
+    const mine = realtime.audience.emails([actor.email]);
+    if (req.method === 'DELETE') realtime.publish('notification.deleted', { id: paramId }, mine);
+    else realtime.publish('notification.read', Number.isInteger(paramId) ? { id: paramId } : { all: true }, mine);
+  }
+}
+
+/**
+ * Route middleware. Wraps res.json so that, only when the handler answered successfully, the change is announced. `prior`
+ * (optional) loads the record BEFORE the handler runs — needed when the handler deletes it and the audience depends on it.
+ */
+function announce(topic, opts = {}) {
+  return async (req, res, next) => {
+    let prior = null;
+    if (opts.prior) { try { prior = await opts.prior(req); } catch (_) { /* audience falls back to the safe default */ } }
+    const send = res.json.bind(res);
+    res.json = (body) => {
+      const out = send(body);
+      if (res.statusCode < 400 && !(body && body.success === false)) {
+        publishChange(topic, req, body, prior).catch(err => console.error('realtime announce failed:', err.message));
+      }
+      return out;
+    };
+    next();
+  };
+}
+function priorPartnership(req) { return getDb().collection('partnerships').findOne({ id: parseInt(req.params.id, 10) }); }
+function priorCalendarEvent(req) { return getDb().collection('calendarevents').findOne({ id: parseInt(req.params.id, 10) }); }
+
+// A user's own new notification goes to that user only, in the same shape /api/notifications/mine returns it.
+async function publishNewNotifications(db, docs) {
+  if (!realtime.hasClients() || !docs.length) return;
+  const users = await db.collection('users').find({ email: { $in: docs.map(d => d.targetEmail) } }).project({ email: 1, role: 1 }).toArray();
+  const roleOf = new Map(users.map(u => [String(u.email).toLowerCase(), u.role]));
+  for (const d of docs) {
+    const [view] = withNotificationHref([d], roleOf.get(String(d.targetEmail).toLowerCase()));
+    realtime.publish('notification.created', { notification: view }, realtime.audience.emails([d.targetEmail]));
+  }
+}
+
+// GET /api/realtime/stream — the browser's EventSource. Signed-in users only; it is bound to the account that opened it
+// (and the page says which account it believes it is, so a stale tab of another login is refused). It only ever RECEIVES.
+app.get('/api/realtime/stream', (req, res) => {
+  const user = req.session && req.session.user;
+  if (!user) return res.status(401).json({ error: 'Your session has expired. Please sign in again.', code: 'UNAUTHENTICATED' });
+  if (req.query.uid !== undefined && String(req.query.uid) !== String(user.id)) {
+    return res.status(409).json({ error: 'This page belongs to a different sign-in.', code: 'USER_MISMATCH' });
+  }
+  realtime.connect(req, res, user);
+});
+realtime.setRevalidator(async (client) => {
+  const dbUser = await getDb().collection('users').findOne({ id: client.user.id }, { projection: { status: 1, role: 1, email: 1 } });
+  if (!dbUser || dbUser.status === 'Inactive' || dbUser.role !== client.user.role || dbUser.email !== client.user.email) return false;
+  const stored = await new Promise(resolve => sessionStore.get(client.sessionID, (err, sess) => resolve(err ? { user: true } : sess)));
+  return !!(stored && stored.user);
+});
 
 // documentLibraryService.shortDocType() classifies by matching words like
 // "agreement"/"understanding" in a free-form OCR guess — short codes like
@@ -5239,6 +5444,70 @@ function expandDocTypeLabel(shortCode) {
  * Staff each only have their own plain request-tracking list (no
  * per-request modal exists there today), so those link at the page level.
  */
+// ── Where a notification click goes ─────────────────────────────────────────────────────────────────────────
+// A notification stores the link that was right for its recipient's role WHEN IT WAS CREATED. Clicking that
+// stored link later went wrong whenever the route no longer suited the reader: an old "/calendar" link opened
+// by CIRL Staff (requirePersonnel bounces them to their home = the Dashboard), a removed page such as
+// /viewonly/request-access (404), a College Staff "partnership request" link (that role has no Partnership
+// Request page any more) or a Partner "document request" link (Monitoring has no such table any more, so the
+// click just landed on the Monitoring home). notificationHref() re-resolves the destination for the role that is
+// actually reading it, from the stored link/module/tag, and only ever returns a page that role can open. The
+// stored `link` is left untouched. It is derived from the caller's own notification only and contains nothing
+// but an allow-listed path plus a numeric id, so it can neither point off-site nor at another user's request
+// (the destination pages still authorize every record they load).
+const NOTIFICATION_PAGES = {
+  'Administrator':     { fallback: '/notifications',          dashboard: '/dashboard',       requests: '/partnership-requests', calendar: '/calendar',          monitoring: '/lifecycle' },
+  'Staff':             { fallback: '/staff/notifications',    dashboard: '/staff/dashboard', requests: '/staff/requests',       calendar: '/staff/calendar',    monitoring: '/staff/lifecycle' },
+  'Auth. Personnel':   { fallback: '/personnel/monitoring',   requests: '/personnel/requests',   calendar: '/personnel/calendar', monitoring: '/personnel/monitoring' },
+  'potential_partner': { fallback: '/partner/monitoring',     requests: '/partner/requests',     calendar: '/partner/calendar',   monitoring: '/partner/monitoring' }
+};
+const NOTIFICATION_LINK_KINDS = [
+  [/^\/(?:staff\/|personnel\/|partner\/)?calendar$/, 'calendar'],
+  [/^\/(?:partnership-requests|staff\/requests|personnel\/requests|partner\/requests|viewonly\/request-access)$/, 'requests'],
+  [/^\/(?:lifecycle|registry|staff\/lifecycle|staff\/registry|personnel\/lifecycle|personnel\/monitoring|partner\/monitoring)$/, 'monitoring'],
+  [/^\/(?:staff\/|personnel\/|partner\/)?dashboard$/, 'dashboard']
+];
+function notificationHref(role, n) {
+  const pages = NOTIFICATION_PAGES[role];
+  if (!pages || !n) return null;
+  let path = '', params = new URLSearchParams();
+  if (typeof n.link === 'string' && n.link.startsWith('/') && !n.link.startsWith('//') && !n.link.includes('\\')) {
+    try { const u = new URL(n.link, 'http://internal.invalid'); path = u.pathname; params = u.searchParams; } catch (_) { /* unparseable: fall back to module/tag */ }
+  }
+  let kind = null;
+  for (const [re, k] of NOTIFICATION_LINK_KINDS) if (re.test(path)) { kind = k; break; }
+  // The notification's own module says what it is about. It fills in a missing/unknown link, and it also
+  // overrides a link that points at a Dashboard (an old link, or another role's home) for a request/calendar item.
+  const moduleKind = n.module === 'calendar' ? 'calendar'
+    : (n.module === 'request' || n.module === 'requests') ? 'requests'
+    : ['lifecycle', 'registry'].includes(n.module) ? 'monitoring'
+    : n.module === 'dashboard' ? 'dashboard' : null;
+  if (!kind || (kind === 'dashboard' && moduleKind && moduleKind !== 'dashboard')) kind = moduleKind || kind;
+  const rawId = params.get('id');
+  const id = rawId && /^\d+$/.test(rawId) ? rawId : null;
+  if (kind === 'calendar') return pages.calendar + (id ? '?id=' + id : '');
+
+  // Partnership (pr) vs Document (dr) request — from the link's own marker, else the notification's tag
+  let reqKind = params.get('open') || params.get('type');
+  if (reqKind !== 'pr' && reqKind !== 'dr') reqKind = /partnership/i.test(n.tag || '') ? 'pr' : /document/i.test(n.tag || '') ? 'dr' : null;
+  if ((kind === 'requests' || kind === 'monitoring') && reqKind) {
+    if ((role === 'Administrator' || role === 'Staff') && id) return pages.requests + '?open=' + reqKind + '&id=' + id;
+    if (role === 'Auth. Personnel' && id) return reqKind === 'dr' ? pages.monitoring + '?type=dr&id=' + id : pages.monitoring;   // no Partnership Request page for College Staff
+    if (role === 'potential_partner') {
+      if (reqKind === 'dr') return pages.requests + '?tab=dr';                       // MOA/MOU submissions live on the Requests page itself
+      if (id) return pages.monitoring + '?type=pr&id=' + id;
+    }
+  }
+  if (kind === 'requests') return pages.requests;
+  if (kind === 'monitoring') return pages.monitoring;
+  // Administrator and CIRL Staff still have a real Dashboard; College Staff and Partner do not (Monitoring is their home)
+  if (kind === 'dashboard') return pages.dashboard || pages.monitoring;
+  return pages.fallback;
+}
+function withNotificationHref(docs, role) {
+  return docs.map(d => ({ ...d, href: notificationHref(role, d) }));
+}
+
 function prLinkForRole(role, id) {
   if (role === 'Administrator') return '/partnership-requests?open=pr&id=' + id;
   // potential_partner's own request tracking moved from the Requests page onto
@@ -5265,7 +5534,8 @@ function prLinkForRole(role, id) {
 // its tracking also lives on Monitoring (never a page of its own).
 function drLinkForRole(role, id) {
   if (role === 'Administrator') return '/partnership-requests?open=dr&id=' + id;
-  if (role === 'potential_partner') return '/partner/monitoring?type=dr&id=' + id;
+  // Partner document requests are MOA/MOU submissions, tracked nowhere but the Requests page itself
+  if (role === 'potential_partner') return '/partner/requests?tab=dr';
   // Staff never submits Document Requests (requireRequester excludes Staff)
   // but does review them as a REQUEST_REVIEWER_ROLES member, same
   // Staff-scoped review route as prLinkForRole's Staff branch above.
@@ -5408,7 +5678,7 @@ app.get('/api/activitylogs', requireStaffAccess, async (req, res) => {
 // role uses this same route now — Administrator/Auth. Personnel's frontend
 // (administrator/notifications.ejs) was repointed here from the old,
 // unscoped /markallread (removed 2026-07-18, see docs/SYSTEM_AUDIT_2026-07-16.md).
-app.patch('/api/notifications/markallread/mine', requireAuth, async (req, res) => {
+app.patch('/api/notifications/markallread/mine', requireAuth, announce('notificationState'), async (req, res) => {
   try {
     const db = getDb();
     const email = req.session.user ? req.session.user.email : '';
@@ -5430,7 +5700,7 @@ function canActOnNotification(user, notif) {
 // sends { unread: false } — that's the entire canonical schema for this route.
 const NOTIFICATION_PATCH_FIELDS = { unread: 'boolean' };
 
-app.patch('/api/notifications/:id', requireAuth, async (req, res) => {
+app.patch('/api/notifications/:id', requireAuth, announce('notificationState'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const unknown = Object.keys(req.body).filter(k => !(k in NOTIFICATION_PATCH_FIELDS));
@@ -5459,7 +5729,7 @@ app.patch('/api/notifications/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/notifications/:id', requireAuth, async (req, res) => {
+app.delete('/api/notifications/:id', requireAuth, announce('notificationState'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -5603,7 +5873,10 @@ app.get('/api/calendarevents', requireAuth, async (req, res) => {
     const user = req.session.user;
     const filter = user.role === 'Administrator'
       ? {}
-      : { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }] };
+      // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
+      // meeting they scope to other people, so without this their own event vanished from their calendar the
+      // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
+      : { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
     const docs = await db.collection('calendarevents').find(filter).toArray();
     const now = new Date();
     res.json(docs.map(d => calendarEventView(d, user, now)));
@@ -5780,7 +6053,7 @@ function invitationSummary(ev, extra) {
 // requireStaffAccess (Administrator OR Staff) so Staff gets full Calendar
 // parity with Administrator, reusing the exact same create/edit/delete path
 // and the same shared Google Calendar integration — no second implementation.
-app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
+app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async (req, res) => {
   try {
     const db = getDb();
     const fields = pickCalendarEventFields(req.body);
@@ -5794,10 +6067,13 @@ app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
     const clientRequestId = typeof req.body.clientRequestId === 'string' && /^[\w-]{8,64}$/.test(req.body.clientRequestId)
       ? req.body.clientRequestId : null;
     const duplicateResponse = async () => {
-      const prior = await db.collection('calendarevents').findOne({ clientRequestId });
+      const prior = await db.collection('calendarevents').findOne(clientRequestId ? { clientRequestId } : naturalKeyFilter);
       return prior ? res.json({ success: true, duplicate: true, event: calendarEventView(prior, req.session.user, new Date()), invitations: invitationSummary(prior) }) : null;
     };
-    if (clientRequestId && await duplicateResponse()) return;
+    // A caller that sends no token (a script, an older page) is still not allowed to create the very same
+    // event twice in a burst: same creator + title + start within a few seconds is the same Save.
+    const naturalKeyFilter = { createdByEmail: req.session.user.email, title: fields.title, start: fields.start, createdAt: { $gte: new Date(Date.now() - 5000).toISOString() } };
+    if (await duplicateResponse()) return;
 
     // Recipients are only meaningful at creation time — only the users
     // selected here are notified, per the recipient-targeting requirement.
@@ -5825,7 +6101,8 @@ app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
       ...(participants.googleEmails.length ? { googleAttendeeEmails: participants.googleEmails, googleEventKey: newGoogleEventKey() } : {}),
       ...(participants.invalid.length ? { inviteSkipped: participants.invalid } : {}),
       ...(clientRequestId ? { clientRequestId } : {}),
-      createdByEmail: req.session.user.email
+      createdByEmail: req.session.user.email,
+      createdAt: new Date().toISOString()
     };
 
     let entry = null;
@@ -5873,7 +6150,7 @@ app.post('/api/calendarevents', requireStaffAccess, async (req, res) => {
   }
 });
 
-app.patch('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
+app.patch('/api/calendarevents/:id', requireStaffAccess, announce('calendar'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
   try {
@@ -5933,7 +6210,7 @@ app.patch('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
   }
 });
 
-app.delete('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
+app.delete('/api/calendarevents/:id', requireStaffAccess, announce('calendar', { prior: priorCalendarEvent }), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
   try {
@@ -5955,7 +6232,7 @@ app.delete('/api/calendarevents/:id', requireStaffAccess, async (req, res) => {
 // (the stored event, in the application timezone) and WHEN they joined (the
 // server clock at the moment of this call). The request body is ignored, so a
 // tampered timestamp, user id, role or event time has nothing to act on.
-app.post('/api/calendarevents/:id/join', requireAuth, async (req, res) => {
+app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
   try {

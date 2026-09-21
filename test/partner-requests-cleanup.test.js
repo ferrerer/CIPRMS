@@ -61,14 +61,14 @@ describe('Partner → Requests page', () => {
     expect(visible).not.toContain('Save as Draft');
     expect(html).not.toContain('onclick="saveDraft()"');
     expect(html).not.toContain('onclick="openNewRequestForm()"');
-    expect(html).toContain('onclick="submitRequest()"');
+    expect(html).toContain('onclick="submitRequest(this)"');   // (the button hands itself to CIPRMS.busy, which ignores a second click)
     expect(visible).toContain('Submit Request');
     // the real form is intact
     for (const id of ['f-inst', 'f-country', 'f-type', 'f-nature', 'f-start', 'f-end', 'f-notes']) expect(html).toContain(`id="${id}"`);
   });
 
   test('client script keeps the notes-or-file rule and the two-step flow on the existing endpoints', () => {
-    expect(html).toContain("fetch('/api/document-requests'");
+    expect(html).toContain("CIPRMS.api('/api/document-requests'");
     expect(html).toContain("'/api/document-requests/' + id + '/documents'");
     expect(html).toContain("if (!notes && !file && !moaPendingId)"); // needs a note OR a file — never both
   });

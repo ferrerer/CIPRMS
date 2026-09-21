@@ -206,7 +206,7 @@
                                     <label class="form-label" for="f-type">Agreement Type <span class="text-danger">*</span></label>
                                     <select class="form-select" id="f-type">
                                         <option value="">Select…</option>
-                                        <option>MOA</option><option>MOU</option><option>LOI</option><option>JVA</option><option>Other</option>
+                                        <option>MOA</option><option>MOU</option>
                                     </select>
                                     <div class="form-text text-warning fs-12" id="f-type-warn" style="display:none"></div>
                                 </div>
@@ -255,7 +255,7 @@
                             </div>
 
                             <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-success" onclick="submitRequest()"><i class="ri-send-plane-line me-1"></i>Submit Request</button>
+                                <button type="button" class="btn btn-success" onclick="submitRequest(this)"><i class="ri-send-plane-line me-1"></i>Submit Request</button>
                             </div>
                         </div>
                     </div>
@@ -372,8 +372,8 @@
     var ocrExtractedResult = null;
 
     function loadHistory() {
-        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (data) {
-            myRequests = data;
+        return CIPRMS.api('/api/requests/mine', { quiet: true }).then(function (res) {
+            if (res.ok && Array.isArray(res.data)) myRequests = res.data;
         });
     }
 
@@ -431,30 +431,30 @@
         };
     }
 
-    function submitRequest() {
+    // One submission at a time (CIPRMS.busy ignores a double click while the first is in flight), and a draft is only
+    // submitted once its edit has actually been saved.
+    function submitRequest(btn) {
         var payload = collectFormData();
         if (!payload.institution || !payload.country || !payload.type || !payload.nature) {
             showToast('Institution, country, agreement type, and nature are required to submit.');
             return;
         }
-        if (editingId) {
-            fetch('/api/requests/' + editingId + '/edit', {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            }).then(function () {
-                return fetch('/api/requests/' + editingId + '/submit', { method: 'POST' });
-            }).then(function (r) { return r.json(); }).then(function (data) {
-                if (data.success) { showToast('Request submitted.'); openNewRequestForm(); loadHistory(); }
-                else showToast(data.error || 'Failed to submit request.');
+        return CIPRMS.busy(btn, function () {
+            var step;
+            if (editingId) {
+                var id = editingId;
+                step = CIPRMS.api('/api/requests/' + id + '/edit', { method: 'PATCH', json: payload, quiet: true }).then(function (saved) {
+                    return saved.ok ? CIPRMS.api('/api/requests/' + id + '/submit', { method: 'POST', quiet: true }) : saved;
+                });
+            } else {
+                payload.isDraft = false;
+                step = CIPRMS.api('/api/requests', { method: 'POST', json: payload, quiet: true });
+            }
+            return step.then(function (res) {
+                if (res.ok) { showToast('Request submitted.'); openNewRequestForm(); return loadHistory(); }
+                showToast(res.error || 'Failed to submit request.');
             });
-        } else {
-            payload.isDraft = false;
-            fetch('/api/requests', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-            }).then(function (r) { return r.json(); }).then(function (data) {
-                if (data.success) { showToast('Request submitted.'); openNewRequestForm(); loadHistory(); }
-                else showToast(data.error || 'Failed to submit request.');
-            });
-        }
+        }, 'Submitting…');
     }
 
     // ── OCR auto-fill (reuses the same /api/ocr endpoints as the Registry module) ──
@@ -558,7 +558,7 @@
         if (r.nature) set('f-nature', r.nature, r.natureConfidence);
 
         var typeWarn = document.getElementById('f-type-warn');
-        var mappedType = window.IDP ? IDP.mapDocumentType(r.documentType, ['MOA', 'MOU', 'LOI', 'JVA', 'Other']) : null;
+        var mappedType = window.IDP ? IDP.mapDocumentType(r.documentType, ['MOA', 'MOU']) : null;
         if (mappedType) {
             set('f-type', mappedType, r.documentTypeConfidence);
             if (typeWarn) typeWarn.style.display = 'none';
@@ -678,25 +678,20 @@
 
         var create = moaPendingId
             ? Promise.resolve(moaPendingId)
-            : fetch('/api/document-requests', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ institution: inst, documentTypes: [MOA_MOU_TYPE], notes: notes })
+            : CIPRMS.api('/api/document-requests', {
+                method: 'POST', json: { institution: inst, documentTypes: [MOA_MOU_TYPE], notes: notes }, quiet: true
             }).then(function (res) {
-                return res.json().then(function (data) {
-                    if (!res.ok || !data.success) throw new Error(data.error || 'Error submitting.');
-                    return data.request.id;
-                });
+                if (!res.ok) throw new Error(res.error || 'Error submitting.');
+                return res.data.request.id;
             });
 
         create.then(function (id) {
             if (!file) return id; // notes only — nothing to upload
             var fd = new FormData();
             fd.append('document', file);
-            return fetch('/api/document-requests/' + id + '/documents', { method: 'POST', body: fd }).then(function (res) {
-                return res.json().catch(function () { return {}; }).then(function (data) {
-                    if (!res.ok) { var err = new Error(data.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
-                    return id;
-                });
+            return CIPRMS.api('/api/document-requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
+                if (!res.ok) { var err = new Error(res.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
+                return id;
             });
         }).then(function () {
             showToast('Submission sent to CSPC-CIRL!');
@@ -715,6 +710,8 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        // A notification about a MOA/MOU submission lands here on its tab: /partner/requests?tab=dr
+        if (new URLSearchParams(window.location.search).get('tab') === 'dr') switchSection('dr');
         loadHistory().then(openFormOnEntry);
     });
 </script>

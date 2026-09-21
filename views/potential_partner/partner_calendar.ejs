@@ -10,6 +10,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <%- include('../partials/calendar_layout') %>
 </head>
 <body>
 
@@ -37,11 +38,11 @@
 
                 <div class="row">
                     <!-- Left sidebar -->
-                    <div class="col-xl-3">
-                        <div>
+                    <div class="col-xl-3 cal-side">
+                        <div class="cal-upcoming">
                             <h5 class="mb-1">Upcoming Events</h5>
                             <p class="text-muted">Don't miss scheduled meetings and deadlines</p>
-                            <div class="pe-2 me-n1 mb-3" data-simplebar style="height:400px">
+                            <div class="cal-upcoming-scroll pe-2 me-n1">
                                 <div id="upcoming-event-list"></div>
                             </div>
                         </div>
@@ -63,7 +64,7 @@
 
                     <!-- Main calendar -->
                     <div class="col-xl-9">
-                        <div class="card card-h-100">
+                        <div class="card cal-card">
                             <div class="card-body">
                                 <div id="calendar"></div>
                             </div>
@@ -189,6 +190,7 @@
             timeZone: 'local',
             headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listMonth' },
             initialView: 'dayGridMonth',
+            aspectRatio: calendarAspect(window.innerWidth),
             editable: false,
             selectable: false,
             navLinks: false,
@@ -207,13 +209,17 @@
             },
             windowResize: function () {
                 var w = window.innerWidth;
+                cal.setOption('aspectRatio', calendarAspect(w));
                 cal.changeView(w < 768 ? 'listMonth' : w < 1200 ? 'timeGridWeek' : 'dayGridMonth');
             },
+            datesSet: function (info) { calendarCardFill(info); },
             eventDidMount: function () { upcomingEvents(); },
             eventClick: function (info) { showEvent(info.event); },
-            loading: function (isLoading) { if (!isLoading) openFromQuery(); }
+            loading: function (isLoading) { if (!isLoading) openFromQuery(); },
+            eventsSet: function () { openFromQuery(); }   // see administrator/calendar.ejs: loading(false) can fire before the events are stored
         });
         cal.render();
+        calendarLive(cal, function () { return 0; });
     });
 </script>
 </body>

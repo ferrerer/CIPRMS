@@ -1,0 +1,55 @@
+<%# Compact calendar layout shared by EVERY role's Calendar page (Administrator, CIRL Staff and
+    College Staff through administrator/calendar.ejs, Partner through potential_partner/partner_calendar.ejs)
+    so they cannot drift apart. Expected markup: a two-column row where the left column is
+    <div class="col-xl-3 cal-side"> holding <div class="cal-upcoming"> … <div class="cal-upcoming-scroll">,
+    and the right column holds <div class="card cal-card"> around #calendar. %>
+<style>
+    /* ── Calendar page layout ──
+       The calendar card used to be stretched (Velzon's card-h-100 = height:100%) to the height of
+       the left column, and the left column's height came from a FIXED 400px "Upcoming Events"
+       box even when it held a single event. The month grid is only ~650px tall, so the card kept
+       ~300px of empty space under it.
+       Now the calendar card is exactly as tall as its calendar, and on wide screens the left
+       column is a flex column that FILLS that height: the Upcoming Events list takes whatever is
+       left and scrolls inside it when there are more events than fit. The list's minimum height is
+       kept small on purpose: the left column can never be taller than the calendar, or it would set
+       the row height and bring the empty space back.
+       The short List view is the one view that is shorter than the left column, so there the card
+       is stretched to match it (.cal-card-fill, toggled from datesSet) rather than leaving the page
+       ending under a half-empty card. */
+    .cal-card { height: auto; }
+    .cal-upcoming-scroll { max-height: 320px; overflow-y: auto; }     /* stacked (narrow) layout */
+    @media (min-width: 1200px) {
+        .cal-side { display: flex; flex-direction: column; }
+        .cal-side > .cal-upcoming { flex: 1 1 0; min-height: 130px; display: flex; flex-direction: column; margin-bottom: 1.5rem; }
+        .cal-side > .cal-upcoming .cal-upcoming-scroll { flex: 1 1 0; min-height: 0; max-height: none; }
+        .cal-card.cal-card-fill { height: calc(100% - 1.5rem); }
+    }
+</style>
+<script>
+// The month grid's height comes from FullCalendar's aspectRatio (width / height), so it shrinks
+// with the window while the sidebar next to it keeps a fixed minimum height. From 1366px up the
+// default (1.35) already matches that height; on narrower desktop widths (1200-1365px, where the
+// two-column layout is still used) a lower ratio keeps the grid as tall as the sidebar instead
+// of leaving the page ending under a short calendar.
+function calendarAspect(w){ return w >= 1366 ? 1.35 : w >= 1280 ? 1.15 : w >= 1200 ? 0.95 : 1.35; }
+
+// List view is much shorter than the sidebar next to it: let its card fill the row.
+function calendarCardFill(info){
+  var card = document.querySelector('.cal-card');
+  if (card) card.classList.toggle('cal-card-fill', info.view.type === 'listMonth');
+}
+// Live updates (Server-Sent Events): when somebody else creates, moves or deletes an event this person can see, re-read the
+// feed - the server decides what they may see, so this shows exactly what a page reload would. `writesPending` lets a
+// refresh wait until this page's own save/drag/delete has finished, so it never snaps an event back mid-write.
+// `onRefreshed` runs after each refresh (the events are in the calendar again).
+function calendarLive(cal, writesPending, onRefreshed){
+  if (!(window.CIPRMS && CIPRMS.live)) return;
+  var timer = null;
+  function refetchWhenIdle(tries){
+    if (writesPending() > 0 && tries < 40) { timer = setTimeout(function(){ refetchWhenIdle(tries + 1); }, 300); return; }
+    cal.refetchEvents();
+  }
+  CIPRMS.live(['calendar.updated', 'calendar.deleted'], function(){ clearTimeout(timer); refetchWhenIdle(0); }, { debounce: 250 });
+}
+</script>

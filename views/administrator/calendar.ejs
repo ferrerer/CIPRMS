@@ -13,29 +13,7 @@
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet"/>
     <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
-    <style>
-        /* ── Calendar page layout ──
-           The calendar card used to be stretched (.card-h-100 = height:100%) to the height of
-           the left column, and the left column's height came from a FIXED 400px "Upcoming
-           Events" box even when it held a single event. The month grid is only ~650px tall, so
-           the card kept ~300px of empty space under it.
-           Now the calendar card is exactly as tall as its calendar, and on wide screens the left
-           column is a flex column that FILLS that height: the Upcoming Events list takes
-           whatever is left and scrolls inside it when there are more events than fit. The list's
-           minimum height is kept small on purpose: the left column can never be taller than the
-           calendar, or it would set the row height and bring the empty space back.
-           The short List view is the one view that is shorter than the left column, so there the
-           card is stretched to match it (.cal-card-fill, toggled from datesSet below) rather than
-           leaving the page ending under a half-empty card. */
-        .cal-card { height: auto; }
-        .cal-upcoming-scroll { max-height: 320px; overflow-y: auto; }     /* stacked (narrow) layout */
-        @media (min-width: 1200px) {
-            .cal-side { display: flex; flex-direction: column; }
-            .cal-side > .cal-upcoming { flex: 1 1 0; min-height: 130px; display: flex; flex-direction: column; margin-bottom: 1.5rem; }
-            .cal-side > .cal-upcoming .cal-upcoming-scroll { flex: 1 1 0; min-height: 0; max-height: none; }
-            .cal-card.cal-card-fill { height: calc(100% - 1.5rem); }
-        }
-    </style>
+    <%- include('../partials/calendar_layout') %>
 </head>
 <body>
 <div id="layout-wrapper">
@@ -309,13 +287,6 @@ function str_date_input(dt){
   if(!dt) return '';
   return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
 }
-// The month grid's height comes from FullCalendar's aspectRatio (width / height), so it shrinks
-// with the window while the sidebar next to it keeps a fixed minimum height. From 1366px up the
-// default (1.35) already matches that height; on narrower desktop widths (1200-1365px, where the
-// two-column layout is still used) a lower ratio keeps the grid as tall as the sidebar instead
-// of leaving the page ending under a short calendar.
-function calendarAspect(w){ return w >= 1366 ? 1.35 : w >= 1280 ? 1.15 : w >= 1200 ? 0.95 : 1.35; }
-
 // Wall-clock string in the SAME shape the Add/Edit form saves ("2026-09-29T21:44"
 // or "2026-09-29" for all-day). Drag-and-drop used to save toISOString() (a UTC
 // instant) instead, so one event could end up stored in two different formats.
@@ -324,6 +295,15 @@ function fc_wall(dt, allDay){
   return allDay ? date : date + 'T' + str_tm_input(dt);
 }
 function esc(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Show a just-saved event. It is attached to the calendar's own event source (the /api/calendarevents
+// feed): FullCalendar wipes and reloads a source's events on every fetch — which happens whenever
+// you page to another month — so the saved event is then replaced by the feed's copy of itself. A
+// source-less cal.addEvent() copy was never replaced, so paging away and back showed the same event
+// twice (one of them a phantom that Delete could not remove until a refresh).
+function addSavedEvent(doc){
+  if(cal.getEventById(String(doc.id))) return null;
+  return cal.addEvent(docToFcEvent(doc), cal.getEventSources()[0]);
+}
 // One token per Save / palette drop, so a repeated request for the same action
 // is recognised by the server and cannot create a second event.
 function newRequestId(){
@@ -437,9 +417,31 @@ function upcomingEvent(){
 }
 
 // â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function apiPost(payload){ return fetch('/api/calendarevents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}); }
-function apiPatch(id,payload){ return fetch('/api/calendarevents/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(function(r){return r.json();}); }
-function apiDelete(id){ return fetch('/api/calendarevents/'+id,{method:'DELETE'}).then(function(r){return r.json();}); }
+// Every write goes through CIPRMS.api: a timeout, a dropped connection, an expired session or a server error comes back as
+// { success:false, error:<plain-language message> } - the shape the callers below already handle (a failed drag reverts,
+// a failed delete restores the event). Google Calendar sync happens inside these requests, so allow it more time.
+var calWrites = 0;   // writes in flight - a live refresh waits for them (see calendarLive)
+function calApi(url, method, payload){
+  calWrites++;
+  return CIPRMS.api(url, { method: method, json: payload, quiet: true, timeout: 45000 }).then(function(res){
+    calWrites--;
+    return res.ok ? res.data : { success: false, error: res.error, status: res.status };
+  });
+}
+function apiPost(payload){ return calApi('/api/calendarevents', 'POST', payload); }
+function apiPatch(id,payload){ return calApi('/api/calendarevents/'+id, 'PATCH', payload); }
+function apiDelete(id){ return calApi('/api/calendarevents/'+id, 'DELETE'); }
+
+// Somebody else changed the event that is open in the dialog: one that was removed closes it; one that only changed is
+// redrawn if it is being viewed (an event being edited keeps what was typed, and Save still targets the same event).
+function reconcileOpenEvent(){
+  var modalEl = document.getElementById('event-modal');
+  if(!modalEl || !modalEl.classList.contains('show') || isAdding || !currentEv || saving) return;
+  var fresh = cal.getEventById(String(currentEv.id));
+  if(!fresh){ bsModal.hide(); currentEv = null; showToast('This event was removed.', '#f06548'); return; }
+  if(fresh === currentEv) return;
+  if(!document.getElementById('view-mode').classList.contains('d-none')) showView(fresh); else currentEv = fresh;
+}
 
 // â”€â”€ Modal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showView(ev){
@@ -613,7 +615,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var payload = { title: title, start: info.dateStr, allDay: true, className: cls, location: '', description: '', clientRequestId: newRequestId() };
       apiPost(payload).then(function(data){
         if(data.success){
-          if(!cal.getEventById(String(data.event.id))) cal.addEvent(docToFcEvent(data.event));
+          addSavedEvent(data.event);
           upcomingEvent();
         } else { showToast(data.error || 'Could not create the event.', '#f06548'); }
       }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); })
@@ -621,15 +623,17 @@ document.addEventListener('DOMContentLoaded', function(){
     },
 
     // List view is much shorter than the sidebar next to it: let its card fill the row.
-    datesSet: function(info){
-      var card = document.querySelector('.cal-card');
-      if (card) card.classList.toggle('cal-card-fill', info.view.type === 'listMonth');
-    },
+    datesSet: function(info){ calendarCardFill(info); },
     eventDidMount: function(){ upcomingEvent(); },
-    loading: function(isLoading){ if (!isLoading) openFromQuery(); }
+    loading: function(isLoading){ if (!isLoading) openFromQuery(); },
+    // loading(false) can fire before the fetched events are in the calendar's store, in which case the
+    // deep link (?id=N from a notification) found nothing and never tried again. eventsSet fires once they are
+    // there; openFromQuery() is a no-op after it has opened the event once.
+    eventsSet: function(){ openFromQuery(); reconcileOpenEvent(); }
   });
 
   cal.render();
+  calendarLive(cal, function(){ return calWrites; });
 
   // Draggable external events (Administrator/Staff only — the palette isn't rendered otherwise)
   if(CAN_MANAGE && typeof FullCalendar.Draggable !== 'undefined'){
@@ -688,7 +692,7 @@ document.addEventListener('DOMContentLoaded', function(){
       var payload = { title:title, start:start, end:end, allDay:!st, className:cls, location:loc, description:desc, recipients:recipients, clientRequestId: pendingRequestId };
       apiPost(payload).then(function(data){
         if(data.success){
-          if(!cal.getEventById(String(data.event.id))) cal.addEvent(docToFcEvent(data.event));
+          addSavedEvent(data.event);
           pendingRequestId = newRequestId();
           bsModal.hide(); upcomingEvent();
           reportInvitations(data.invitations, data.duplicate ? 'Event already created.' : 'Event created.');
@@ -702,10 +706,22 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!currentEv) return;
     if(!confirm('Delete "' + currentEv.title + '"?')) return;
     var dbId = currentEv.extendedProps.dbId || currentEv.id;
+    // The event leaves the calendar the moment the user confirms — it does not wait for the server (and, behind
+    // it, the Google Calendar cancellation) to answer. If the server then refuses, it is put back and the user
+    // is told. Every instance with that id is removed, so no stray copy can be left standing.
+    var gone = String(currentEv.id);
+    var snapshot = currentEv.toPlainObject();
+    cal.getEvents().filter(function(e){ return String(e.id) === gone; }).forEach(function(e){ e.remove(); });
+    bsModal.hide(); upcomingEvent();
+    function restore(message){
+      if(!cal.getEventById(gone)) cal.addEvent(snapshot, cal.getEventSources()[0]);
+      upcomingEvent();
+      showToast(message, '#f06548');
+    }
     apiDelete(dbId).then(function(data){
-      if(data.success){ currentEv.remove(); bsModal.hide(); upcomingEvent(); showToast('<i class="ri-checkbox-circle-line me-1"></i>Event deleted.'); }
-      else { showToast(data.error || 'Could not delete the event.', '#f06548'); }
-    }).catch(function(e){ console.error(e); showToast('Error deleting event.', '#f06548'); });
+      if(data.success){ showToast('<i class="ri-checkbox-circle-line me-1"></i>Event deleted.'); }
+      else { restore(data.error || 'Could not delete the event.'); }
+    }).catch(function(e){ console.error(e); restore('Error deleting event.'); });
   });
 });
 

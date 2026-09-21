@@ -507,10 +507,11 @@
         btn.disabled = true;
         btn.innerHTML = '<i class="ri-loader-4-line ai-spin me-2"></i> Submitting...';
 
-        fetch('/api/document-requests', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ institution: inst, documentTypes, notes, contactNumber, documentForm })
-        }).then(res => res.json().then(data => ({ ok: res.ok, data })))
+        // Through the shared helper: a timeout, a dropped connection or an expired session gets a plain message.
+        // (The button above is already disabled, so a double click cannot submit twice.)
+        CIPRMS.api('/api/document-requests', {
+            method: 'POST', json: { institution: inst, documentTypes, notes, contactNumber, documentForm }, quiet: true
+        }).then(res => ({ ok: res.ok, data: res.ok ? res.data : { error: res.error } }))
         .then(({ ok, data }) => {
             btn.disabled = false;
             btn.innerHTML = orig;

@@ -40,17 +40,15 @@ afterAll(async () => {
   await closeDB();
 });
 
-test('Auto-archive: a Partnership Request submitted by Auth. Personnel copies into their own Document Library', async () => {
+// College Staff (stored role "Auth. Personnel") no longer has a Partnership Request workflow — the API refuses it (403), so
+// there is nothing to archive. (It used to be accepted here; see denyCollegeStaffPartnershipRequests in cirl.js.)
+test('College Staff can no longer submit a Partnership Request, so nothing is archived for one', async () => {
   const res = await personnelAgent.post('/api/requests').send({
     institution: 'Jest DocLib University', country: 'Testland', type: 'MOA', nature: 'Research', notes: 'jesttest'
   });
-  expect(res.status).toBe(200);
-  createdRequestIds.push(res.body.request.id);
-
+  expect(res.status).toBe(403);
   const libRes = await personnelAgent.get('/api/documents/mine');
-  const entry = libRes.body.find(d => d.requestType === 'partnership' && d.requestId === res.body.request.id);
-  expect(entry).toBeTruthy();
-  expect(entry.title).toContain('Jest DocLib University');
+  expect(libRes.body.some(d => d.requestType === 'partnership')).toBe(false);
 });
 
 test('Auto-archive: a Partnership Request submitted by potential_partner copies into their own Document Library', async () => {

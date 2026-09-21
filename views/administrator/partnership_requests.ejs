@@ -969,6 +969,7 @@
        PARTNERSHIP REQUESTS
     ═══════════════════════════════════════════════════════ */
     var _prStatusFilter = '';
+    var flashPR = new Set(), flashDR = new Set();   // rows a live update just changed
 
     function setPRStatusFilter(val, btn) {
       _prStatusFilter = val;
@@ -978,15 +979,12 @@
       renderPR();
     }
 
+    // Drafts are still being edited by the submitter and were never actually submitted — they don't belong in the admin
+    // review queue.
+    const notDraft = r => r.status !== 'Draft';
     async function loadPR() {
-      try {
-        const res = await fetch('/api/requests');
-        prData = await res.json();
-        if (!Array.isArray(prData)) prData = [];
-        // Drafts are still being edited by the submitter and were never
-        // actually submitted — they don't belong in the admin review queue.
-        prData = prData.filter(r => r.status !== 'Draft');
-      } catch (e) { prData = []; }
+      const res = await CIPRMS.api('/api/requests', { quiet: true });
+      prData = res.ok && Array.isArray(res.data) ? res.data.filter(notDraft) : [];
       renderPR();
     }
 
@@ -1027,7 +1025,7 @@
         const status = r.status || 'Pending';
         const canAct = IS_ADMIN && (status === 'Pending' || status === 'Under Review');
 
-        return `<tr>
+        return `<tr data-rid="${uid}"${flashPR.has(uid) ? ' class="rt-flash"' : ''}>
           <td class="text-muted fw-semibold fs-13">${i + 1}</td>
           <td><span class="fw-semibold text-primary fs-13">#REQ-${String(r.id).padStart(3, '0')}</span></td>
           <td class="fw-medium fs-13">${by}</td>
@@ -1164,10 +1162,18 @@
         ` : ''}`;
 
       document.getElementById('pr-modal-footer').innerHTML = `
+        <div id="pr-moreinfo-wrap" class="w-100 d-none mb-1">
+          <label class="form-label fs-13 mb-1" for="pr-moreinfo-note">What information or documents are needed?</label>
+          <textarea id="pr-moreinfo-note" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Tell the requester what to provide…"></textarea>
+        </div>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
           <i class="ri-close-line me-1"></i>Close</button>
+        ${isReview && r.status === 'Pending' ? `
+          <button type="button" class="btn btn-soft-warning" id="pr-moreinfo-btn" onclick="requestMoreInfo('${uid}', this)">
+            <i class="ri-question-answer-line me-1"></i>Request More Information</button>
+        ` : ''}
         ${isReview ? `
-          <button class="btn btn-success" onclick="resolvePR('${uid}','Approved')">
+          <button type="button" class="btn btn-success" onclick="resolvePR('${uid}','Approved', this)">
             <i class="ri-check-line me-1"></i>Approve</button>
         ` : ''}`;
 
@@ -1221,7 +1227,16 @@
       'dr-modal': function () { if (currentDRId) openDRDetail(currentDRId); else modalInstance('dr-modal').show(); }
     };
 
+    var MODAL_PENDING = {};     // modal id -> true from the click until it is actually on screen
     function swapToModal(toId, fromId) {
+      // A double-click on "View Draft" arrives while the details modal is still fading out (Bootstrap has
+      // already dropped its .show class), so the second call used to take the "nothing to swap" branch and
+      // open the drafts over the fading details modal — two modals and two backdrops at once, with the
+      // return-to link lost. One swap in flight per target modal; repeat clicks are ignored.
+      if (MODAL_PENDING[toId]) return;
+      MODAL_PENDING[toId] = true;
+      document.getElementById(toId).addEventListener('shown.bs.modal', function () { delete MODAL_PENDING[toId]; }, { once: true });
+      setTimeout(function () { delete MODAL_PENDING[toId]; }, 2000);   // never stay stuck if the modal fails to show
       const fromEl = fromId && document.getElementById(fromId);
       if (fromEl && fromEl.classList.contains('show')) {
         MODAL_RETURN_TO[toId] = fromId;
@@ -1438,9 +1453,9 @@
       if (file) formData.append('document', file);
       formData.append('note', note);
       try {
-        const res = await fetch('/api/document-requests/' + currentDRId + '/documents', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed.');
+        const res = await CIPRMS.api('/api/document-requests/' + currentDRId + '/documents', { method: 'POST', body: formData, quiet: true });
+        if (!res.ok) throw new Error(res.error || 'Upload failed.');
+        const data = res.data;
         const idx = drData.findIndex(x => x.id === currentDRId);
         if (idx !== -1 && data.request) drData[idx] = data.request;
         renderDRDraftTimeline(drData.find(x => x.id === currentDRId));
@@ -1489,9 +1504,9 @@
       if (file) formData.append('document', file);
       formData.append('note', note);
       try {
-        const res = await fetch('/api/requests/' + currentPRId + '/documents', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed.');
+        const res = await CIPRMS.api('/api/requests/' + currentPRId + '/documents', { method: 'POST', body: formData, quiet: true });
+        if (!res.ok) throw new Error(res.error || 'Upload failed.');
+        const data = res.data;
         const idx = prData.findIndex(x => String(x.id) === currentPRId);
         if (idx !== -1 && data.request) prData[idx] = data.request;
         renderDraftTimeline(prData.find(x => String(x.id) === currentPRId));
@@ -1508,7 +1523,27 @@
       }
     }
 
-    async function resolvePR(uid, decision) {
+    // A status change is only shown once the SERVER has saved it: the row is replaced with the record the server returns,
+    // and if the server refuses (already decided, not allowed, gone, offline) nothing local changes — the list is re-read
+    // and the reviewer is told why.
+    async function applyPRStatus(r, payload, button, okMessage, okColor) {
+      return CIPRMS.busy(button, async () => {
+        const res = await CIPRMS.api('/api/requests/' + r.id, { method: 'PATCH', json: payload, quiet: true });
+        if (!res.ok) {
+          showToast('<i class="ri-error-warning-line me-1"></i>' + res.error, '#f06548');
+          if (res.status === 400 || res.status === 404 || res.status === 409) { await refreshLive(); refreshOpenModals(); }
+          return false;
+        }
+        const i = prData.findIndex(x => x.id === r.id);
+        if (i !== -1 && res.data && res.data.request) prData[i] = res.data.request;
+        renderPR();
+        updateStats();
+        showToast(okMessage, okColor);
+        return true;
+      }, 'Saving…');
+    }
+
+    async function resolvePR(uid, decision, button) {
       const r = prData.find(x => String(x.id) === uid);
       if (!r) return;
       // Approving a NEW partnership request (not a renewal) no longer flips
@@ -1518,41 +1553,45 @@
       // partnership is actually saved (see POST /api/partnerships,
       // sourceRequestId). Renewal requests are unaffected — approving one
       // still directly extends the already-linked partnership as before.
+      // (This one stays a normal page navigation: it opens a different page, the Registry form.)
       if (decision === 'Approved' && !r.isRenewal) {
         bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
         window.location.href = REGISTRY_BASE_PATH + '?fromRequest=' + r.id;
         return;
       }
-      try {
-        await fetch('/api/requests/' + r.id, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: decision })
-        });
-        bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
-        r.status = decision;
-        renderPR();
-        updateStats();
-        const verbLabel = decision === 'Approved' ? 'approved' : 'rejected';
-        showToast(
-          `<i class="ri-${decision === 'Approved' ? 'checkbox-circle' : 'close-circle'}-line me-1"></i>
-           Partnership request ${verbLabel}.`,
-          decision === 'Approved' ? '#0ab39c' : '#f06548'
-        );
-      } catch (e) {
-        showToast('<i class="ri-error-warning-line me-1"></i>Action failed. Please try again.', '#f06548');
+      const verbLabel = decision === 'Approved' ? 'approved' : 'rejected';
+      const ok = await applyPRStatus(r, { status: decision }, button,
+        `<i class="ri-${decision === 'Approved' ? 'checkbox-circle' : 'close-circle'}-line me-1"></i> Partnership request ${verbLabel}.`,
+        decision === 'Approved' ? '#0ab39c' : '#f06548');
+      if (ok) bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
+    }
+
+    // "Request More Information": moves a Pending request to Under Review with the reviewer's note, which the server turns
+    // into the "Additional documents requested" notification for the requester. First click opens the note box, second sends.
+    async function requestMoreInfo(uid, button) {
+      const r = prData.find(x => String(x.id) === uid);
+      if (!r) return;
+      const wrap = document.getElementById('pr-moreinfo-wrap');
+      const note = document.getElementById('pr-moreinfo-note');
+      if (wrap.classList.contains('d-none')) {
+        wrap.classList.remove('d-none');
+        button.innerHTML = '<i class="ri-send-plane-line me-1"></i>Send request';
+        note.focus();
+        return;
       }
+      const text = note.value.trim();
+      if (!text) { showToast('<i class="ri-error-warning-line me-1"></i>Write what information or documents are needed.', '#f06548'); note.focus(); return; }
+      const ok = await applyPRStatus(r, { status: 'Under Review', notes: text }, button,
+        '<i class="ri-question-answer-line me-1"></i>Requested. The requester has been notified.', '#0ab39c');
+      if (ok) bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
     }
 
     /* ═══════════════════════════════════════════════════════
        DOCUMENT REQUESTS
     ═══════════════════════════════════════════════════════ */
     async function loadDR() {
-      try {
-        const res = await fetch('/api/document-requests');
-        drData = await res.json();
-        if (!Array.isArray(drData)) drData = [];
-      } catch (e) { drData = []; }
+      const res = await CIPRMS.api('/api/document-requests', { quiet: true });
+      drData = res.ok && Array.isArray(res.data) ? res.data : [];
       renderDR();
     }
 
@@ -1578,7 +1617,7 @@
       tbody.innerHTML = drFiltered.map((r, i) => {
         const cs = r.canonicalStatus || r.status;
         const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
-        return `<tr>
+        return `<tr data-rid="${r.id}"${flashDR.has(r.id) ? ' class="rt-flash"' : ''}>
           <td class="text-muted fw-semibold fs-13">${i + 1}</td>
           <td><span class="fw-semibold fs-13">${escapeHtml(r.institution || '—')}</span></td>
           <td>${drDocTypeBadges(r)}</td>
@@ -1678,30 +1717,31 @@
 
     // Backs the Update Status dropdown (any workflow stage) — a single PATCH
     // call, the same server-side transition/RBAC validation for every stage.
+    var drStatusInFlight = new Set();     // one status change per request at a time (a double click / rapid re-pick is ignored)
     async function submitDrStatusChange(id, newStatus) {
       const r = drData.find(x => x.id === id);
-      if (!r) return;
+      if (!r || drStatusInFlight.has(id)) return;
       const body = { status: newStatus };
       if (newStatus === 'Completed') {
         const receivedByEl = document.getElementById('dr-received-by');
         if (receivedByEl && receivedByEl.value.trim()) body.receivedBy = receivedByEl.value.trim();
       }
+      const sel = document.getElementById('dr-status-update');
+      drStatusInFlight.add(id);
+      if (sel) sel.disabled = true;
       try {
-        const res = await fetch('/api/document-requests/' + id, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        const data = await res.json();
+        const res = await CIPRMS.api('/api/document-requests/' + id, { method: 'PATCH', json: body, quiet: true });
         if (!res.ok) {
-          showToast('<i class="ri-error-warning-line me-1"></i>' + (data.error || 'Action failed. Please try again.'), '#f06548');
-          if (r.canonicalStatus) populateDrStatusSelect(r.canonicalStatus); // reset the dropdown to the real current value
+          showToast('<i class="ri-error-warning-line me-1"></i>' + res.error, '#f06548');
+          // reset the dropdown to the real current value (and re-read the list when the server says it has moved on)
+          if (res.status === 400 || res.status === 404 || res.status === 409) { await refreshLive(); refreshOpenModals(); }
+          else if (r.canonicalStatus) populateDrStatusSelect(r.canonicalStatus);
           return;
         }
         // Refresh the in-memory row from the server's own response — the
         // PATCH handler computes canonicalStatus/releasedBy/receivedBy/
         // statusHistory server-side, so trust that over reconstructing it.
-        Object.assign(r, data.request, { canonicalStatus: newStatus === 'Rejected' ? 'Rejected' : newStatus });
+        Object.assign(r, res.data.request, { canonicalStatus: newStatus === 'Rejected' ? 'Rejected' : newStatus });
         renderDR();
         updateStats();
         if (document.getElementById('dr-modal').classList.contains('show')) openDRDetail(id);
@@ -1711,11 +1751,11 @@
            Document request ${verbLabel} for ${r.institution}.`,
           newStatus === 'Rejected' ? '#f06548' : '#0ab39c'
         );
-      } catch (e) {
-        showToast('<i class="ri-error-warning-line me-1"></i>Action failed. Please try again.', '#f06548');
+      } finally {
+        drStatusInFlight.delete(id);
+        if (sel && document.getElementById('dr-modal').classList.contains('show')) { const cur = drData.find(x => x.id === id); if (cur) populateDrStatusSelect(cur.canonicalStatus || cur.status); }
       }
     }
-
     function updateDrStatus(id, newStatus) {
       if (!newStatus) return;
       submitDrStatusChange(id, newStatus);
@@ -1739,10 +1779,55 @@
       }
     }
 
+    /* ─── LIVE UPDATES ───
+       Another reviewer, or the requester, changed a request: re-read both lists from the server (the source of truth), redraw
+       the tables and counters, flash the rows that actually changed, and refresh a detail modal that is open on one of them.
+       Filters and search text stay as they are. A failed background read leaves what is on screen untouched. */
+    var refreshing = false, refreshQueued = false;
+    function changedIds(before, after, idOf) {
+      const old = new Map(before.map(r => [idOf(r), JSON.stringify(r)]));
+      return new Set(after.filter(r => old.get(idOf(r)) !== JSON.stringify(r)).map(idOf));
+    }
+    function refreshOpenModals() {
+      const shown = id => document.getElementById(id) && document.getElementById(id).classList.contains('show');
+      if (shown('pr-modal') && currentPRId && prData.some(x => String(x.id) === currentPRId)) openPRDetail(currentPRId);
+      if (shown('pr-draft-modal') && currentPRId) { const r = prData.find(x => String(x.id) === currentPRId); if (r) renderDraftTimeline(r); }
+      if (shown('dr-modal') && currentDRId) {
+        const keep = document.getElementById('dr-received-by').value;
+        if (drData.some(x => x.id === currentDRId)) { openDRDetail(currentDRId); document.getElementById('dr-received-by').value = keep; }
+      }
+      if (shown('dr-draft-modal') && currentDRId) { const r = drData.find(x => x.id === currentDRId); if (r) renderDRDraftTimeline(r); }
+    }
+    async function refreshLive() {
+      if (refreshing) { refreshQueued = true; return true; }
+      refreshing = true;
+      try {
+        const [p, d] = await Promise.all([CIPRMS.api('/api/requests', { quiet: true }), CIPRMS.api('/api/document-requests', { quiet: true })]);
+        if (p.ok && Array.isArray(p.data)) {
+          const next = p.data.filter(notDraft);
+          flashPR = changedIds(prData, next, r => String(r.id));
+          prData = next; renderPR(); flashPR = new Set();
+        }
+        if (d.ok && Array.isArray(d.data)) {
+          flashDR = changedIds(drData, d.data, r => r.id);
+          drData = d.data; renderDR(); flashDR = new Set();
+        }
+        updateStats();
+        refreshOpenModals();
+        return !!(p.ok && d.ok);   // false makes CIPRMS.live retry
+      } finally {
+        refreshing = false;
+        if (refreshQueued) { refreshQueued = false; refreshLive(); }
+      }
+    }
+
     async function init() {
       await Promise.all([loadPR(), loadDR()]);
       updateStats();
       openFromQuery();
+      if (window.CIPRMS && CIPRMS.live) {
+        CIPRMS.live(['request.updated', 'request.statusChanged', 'documentRequest.updated', 'documentRequest.statusChanged'], refreshLive, { debounce: 250 });
+      }
     }
 
     document.addEventListener('DOMContentLoaded', init);

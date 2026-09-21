@@ -505,7 +505,7 @@
         if (draftPreviewReturnTo) {
             var returnEl = document.getElementById(draftPreviewReturnTo);
             draftPreviewReturnTo = null;
-            if (returnEl) new bootstrap.Modal(returnEl).show();
+            if (returnEl) bootstrap.Modal.getOrCreateInstance(returnEl).show();
         }
     });
 
@@ -554,7 +554,7 @@
         draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
         if (sourceInstance) sourceInstance.hide();
 
-        new bootstrap.Modal(document.getElementById('draft-preview-modal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('draft-preview-modal')).show();
     }
 
     function draftItemHtml(item, idx, prefix) {
@@ -635,7 +635,7 @@
         document.getElementById('dr-draft-note').value = '';
         var drDetailInstance = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'));
         if (drDetailInstance) { draftDetailReturnTo = 'dr-detail-modal'; drDetailInstance.hide(); }
-        new bootstrap.Modal(document.getElementById('dr-draft-modal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-draft-modal')).show();
     }
 
     function uploadDRDraftDocument() {
@@ -650,10 +650,9 @@
         var formData = new FormData();
         formData.append('document', file);
         formData.append('note', noteInput.value.trim());
-        fetch('/api/document-requests/' + currentDraftDRId + '/documents', { method: 'POST', body: formData })
-            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        CIPRMS.api('/api/document-requests/' + currentDraftDRId + '/documents', { method: 'POST', body: formData, quiet: true })
             .then(function (result) {
-                if (!result.ok) throw new Error(result.data.error || 'Upload failed.');
+                if (!result.ok) throw new Error(result.error || 'Upload failed.');
                 var idx = myDocRequests.findIndex(function (x) { return x.id === currentDraftDRId; });
                 if (idx !== -1 && result.data.request) myDocRequests[idx] = result.data.request;
                 renderDRDraftTimeline(myDocRequests.find(function (x) { return x.id === currentDraftDRId; }));
@@ -667,6 +666,8 @@
     }
 
     var myDocRequests = [];
+    var flashDRIds = new Set();   // rows a live update just changed
+    var currentDRDetailId = null;
 
     function renderDRTable() {
         var body = document.getElementById('dr-monitor-body');
@@ -679,7 +680,7 @@
             // Requester-facing Actions: View Details only. Draft history, Print,
             // PDF download and Cancel remain reachable from the details modal.
             var actions = '<button class="btn btn-sm btn-soft-secondary" onclick="openDRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line me-1"></i>View Details</button>';
-            return '<tr data-dr-id="' + r.id + '">' +
+            return '<tr data-dr-id="' + r.id + '"' + (flashDRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
                 '<td class="text-muted">#' + r.id + '</td>' +
                 '<td>' + escapeHtml(r.institution) + '</td>' +
                 '<td style="max-width:200px;">' + renderExpandable(r.documentType, 60) + '</td>' +
@@ -696,6 +697,7 @@
     function openDRDetail(id) {
         var r = myDocRequests.find(function (x) { return x.id === id; });
         if (!r) return;
+        currentDRDetailId = id;
         var cs = r.canonicalStatus || r.status;
         document.getElementById('drd-id').textContent = '#' + r.id;
         document.getElementById('drd-type').textContent = r.documentType || '—';
@@ -714,23 +716,27 @@
             '<a href="/document-requests/' + id + '/print" target="_blank" rel="noopener" class="btn btn-soft-primary"><i class="ri-printer-line me-1"></i>Print</a>' +
             '<a href="/api/document-requests/' + id + '/pdf" class="btn btn-soft-info"><i class="ri-file-download-line me-1"></i>Download PDF</a>';
         if (cs === 'Received') {
-            footer += '<button class="btn btn-danger" onclick="cancelDocRequest(' + r.id + ')"><i class="ri-close-circle-line me-1"></i>Cancel</button>';
+            footer += '<button class="btn btn-danger" onclick="cancelDocRequest(' + r.id + ', this)"><i class="ri-close-circle-line me-1"></i>Cancel</button>';
         }
         footer += '<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>';
         document.getElementById('drd-footer').innerHTML = footer;
 
-        new bootstrap.Modal(document.getElementById('dr-detail-modal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-detail-modal')).show();
     }
 
-    function cancelDocRequest(id) {
+    function cancelDocRequest(id, btn) {
         if (!confirm('Cancel this document request?')) return;
-        fetch('/api/document-requests/' + id, { method: 'DELETE' }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) {
-                showToast('Request cancelled.', '#15803d');
-                bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'))?.hide();
-                loadDRRequests();
-            } else showToast(data.error || 'Failed to cancel request.', '#f06548');
-        });
+        return CIPRMS.busy(btn, function () {
+            return CIPRMS.api('/api/document-requests/' + id, { method: 'DELETE', quiet: true }).then(function (res) {
+                if (res.ok) {
+                    showToast('Request cancelled.', '#15803d');
+                    var m = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal')); if (m) m.hide();
+                } else {
+                    showToast(res.error || 'Failed to cancel request.', '#f06548');
+                }
+                return loadDRRequests({ live: !res.ok });   // re-read either way: after a refusal the row on screen may be stale
+            });
+        }, 'Cancelling…');
     }
 
     // Stat cards + Approval Progress track the requester's own Document
@@ -802,16 +808,41 @@
         if (!highlightRows(rows)) showToast('No documents on file yet.', '#405189');
     }
 
-    function loadDRRequests() {
-        return fetch('/api/document-requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
-            myDocRequests = Array.isArray(requests) ? requests : [];
+    // opts.live: a background refresh after a live update — rows that changed flash, and a failed read leaves the screen alone.
+    function loadDRRequests(opts) {
+        var live = !!(opts && opts.live);
+        return CIPRMS.api('/api/document-requests/mine', { quiet: true }).then(function (res) {
+            if (!res.ok || !Array.isArray(res.data)) {
+                if (live) return false;   // (false = try again later)
+                document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+                document.getElementById('approval-progress-body').innerHTML = '';
+                return;
+            }
+            var previous = {};
+            myDocRequests.forEach(function (r) { previous[r.id] = JSON.stringify(r); });
+            flashDRIds = new Set(live ? res.data.filter(function (r) { return previous[r.id] !== JSON.stringify(r); }).map(function (r) { return r.id; }) : []);
+            myDocRequests = res.data;
             renderDRTable();
+            flashDRIds = new Set();
             renderRequestStats();
-            return openFromQuery();
-        }).catch(function () {
-            document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
-            document.getElementById('approval-progress-body').innerHTML = '';
+            refreshOpenDRModals();
+            return live ? undefined : openFromQuery();
         });
+    }
+
+    // a modal that is open on a request whose data just changed shows the new state (status, progress, timeline)
+    function refreshOpenDRModals() {
+        var shown = function (id) { var el = document.getElementById(id); return el && el.classList.contains('show'); };
+        if (shown('dr-detail-modal') && currentDRDetailId && myDocRequests.some(function (x) { return x.id === currentDRDetailId; })) openDRDetail(currentDRDetailId);
+        if (shown('dr-draft-modal') && currentDraftDRId) {
+            var r = myDocRequests.find(function (x) { return x.id === currentDraftDRId; });
+            if (r) {
+                renderDRDraftTimeline(r);
+                var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
+                document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
+                document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
+            }
+        }
     }
 
     // Deep-link support so a notification ("Document Request Fulfilled", etc.)
@@ -829,60 +860,69 @@
         setTimeout(function () { row.classList.remove('table-warning'); }, 3000);
     }
 
-    fetch('/api/documents/mine').then(function (r) { return r.json(); }).then(function (docs) {
-        setCount('cnt-docs', docs.length);
-        var body = document.getElementById('doc-verification-body');
-        if (docs.length === 0) {
-            body.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">No documents uploaded yet.</td></tr>';
-            return;
-        }
-        body.innerHTML = docs.map(function (d) {
-            var badge = d.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
-            var label = d.status === 'Needs Review' ? 'Pending Verification' : 'Verified';
-            return '<tr class="doc-file-row"><td>' + d.title + '</td><td><span class="badge ' + badge + '">' + label + '</span></td></tr>';
-        }).join('');
-    }).catch(function () {
-        document.getElementById('doc-verification-body').innerHTML = '<tr><td colspan="2" class="text-center text-danger py-4">Failed to load documents.</td></tr>';
-    });
+    function refreshDocs() {
+        return CIPRMS.api('/api/documents/mine', { quiet: true }).then(function (res) {
+            var body = document.getElementById('doc-verification-body');
+            if (!res.ok || !Array.isArray(res.data)) {
+                if (!body.querySelector('tr.doc-file-row')) body.innerHTML = '<tr><td colspan="2" class="text-center text-danger py-4">Failed to load documents.</td></tr>';
+                return false;
+            }
+            var docs = res.data;
+            setCount('cnt-docs', docs.length);
+            if (docs.length === 0) {
+                body.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">No documents uploaded yet.</td></tr>';
+                return;
+            }
+            body.innerHTML = docs.map(function (d) {
+                var badge = d.status === 'Needs Review' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+                var label = d.status === 'Needs Review' ? 'Pending Verification' : 'Verified';
+                return '<tr class="doc-file-row"><td>' + escapeHtml(d.title) + '</td><td><span class="badge ' + badge + '">' + label + '</span></td></tr>';
+            }).join('');
+        });
+    }
+    refreshDocs();
 
     var myPartnerships = [];
 
-    function loadRenewalStatus() {
-    return Promise.all([
-        fetch('/api/partnerships/mine').then(function (r) { return r.json(); }),
-        fetch('/api/requests/mine').then(function (r) { return r.json(); })
-    ]).then(function (results) {
-        var partnerships = Array.isArray(results[0]) ? results[0] : [];
-        var reqs = Array.isArray(results[1]) ? results[1] : [];
-        myPartnerships = partnerships;
+    function loadRenewalStatus(opts) {
+        var live = !!(opts && opts.live);
+        return Promise.all([
+            CIPRMS.api('/api/partnerships/mine', { quiet: true }),
+            CIPRMS.api('/api/requests/mine', { quiet: true })
+        ]).then(function (results) {
+            var box = document.getElementById('renewal-status-body');
+            if (!results[0].ok || !results[1].ok) {
+                if (!live) box.innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
+                return live ? false : undefined;
+            }
+            var partnerships = Array.isArray(results[0].data) ? results[0].data : [];
+            var reqs = Array.isArray(results[1].data) ? results[1].data : [];
+            myPartnerships = partnerships;
 
-        // Partnerships that already have a renewal request awaiting a decision.
-        var pendingRenewalIds = new Set(
-            reqs
-                .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
-                .map(function (r) { return r.renewalPartnershipId; })
-        );
+            // Partnerships that already have a renewal request awaiting a decision.
+            var pendingRenewalIds = new Set(
+                reqs
+                    .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
+                    .map(function (r) { return r.renewalPartnershipId; })
+            );
 
-        var box = document.getElementById('renewal-status-body');
-        if (partnerships.length === 0) {
-            box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
-            return;
-        }
-        box.innerHTML = partnerships.map(function (p) {
-            var status = p.status || 'Unknown';
-            var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
-            var inst = p.inst || p.institution || '';
-            var renewalPending = pendingRenewalIds.has(p.id);
-            var actionHtml = renewalPending
-                ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
-                : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
-            return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
-                '<div><strong>' + escapeHtml(inst) + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
-                '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
-        }).join('');
-    }).catch(function () {
-        document.getElementById('renewal-status-body').innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
-    });
+            if (partnerships.length === 0) {
+                box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
+                return;
+            }
+            box.innerHTML = partnerships.map(function (p) {
+                var status = p.status || 'Unknown';
+                var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+                var inst = p.inst || p.institution || '';
+                var renewalPending = pendingRenewalIds.has(p.id);
+                var actionHtml = renewalPending
+                    ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
+                    : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
+                return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
+                    '<div><strong>' + escapeHtml(inst) + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
+                    '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
+            }).join('');
+        });
     }
 
     var renewalModal = null;
@@ -897,7 +937,7 @@
         document.getElementById('rr-end-date').value = '';
         document.getElementById('rr-notes').value = '';
         document.getElementById('rr-error').classList.add('d-none');
-        if (!renewalModal) renewalModal = new bootstrap.Modal(document.getElementById('renewal-request-modal'));
+        if (!renewalModal) renewalModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('renewal-request-modal'));
         renewalModal.show();
     }
 
@@ -915,36 +955,32 @@
         }
 
         var btn = document.getElementById('rr-submit-btn');
-        var orig = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Submitting…';
-
-        fetch('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proposedEndDate: endDate, notes: notes })
-        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-        .then(function (res) {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            if (res.ok && res.data.success) {
-                renewalModal.hide();
-                loadRenewalStatus();
-                showToast('Renewal request submitted.', '#15803d');
-            } else {
-                errBox.textContent = res.data.error || 'Failed to submit renewal request.';
+        return CIPRMS.busy(btn, function () {
+            return CIPRMS.api('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
+                method: 'POST', json: { proposedEndDate: endDate, notes: notes }, quiet: true
+            }).then(function (res) {
+                if (res.ok) {
+                    renewalModal.hide();
+                    showToast('Renewal request submitted.', '#15803d');
+                    return loadRenewalStatus({ live: true });
+                }
+                errBox.textContent = res.error || 'Failed to submit renewal request.';
                 errBox.classList.remove('d-none');
-            }
-        }).catch(function () {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            errBox.textContent = 'Network error while submitting the request.';
-            errBox.classList.remove('d-none');
-        });
+                if (res.status === 409 || res.status === 404) return loadRenewalStatus({ live: true });   // the card was stale
+            });
+        }, 'Submitting…');
     }
 
     loadRenewalStatus();
     loadDRRequests();
+    // Live updates: a reviewer moved one of my Document Requests to the next stage, or acted on a renewal request. The
+    // server is asked again for the real data — counters, Approval Progress, the table and the renewal card are all
+    // recomputed from it, never from the event itself.
+    if (window.CIPRMS && CIPRMS.live) {
+        CIPRMS.live(['documentRequest.updated', 'documentRequest.statusChanged', 'request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
+            return Promise.all([loadDRRequests({ live: true }), loadRenewalStatus({ live: true }), refreshDocs()]).then(function (r) { return r.indexOf(false) === -1; });
+        }, { debounce: 250 });
+    }
 </script>
 </body>
 </html>

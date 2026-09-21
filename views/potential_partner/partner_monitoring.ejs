@@ -362,7 +362,7 @@
         if (draftPreviewReturnTo) {
             var returnEl = document.getElementById(draftPreviewReturnTo);
             draftPreviewReturnTo = null;
-            if (returnEl) new bootstrap.Modal(returnEl).show();
+            if (returnEl) bootstrap.Modal.getOrCreateInstance(returnEl).show();
         }
     });
 
@@ -394,7 +394,7 @@
         draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
         if (sourceInstance) sourceInstance.hide();
 
-        new bootstrap.Modal(document.getElementById('draft-preview-modal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('draft-preview-modal')).show();
     }
 
     function draftItemHtml(item, idx, prefix) {
@@ -469,7 +469,7 @@
         document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('pr-draft-file').value = '';
         document.getElementById('pr-draft-note').value = '';
-        new bootstrap.Modal(document.getElementById('pr-draft-modal')).show();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('pr-draft-modal')).show();
     }
 
     function uploadDraftDocument() {
@@ -484,10 +484,9 @@
         var formData = new FormData();
         formData.append('document', file);
         formData.append('note', noteInput.value.trim());
-        fetch('/api/requests/' + currentDraftPRId + '/documents', { method: 'POST', body: formData })
-            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        CIPRMS.api('/api/requests/' + currentDraftPRId + '/documents', { method: 'POST', body: formData, quiet: true })
             .then(function (result) {
-                if (!result.ok) throw new Error(result.data.error || 'Upload failed.');
+                if (!result.ok) throw new Error(result.error || 'Upload failed.');
                 var idx = myRequests.findIndex(function (x) { return x.id === currentDraftPRId; });
                 if (idx !== -1 && result.data.request) myRequests[idx] = result.data.request;
                 renderDraftTimeline(myRequests.find(function (x) { return x.id === currentDraftPRId; }));
@@ -501,6 +500,7 @@
     }
 
     var myRequests = [];
+    var flashPRIds = new Set();   // rows a live update just changed
 
     function renderPRTable() {
         var body = document.getElementById('pr-monitor-body');
@@ -513,7 +513,7 @@
             if (r.status === 'Draft') {
                 actions = '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>';
             } else if (r.status === 'Pending' || r.status === 'Under Review') {
-                actions = '<button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ')" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
+                actions = '<button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ', this)" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
             } else {
                 actions = '';
             }
@@ -521,7 +521,7 @@
                 actions += ' <button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line me-1"></i>Draft</button>';
             }
             if (!actions) actions = '<span class="text-muted fs-12">—</span>';
-            return '<tr data-pr-id="' + r.id + '">' +
+            return '<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
                 '<td>' + (escapeHtml(r.institution) || '<span class="text-muted">(untitled draft)</span>') + '</td>' +
                 '<td>' + (r.isRenewal ? 'Renewal' : 'Partnership') + '</td>' +
                 '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + r.status + '</span></td>' +
@@ -533,43 +533,87 @@
         }).join('');
     }
 
-    function withdrawRequest(id) {
+    function withdrawRequest(id, btn) {
         if (!confirm('Withdraw this partnership request?')) return;
-        fetch('/api/requests/' + id + '/withdraw', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (data) {
-            if (data.success) { showToast('Request withdrawn.', '#15803d'); loadPRRequests(); }
-            else showToast(data.error || 'Failed to withdraw request.', '#f06548');
-        });
+        return CIPRMS.busy(btn, function () {
+            return CIPRMS.api('/api/requests/' + id + '/withdraw', { method: 'POST', quiet: true }).then(function (res) {
+                showToast(res.ok ? 'Request withdrawn.' : res.error, res.ok ? '#15803d' : '#f06548');
+                // re-read either way: after a refusal (already decided, gone) the row on screen may be stale
+                return loadPRRequests({ live: !res.ok });
+            });
+        }, 'Withdrawing…');
     }
 
-    function loadPRRequests() {
-        return fetch('/api/requests/mine').then(function (r) { return r.json(); }).then(function (requests) {
-            myRequests = Array.isArray(requests) ? requests : [];
+    // Pending -> "Pending", Under Review -> "In Progress", Approved -> "Approved"; Rejected and Withdrawn are both
+    // "Closed" (decided without approval). The backend status names are unchanged - only this display grouping.
+    function requestBuckets(list) {
+        var b = { pending: 0, review: 0, approved: 0, closed: 0 };
+        list.forEach(function (r) {
+            if (r.status === 'Pending') b.pending++;
+            else if (r.status === 'Under Review') b.review++;
+            else if (r.status === 'Approved') b.approved++;
+            else b.closed++;
+        });
+        return b;
+    }
+
+    function loadPRRequests(opts) {
+        var live = !!(opts && opts.live);
+        return CIPRMS.api('/api/requests/mine', { quiet: true }).then(function (res) {
+            if (!res.ok || !Array.isArray(res.data)) {
+                if (live) return false;   // a background refresh never wipes what is on screen (false = try again later)
+                document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+                document.getElementById('approval-progress-body').innerHTML = '';
+                return;
+            }
+            var requests = res.data;
+            var previous = {};
+            myRequests.forEach(function (r) { previous[r.id] = JSON.stringify(r); });
+            flashPRIds = new Set(live ? requests.filter(function (r) { return previous[r.id] !== JSON.stringify(r); }).map(function (r) { return r.id; }) : []);
+            myRequests = requests;
             var real = myRequests.filter(function (r) { return r.status !== 'Draft'; });
 
+            // Every non-draft request falls in exactly ONE bucket, so Pending + In Progress + Approved + Closed
+            // always equals Total. (In Progress used to lump Pending in with Under Review, the tiles showed
+            // "Rejected" but never Pending or Withdrawn, so the tiles could not add up to the total.)
+            var b = requestBuckets(real);
             setCount('cnt-total', real.length);
-            setCount('cnt-progress', real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length);
-            setCount('cnt-approved', real.filter(function (r) { return r.status === 'Approved'; }).length);
+            setCount('cnt-progress', b.review);
+            setCount('cnt-approved', b.approved);
 
             renderPRTable();
+            flashPRIds = new Set();
+            refreshOpenDraft();
 
             var progBox = document.getElementById('approval-progress-body');
             var total = real.length;
-            var approved = real.filter(function (r) { return r.status === 'Approved'; }).length;
+            var approved = b.approved;
             var pct = total ? Math.round((approved / total) * 100) : 0;
             progBox.innerHTML =
                 '<div class="d-flex justify-content-between mb-1"><span>Approved</span><span>' + approved + ' / ' + total + '</span></div>' +
                 '<div class="progress mb-3" style="height:10px"><div class="progress-bar bg-success" style="width:' + pct + '%"></div></div>' +
                 '<div class="row g-2 text-center">' +
-                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0">' + real.filter(function (r) { return r.status === 'Pending' || r.status === 'Under Review'; }).length + '</h5><small class="text-muted">In Progress</small></div></div>' +
-                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
-                    '<div class="col-4"><div class="border rounded p-2"><h5 class="mb-0 text-danger">' + real.filter(function (r) { return r.status === 'Rejected'; }).length + '</h5><small class="text-muted">Rejected</small></div></div>' +
-                '</div>';
+                    '<div class="col-6 col-md-3"><div class="border rounded p-2" data-bucket="progress"><h5 class="mb-0">' + b.review + '</h5><small class="text-muted">In Progress</small></div></div>' +
+                    '<div class="col-6 col-md-3"><div class="border rounded p-2" data-bucket="pending"><h5 class="mb-0 text-warning">' + b.pending + '</h5><small class="text-muted">Pending</small></div></div>' +
+                    '<div class="col-6 col-md-3"><div class="border rounded p-2" data-bucket="approved"><h5 class="mb-0 text-success">' + b.approved + '</h5><small class="text-muted">Approved</small></div></div>' +
+                    '<div class="col-6 col-md-3"><div class="border rounded p-2" data-bucket="closed" title="Rejected or withdrawn"><h5 class="mb-0 text-muted">' + b.closed + '</h5><small class="text-muted">Closed</small></div></div>' +
+                '</div>' +
+                '<p class="text-muted fs-12 mt-3 mb-0">Pending = submitted, awaiting CIRL review &middot; In Progress = under review by CIRL &middot; Closed = rejected or withdrawn. Drafts are not counted.</p>';
 
-            return openFromQuery();
-        }).catch(function () {
-            document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
-            document.getElementById('approval-progress-body').innerHTML = '';
+            return live ? undefined : openFromQuery();
         });
+    }
+
+    // a draft-collaboration modal that is open on a request whose data just changed shows the new timeline / state
+    function refreshOpenDraft() {
+        var el = document.getElementById('pr-draft-modal');
+        if (!el || !el.classList.contains('show') || !currentDraftPRId) return;
+        var r = myRequests.find(function (x) { return x.id === currentDraftPRId; });
+        if (!r) return;
+        renderDraftTimeline(r);
+        var closed = ['Approved', 'Rejected', 'Withdrawn'].indexOf(r.status) !== -1;
+        document.getElementById('pr-draft-upload-wrap').style.display = closed ? 'none' : '';
+        document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
     }
 
     // Deep-link support so a notification ("Partnership Request Approved", etc.) can jump
@@ -587,47 +631,57 @@
     }
 
     // "Documents on File" stat card only — the Document Verification table was removed from this page.
-    fetch('/api/documents/mine').then(function (r) { return r.json(); }).then(function (docs) {
-        setCount('cnt-docs', Array.isArray(docs) ? docs.length : 0);
-    }).catch(function () { /* the count simply stays at 0 */ });
+    function refreshDocCount() {
+        return CIPRMS.api('/api/documents/mine', { quiet: true }).then(function (res) {
+            if (!res.ok) return false;
+            setCount('cnt-docs', Array.isArray(res.data) ? res.data.length : 0);
+        });
+    }
+    refreshDocCount();
 
     var myPartnerships = [];
 
-    Promise.all([
-        fetch('/api/partnerships/mine').then(function (r) { return r.json(); }),
-        fetch('/api/requests/mine').then(function (r) { return r.json(); })
-    ]).then(function (results) {
-        var partnerships = Array.isArray(results[0]) ? results[0] : [];
-        var reqs = Array.isArray(results[1]) ? results[1] : [];
-        myPartnerships = partnerships;
+    function loadRenewalStatus(opts) {
+        var live = !!(opts && opts.live);
+        return Promise.all([
+            CIPRMS.api('/api/partnerships/mine', { quiet: true }),
+            CIPRMS.api('/api/requests/mine', { quiet: true })
+        ]).then(function (results) {
+            var box = document.getElementById('renewal-status-body');
+            if (!results[0].ok || !results[1].ok) {
+                if (!live) box.innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
+                return live ? false : undefined;
+            }
+            var partnerships = Array.isArray(results[0].data) ? results[0].data : [];
+            var reqs = Array.isArray(results[1].data) ? results[1].data : [];
+            myPartnerships = partnerships;
 
-        // Partnerships that already have a renewal request awaiting a decision.
-        var pendingRenewalIds = new Set(
-            reqs
-                .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
-                .map(function (r) { return r.renewalPartnershipId; })
-        );
+            // Partnerships that already have a renewal request awaiting a decision.
+            var pendingRenewalIds = new Set(
+                reqs
+                    .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
+                    .map(function (r) { return r.renewalPartnershipId; })
+            );
 
-        var box = document.getElementById('renewal-status-body');
-        if (partnerships.length === 0) {
-            box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
-            return;
-        }
-        box.innerHTML = partnerships.map(function (p) {
-            var status = p.status || 'Unknown';
-            var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
-            var inst = p.inst || p.institution || '';
-            var renewalPending = pendingRenewalIds.has(p.id);
-            var actionHtml = renewalPending
-                ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
-                : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
-            return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
-                '<div><strong>' + inst + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
-                '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
-        }).join('');
-    }).catch(function () {
-        document.getElementById('renewal-status-body').innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
-    });
+            if (partnerships.length === 0) {
+                box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
+                return;
+            }
+            box.innerHTML = partnerships.map(function (p) {
+                var status = p.status || 'Unknown';
+                var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
+                var inst = p.inst || p.institution || '';
+                var renewalPending = pendingRenewalIds.has(p.id);
+                var actionHtml = renewalPending
+                    ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
+                    : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
+                return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
+                    '<div><strong>' + escapeHtml(inst) + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
+                    '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
+            }).join('');
+        });
+    }
+    loadRenewalStatus();
 
     var renewalModal = null;
     var renewingPartnershipId = null;
@@ -659,34 +713,31 @@
         }
 
         var btn = document.getElementById('rr-submit-btn');
-        var orig = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Submitting…';
-
-        fetch('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proposedEndDate: endDate, notes: notes })
-        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-        .then(function (res) {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            if (res.ok && res.data.success) {
-                renewalModal.hide();
-                location.reload();
-            } else {
-                errBox.textContent = res.data.error || 'Failed to submit renewal request.';
+        return CIPRMS.busy(btn, function () {
+            return CIPRMS.api('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
+                method: 'POST', json: { proposedEndDate: endDate, notes: notes }, quiet: true
+            }).then(function (res) {
+                if (res.ok) {
+                    renewalModal.hide();
+                    showToast('Renewal request submitted.', '#15803d');
+                    return Promise.all([loadPRRequests({ live: true }), loadRenewalStatus({ live: true })]);
+                }
+                errBox.textContent = res.error || 'Failed to submit renewal request.';
                 errBox.classList.remove('d-none');
-            }
-        }).catch(function () {
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            errBox.textContent = 'Network error while submitting the request.';
-            errBox.classList.remove('d-none');
-        });
+                if (res.status === 409 || res.status === 404) return loadRenewalStatus({ live: true });   // the card was stale
+            });
+        }, 'Submitting…');
     }
 
     loadPRRequests();
+    // Live updates: CIRL reviewed / approved / rejected one of my requests, or the registry record behind one changed.
+    // The server is asked again for the real data (counters, Approval Progress, table rows and the renewal card are all
+    // recomputed from it) — nothing here is calculated from the event itself.
+    if (window.CIPRMS && CIPRMS.live) {
+        CIPRMS.live(['request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
+            return Promise.all([loadPRRequests({ live: true }), loadRenewalStatus({ live: true }), refreshDocCount()]).then(function (r) { return r.indexOf(false) === -1; });
+        }, { debounce: 250 });
+    }
 </script>
 </body>
 </html>

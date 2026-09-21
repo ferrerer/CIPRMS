@@ -11,8 +11,8 @@ const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
 const { createTestUser, loginAs, cleanupAll } = require('./helpers');
 
-let db, adminAgent, staffAgent, collegeAgent, adminUser, staffUser;
-const createdDocIds = [];
+let db, adminAgent, staffAgent, collegeAgent, adminUser, staffUser, collegeUser;
+const createdDocIds = [], createdEventIds = [];
 
 beforeAll(async () => {
   db = await connectDB();
@@ -20,10 +20,12 @@ beforeAll(async () => {
   adminAgent = request.agent(app); await loginAs(adminAgent, adminUser);
   staffUser = await createTestUser({ role: 'Staff' });
   staffAgent = request.agent(app); await loginAs(staffAgent, staffUser);
-  collegeAgent = request.agent(app); await loginAs(collegeAgent, await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' }));
+  collegeUser = await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' });
+  collegeAgent = request.agent(app); await loginAs(collegeAgent, collegeUser);
 });
 afterAll(async () => {
   if (createdDocIds.length) await db.collection('documents').deleteMany({ id: { $in: createdDocIds } });
+  if (createdEventIds.length) await db.collection('calendarevents').deleteMany({ id: { $in: createdEventIds } });
   await cleanupAll();
   await closeDB();
 });
@@ -55,6 +57,87 @@ describe('Calendar layout (Administrator and CIRL Staff share one template)', ()
     expect(college.status).toBe(200);
     expect(college.text).not.toContain('id="btn-new-event"');
     expect(college.text).toContain('class="card cal-card"');
+  });
+});
+
+describe('Calendar: one compact layout for every role, and a saved event is never shown twice', () => {
+  let partnerAgent;
+  beforeAll(async () => {
+    partnerAgent = request.agent(app);
+    await loginAs(partnerAgent, await createTestUser({ role: 'potential_partner' }));
+  });
+
+  test.each([
+    ['Administrator', () => adminAgent, '/calendar'],
+    ['CIRL Staff', () => staffAgent, '/staff/calendar'],
+    ['College Staff', () => collegeAgent, '/personnel/calendar'],
+    ['Partner', () => partnerAgent, '/partner/calendar']
+  ])('%s: the same layout classes, helpers and rules (no fixed 400px box, no stretched card)', async (_role, agent, url) => {
+    const res = await agent().get(url);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('class="col-xl-3 cal-side"');
+    expect(res.text).toContain('class="cal-upcoming"');
+    expect(res.text).toContain('class="cal-upcoming-scroll');
+    expect(res.text).toContain('class="card cal-card"');
+    expect(res.text).not.toMatch(/class="[^"]*card-h-100/);
+    expect(res.text).not.toMatch(/data-simplebar[^>]*height:\s*400px/);
+    expect(res.text).toContain('function calendarAspect(w)');
+    expect(res.text).toContain('aspectRatio: calendarAspect(window.innerWidth)');
+    expect(res.text).toContain("cal.setOption('aspectRatio', calendarAspect(w))");
+    expect(res.text).toMatch(/datesSet: function ?\(info\) ?\{ ?calendarCardFill\(info\)/);
+    expect(res.text).toContain('.cal-side > .cal-upcoming { flex: 1 1 0; min-height: 130px');
+  });
+
+  test('the Partner calendar stays view-only and its permissions are unchanged', async () => {
+    const html = (await partnerAgent.get('/partner/calendar')).text;
+    expect(html).toContain('editable: false');
+    expect(html).not.toContain('id="btn-new-event"');
+    expect((await partnerAgent.post('/api/calendarevents').send({ title: 'jesttest partner cannot', start: '2026-12-01T09:00' })).status).toBe(302);
+  });
+
+  test('a saved event is attached to the calendar feed source, never added source-less (the cause of the phantom copy)', async () => {
+    for (const [agent, url] of [[adminAgent, '/calendar'], [staffAgent, '/staff/calendar']]) {
+      const html = (await agent.get(url)).text;
+      expect(html).toContain('return cal.addEvent(docToFcEvent(doc), cal.getEventSources()[0]);');
+      expect(html.split('cal.addEvent(docToFcEvent(').length - 1).toBe(1);                  // the single, source-attached call inside addSavedEvent
+      expect(html.split('addSavedEvent(data.event)').length - 1).toBe(2);      // Save and palette drop both use it
+      expect(html).toContain("cal.getEvents().filter(function(e){ return String(e.id) === gone; }).forEach(function(e){ e.remove(); })");
+    }
+  });
+
+  test('server side: the same event submitted twice in a burst, even without a request token, is one database row', async () => {
+    const body = { title: 'jesttest burst duplicate', start: '2026-12-02T09:00', end: '2026-12-02T10:00', allDay: false, className: 'bg-primary-subtle', recipients: [] };
+    const first = await staffAgent.post('/api/calendarevents').send(body);
+    const second = await staffAgent.post('/api/calendarevents').send(body);
+    createdEventIds.push(first.body.event.id);
+    expect(first.status).toBe(200);
+    expect(second.body.duplicate).toBe(true);
+    expect(second.body.event.id).toBe(first.body.event.id);
+    expect(await db.collection('calendarevents').countDocuments({ title: 'jesttest burst duplicate' })).toBe(1);
+    // a genuinely different event (other time) is still created
+    const other = await staffAgent.post('/api/calendarevents').send({ ...body, start: '2026-12-03T09:00', end: '2026-12-03T10:00' });
+    createdEventIds.push(other.body.event.id);
+    expect(other.body.event.id).not.toBe(first.body.event.id);
+  });
+
+  test('CIRL Staff keep seeing an event they created for other people (it used to vanish once the feed reloaded); visibility for everyone else is unchanged', async () => {
+    const created = await staffAgent.post('/api/calendarevents').send({ title: 'jesttest scoped by staff', start: '2026-12-05T09:00', allDay: false, className: 'bg-primary-subtle', recipients: [collegeUser.email] });
+    const id = created.body.event.id;
+    createdEventIds.push(id);
+    const inFeed = async (agent) => (await agent.get('/api/calendarevents')).body.some(e => e.id === id);
+    expect(await inFeed(staffAgent)).toBe(true);        // the creator
+    expect(await inFeed(adminAgent)).toBe(true);        // Administrator sees everything
+    expect(await inFeed(collegeAgent)).toBe(true);      // the named recipient
+    expect(await inFeed(partnerAgent)).toBe(false);     // not invited, not the creator
+  });
+
+  test('deleting removes the event permanently: gone from the database and from the feed', async () => {
+    const created = await staffAgent.post('/api/calendarevents').send({ title: 'jesttest delete me', start: '2026-12-04T09:00', allDay: false, className: 'bg-primary-subtle', recipients: [] });
+    const id = created.body.event.id;
+    expect((await staffAgent.delete('/api/calendarevents/' + id)).status).toBe(200);
+    expect(await db.collection('calendarevents').findOne({ id })).toBeNull();
+    expect((await staffAgent.get('/api/calendarevents')).body.some(e => e.id === id)).toBe(false);
+    expect((await adminAgent.get('/api/calendarevents')).body.some(e => e.id === id)).toBe(false);
   });
 });
 

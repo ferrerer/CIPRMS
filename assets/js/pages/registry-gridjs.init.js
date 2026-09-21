@@ -438,12 +438,17 @@ function computeDays(endStr) {
   return isNaN(d) ? 0 : Math.ceil((d - new Date()) / 86400000);
 }
 
-// Load partnerships from MongoDB API
-fetch('/api/partnerships')
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
+// Load partnerships from MongoDB API. live=true is a background refresh after a live update: the active filters are
+// kept, and a failed read leaves what is on screen alone. Every KPI card, overview bar and list is recomputed from the
+// server's data by buildGrid() - nothing is calculated from the update itself.
+function loadPartnerships(live) {
+  return CIPRMS.api('/api/partnerships', { quiet: true }).then(function(res) {
+    if (!res.ok || !Array.isArray(res.data)) {
+      if (!live) { console.error('Failed to load partnerships:', res.error); buildGrid(); }
+      return live ? false : undefined;   // false = a background refresh failed; CIPRMS.live will try again
+    }
     // Normalize: map MongoDB docs to the shape this JS expects
-    partnerships = data.map(function(p) {
+    partnerships = res.data.map(function(p) {
       return {
         id:           p.id || 0,
         inst:         p.inst || p.institution || p.name || '',
@@ -469,13 +474,19 @@ fetch('/api/partnerships')
         locationResolvedName: p.locationResolvedName, locationResolvedAt: p.locationResolvedAt
       };
     });
-    filtered = partnerships.slice();
-    buildGrid();
-  })
-  .catch(function(err) {
-    console.error('Failed to load partnerships:', err);
-    buildGrid();
+    if (live) { applyFilter(); } else { filtered = partnerships.slice(); buildGrid(); }
   });
+}
+loadPartnerships(false);
+if (window.CIPRMS && CIPRMS.live) {
+  CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function() { return loadPartnerships(true); }, { debounce: 250 });
+}
+
+// One save at a time: the trigger button is disabled (with progress text) until the server has answered, so a double
+// click cannot submit twice.
+function runOnce(btnSelector, label, fn) {
+  return CIPRMS.busy(document.querySelector(btnSelector), fn, label);
+}
 
 
 function sbadge(s) {
@@ -683,20 +694,24 @@ function approveRecord(id) {
 }
 
 var deletingId=null;
-function openDeleteModal(id){ deletingId=id; new bootstrap.Modal(document.getElementById('deleteRecordModal')).show(); }
+function openDeleteModal(id){ deletingId=id; bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteRecordModal')).show(); }
 function confirmDelete(){
   if(!deletingId) return;
-  var idx=partnerships.findIndex(function(x){return x.id===deletingId;}); if(idx===-1) return;
+  var id=deletingId;
+  var idx=partnerships.findIndex(function(x){return x.id===id;}); if(idx===-1) return;
   var name=partnerships[idx].inst;
-  fetch('/api/partnerships/'+deletingId,{method:'DELETE'})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data.success){
-        partnerships.splice(idx,1); deletingId=null;
+  return runOnce('#delete-record','Deleting...',function(){
+    return CIPRMS.api('/api/partnerships/'+id,{method:'DELETE',quiet:true}).then(function(res){
+      if(res.ok){
+        partnerships=partnerships.filter(function(x){return x.id!==id;}); deletingId=null;
         bootstrap.Modal.getInstance(document.getElementById('deleteRecordModal'))?.hide();
         applyFilter(); showToast('"'+name+'" has been removed from the registry.');
+      } else {
+        showToast(res.error||'Error deleting partnership.');
+        if(res.status===404||res.status===409) loadPartnerships(true);
       }
-    }).catch(function(e){console.error(e);showToast('Error deleting partnership.');});
+    });
+  });
 }
 
 var editingId=null;
@@ -714,7 +729,7 @@ function openEditModal(id){
   document.getElementById('e-doclink').value=p.docLink||''; document.getElementById('e-remarks').value=p.remarks||'';
   locPreviewSeq.e++; clearTimeout(locPreviewTimer.e);
   document.getElementById('e-location-status').innerHTML=describeStoredLocation(p);
-  new bootstrap.Modal(document.getElementById('editPartnershipModal')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('editPartnershipModal')).show();
 }
 function computeEditStatus(){var v=document.getElementById('e-end').value;if(!v)return;var d=Math.ceil((new Date(v)-new Date())/86400000);document.getElementById('e-status').value=d<0?'Expired':d<=90?'Expiring Soon':'Active';}
 function saveEdit(){
@@ -734,20 +749,25 @@ function saveEdit(){
     status:document.getElementById('e-status').value,unit:units,
     coordinator:document.getElementById('e-coordinator').value.trim(),docLink:document.getElementById('e-doclink').value.trim(),
     remarks:document.getElementById('e-remarks').value.trim()};
-  fetch('/api/partnerships/'+editingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(updates)})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data.success){
+  var editId=editingId;
+  return runOnce('#edit-btn','Saving...',function(){
+    return CIPRMS.api('/api/partnerships/'+editId,{method:'PATCH',json:updates,quiet:true}).then(function(res){
+      var data=res.data;
+      if(res.ok){
         var locBefore=p.locationResolvedAt;
         Object.assign(p,updates); p.days=computeDays(p.end);
         // The server re-evaluates the map location when the institution or
-        // country changed — take its result (unset fields come back absent).
+        // country changed - take its result (unset fields come back absent).
         if(data.partnership) LOCATION_KEYS.forEach(function(k){p[k]=data.partnership[k];});
         var locChanged=data.partnership&&data.partnership.locationResolvedAt!==locBefore;
         bootstrap.Modal.getInstance(document.getElementById('editPartnershipModal'))?.hide();
         applyFilter();showToast('"'+inst+'" updated successfully.'+(locChanged?locationNote(data.partnership):''));
+      } else {
+        showToast(res.error||'Error updating partnership.');
+        if(res.status===404||res.status===409) loadPartnerships(true);
       }
-    }).catch(function(e){console.error(e);showToast('Error updating partnership.');});
+    });
+  });
 }
 
 var renewingId=null;
@@ -758,7 +778,7 @@ function openRenewModal(id){
   document.getElementById('renew-prev-end').value=p.end;
   document.getElementById('renew-new-end').value='';document.getElementById('renew-validity').value='';
   document.getElementById('renew-status').value='';document.getElementById('renew-remarks').value='';
-  new bootstrap.Modal(document.getElementById('renewPartnershipModal')).show();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('renewPartnershipModal')).show();
 }
 function computeRenewStatus(){
   var v=document.getElementById('renew-new-end').value; if(!v) return;
@@ -775,15 +795,19 @@ function saveRenew(){
   var d=Math.ceil((new Date(newEnd)-new Date())/86400000);
   var updates={end:fmt(newEnd),endYear:new Date(newEnd).getFullYear(),status:d<0?'Expired':d<=90?'Expiring Soon':'Active'};
   var rmk=document.getElementById('renew-remarks').value.trim(); if(rmk) updates.remarks=rmk;
-  fetch('/api/partnerships/'+renewingId,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(updates)})
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data.success){
+  var renewId=renewingId;
+  return runOnce('#renewPartnershipModal .btn-success','Renewing...',function(){
+    return CIPRMS.api('/api/partnerships/'+renewId,{method:'PATCH',json:updates,quiet:true}).then(function(res){
+      if(res.ok){
         Object.assign(p,updates); p.days=computeDays(p.end);
         bootstrap.Modal.getInstance(document.getElementById('renewPartnershipModal'))?.hide();
-        applyFilter();showToast('"'+p.inst+'" renewed \u2014 new end date: '+p.end+'.');
+        applyFilter();showToast('"'+p.inst+'" renewed - new end date: '+p.end+'.');
+      } else {
+        showToast(res.error||'Error renewing partnership.');
+        if(res.status===404||res.status===409) loadPartnerships(true);
       }
-    }).catch(function(e){console.error(e);showToast('Error renewing partnership.');});
+    });
+  });
 }
 
 var toastTimer=null;
@@ -1129,13 +1153,12 @@ function submitPartnership(){
     startYear:new Date(start).getFullYear(),endYear:new Date(end).getFullYear(),
     start:fmt(start),end:fmt(end),status:status,remarks:document.getElementById('f-remarks').value.trim()};
   if(pendingRequestConversion) payload.sourceRequestId=pendingRequestConversion;
-  fetch('/api/partnerships',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-    .then(function(r){return r.json().then(function(data){return {ok:r.ok,data:data};});})
-    .then(function(res){
+  return runOnce('#addPartnershipModal .btn-primary.ms-auto','Saving...',function(){
+    return CIPRMS.api('/api/partnerships',{method:'POST',json:payload,quiet:true}).then(function(res){
       var data=res.data;
-      if(res.ok&&data.success){
+      if(res.ok&&data&&data.success){
         // If this was already converted by an earlier attempt, the returned
-        // partnership may already be in the list — avoid a visible duplicate row.
+        // partnership may already be in the list - avoid a visible duplicate row.
         if(!partnerships.some(function(p){return p.id===data.partnership.id;})){
           data.partnership.days = computeDays(data.partnership.end);
           partnerships.push(data.partnership);
@@ -1147,9 +1170,10 @@ function submitPartnership(){
           ? '"'+inst+'" was already converted to a Registry partnership.'
           : '"'+inst+'" added to the registry.'+locationNote(data.partnership));
       } else {
-        showToast(data.error||'Error saving partnership. Please try again.');
+        showToast(res.error||'Error saving partnership. Please try again.');
       }
-    }).catch(function(e){console.error(e);showToast('Error saving partnership. Please try again.');});
+    });
+  });
 }
 
 // ── DOMContentLoaded ─────────────────────────────────────────────────────────

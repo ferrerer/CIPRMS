@@ -1,3 +1,7 @@
+<% if (typeof user !== 'undefined' && user) { %>
+<script>window.CIPRMS_USER = { id: <%- JSON.stringify(user.id) %>, role: <%- JSON.stringify(String(user.role || '')).replace(/</g, '\\u003c') %> };</script>
+<script src="/js/ciprms-rt.js?v=1"></script>
+<% } %>
 <header id="page-topbar">
     <div class="layout-width">
         <div class="navbar-header">
@@ -229,19 +233,24 @@
 </div>
 
 <script>
-// Load notification badge
-fetch('/api/notifications/unread-count')
-    .then(r => r.json())
-    .then(d => {
-        const count = d.count || 0;
-        const badge = document.getElementById('notif-badge');
-        const countBadge = document.getElementById('notif-count-badge');
-        if (badge && count > 0) {
-            badge.textContent = count;
-            badge.style.display = '';
-        }
-        if (countBadge) countBadge.textContent = count + ' New';
-    }).catch(() => {});
+// Notification badge. paintNotifBadge() draws a count; refreshNotifBadge() asks the server for the real one (the server is
+// the source of truth) — used on load, after a live update, and after a reconnect.
+function paintNotifBadge(count) {
+    const badge = document.getElementById('notif-badge');
+    const countBadge = document.getElementById('notif-count-badge');
+    if (badge) {
+        badge.textContent = count;
+        badge.style.display = count > 0 ? '' : 'none';
+    }
+    if (countBadge) countBadge.textContent = count + ' New';
+}
+function refreshNotifBadge() {
+    return fetch('/api/notifications/unread-count', { headers: { 'X-Requested-With': 'ciprms' } })
+        .then(r => r.json())
+        .then(d => paintNotifBadge(d.count || 0))
+        .catch(() => {});
+}
+refreshNotifBadge();
 
 // ── Notification bell dropdown — real data, click-to-navigate ───────────────
 // Reuses the same /api/notifications/mine feed and PATCH-mark-read pattern as
@@ -276,11 +285,18 @@ fetch('/api/notifications/unread-count')
     function handleNotifClick(id) {
         const n = notifCache.find(x => x.id === id);
         if (n && n.unread) {
-            fetch('/api/notifications/' + id, {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false })
-            }).catch(() => {});
+            n.unread = false;
+            // keepalive: the page navigates away in this same click; without it the browser can cancel the request
+            // before the server records the notification as read
+            const req = { method: 'PATCH', json: { unread: false }, keepalive: true, quiet: true };
+            if (window.CIPRMS) window.CIPRMS.api('/api/notifications/' + id, req);
+            else fetch('/api/notifications/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unread: false }), keepalive: true }).catch(() => {});
+            paintNotifBadge(notifCache.filter(x => x.unread).length);
         }
-        if (n && n.link) window.location.href = n.link;
+        // n.href is the destination the server resolved for THIS user's role (n.link is only what was stored
+        // when the notification was created, and can be a route the reader's role no longer has).
+        const dest = n && (n.href || n.link);
+        if (dest) window.location.href = dest;
     }
 
     // Header dropdown shows only the newest 5 per tab — the full history
@@ -337,6 +353,43 @@ fetch('/api/notifications/unread-count')
             });
     }
 
+    function rerenderFromCache() {
+        renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
+        renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, HEADER_NOTIF_LIMIT), 'No unread notifications.');
+        paintNotifBadge(notifCache.filter(n => n.unread).length);
+    }
+
     document.addEventListener('DOMContentLoaded', loadDropdownNotifications);
+
+    // Live updates (Server-Sent Events, see public/js/ciprms-rt.js). The pushed notification is for THIS user only; the
+    // server's own count and list are re-read shortly afterwards so what is shown never drifts from the database.
+    let reconcileTimer = null;
+    function reconcileSoon() {
+        clearTimeout(reconcileTimer);
+        reconcileTimer = setTimeout(() => { loadDropdownNotifications(); refreshNotifBadge(); }, 600);
+    }
+    if (window.CIPRMS && window.CIPRMS.on) {
+        window.CIPRMS.on('notification.created', d => {
+            const n = d && d.notification;
+            if (n && !notifCache.some(x => x.id === n.id)) {
+                notifCache.unshift(n);
+                notifCache.sort((a, b) => b.id - a.id);
+                rerenderFromCache();
+                window.CIPRMS.toast(n.title || 'New notification', 'info');
+            }
+            reconcileSoon();
+        });
+        window.CIPRMS.on('notification.read', d => {
+            notifCache.forEach(n => { if (d && (d.all || n.id === d.id)) n.unread = false; });
+            rerenderFromCache();
+            reconcileSoon();
+        });
+        window.CIPRMS.on('notification.deleted', d => {
+            notifCache = notifCache.filter(n => !(d && n.id === d.id));
+            rerenderFromCache();
+            reconcileSoon();
+        });
+        window.CIPRMS.on('rt.resync', () => { loadDropdownNotifications(); refreshNotifBadge(); });
+    }
 })();
 </script>

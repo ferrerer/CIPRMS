@@ -95,7 +95,7 @@
                         <div class="card">
                             <div class="card-header">
                                 <h4 class="card-title mb-0"><i class="ri-lock-2-line me-2 text-primary"></i>Role Permissions Matrix (RBAC)</h4>
-                                <p class="text-muted fs-13 mb-0 mt-1">Reflects the actual route/page gating in <code>cirl.js</code> as of 2026-08-27 (Administrator/CIRL Staff full-parity revision) — re-audited feature by feature, not carried over from prior documentation.</p>
+                                <p class="text-muted fs-13 mb-0 mt-1">What each role can do, taken from the page and API gating <code>cirl.js</code> actually enforces &mdash; re-audited 2026-09-20 against every page route and API route, not carried over from earlier documentation. This table only describes the permissions; it does not grant or change any.</p>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
@@ -107,114 +107,80 @@
                                                 <th class="text-center"><i class="ri-user-star-line me-1"></i>College Staff</th>
                                                 <th class="text-center"><i class="ri-handshake-line me-1"></i>Partner</th>
                                                 <th class="text-center"><i class="ri-briefcase-line me-1"></i>CIRL Staff</th>
+                                                <th style="min-width:280px;">Notes</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <% /* Re-audited 2026-08-27 (Administrator/Staff full-parity revision)
-                                                   directly against every page route's gating middleware (requireAdmin /
-                                                   requirePersonnel / requirePartner / requireUploader /
-                                                   requireRequester / requireStaffAccess / requireAuth in cirl.js) and
-                                                   the corresponding API routes each page calls — not copied from
-                                                   prior documentation. Administrator and Staff now share the exact
-                                                   same underlying template/route/API for every module below except
-                                                   Calendar and Admin Settings:
-                                                   - Calendar: unchanged by this revision — only requireAdmin may
-                                                     POST/PATCH/DELETE /api/calendarevents. Auth. Personnel/
-                                                     potential_partner/Staff can only view it (calendar.ejs's
-                                                     canManageCalendar flag hides the create/edit/delete UI for
-                                                     every role except Administrator).
-                                                   - Monitoring: Administrator and Staff share the exact same
-                                                     consolidated Monitoring page (/lifecycle, /staff/lifecycle —
-                                                     2026-09-05 merge of the former separate Registry page into this
-                                                     one: KPIs, Overview, DSS Smart Alerts, Urgent, and the full
-                                                     Partnership Registry table/filters/Add/Edit/Renew/Delete) with
-                                                     full CRUD authority (CAN_MANAGE_REGISTRY, and the underlying
-                                                     POST/PATCH/DELETE /api/partnerships routes, are
-                                                     requireStaffAccess). /registry and /staff/registry still exist as
-                                                     redirects to /lifecycle and /staff/lifecycle for compatibility.
-                                                     Auth. Personnel/Partner's "Monitoring" is a different feature —
-                                                     tracking their own submitted requests.
-                                                   - User Management: Administrator and Staff share full CRUD
-                                                     (GET/POST/PATCH/DELETE /api/users are all requireStaffAccess) on
-                                                     the same /users page — EXCEPT Staff can never create, edit, or
-                                                     delete an Administrator account, or grant the Administrator role
-                                                     to anyone (explicit checks in cirl.js; the UI shows "Protected"
-                                                     on those specific rows for Staff). A deliberate
-                                                     privilege-escalation guard, not an oversight.
-                                                   - Document Library: GET /api/documents scopes EVERY role in
-                                                     OWN_SCOPE_ROLES (Administrator, Auth. Personnel, potential_partner,
-                                                     Staff) to their own uploads only — that's the *browsing*
-                                                     experience, a separate concern from
-                                                     GET /uploads/documents/:filename, where Administrator AND Staff
-                                                     are both exempt so either reviewer role can open/download any
-                                                     requester's attachment during Partnership/Document Request review.
-                                                   - Partnership Requests: Administrator and Staff share full
-                                                     Review/Approve/Reject authority and org-wide visibility on the
-                                                     same /partnership-requests page (/staff/requests reuses it) —
-                                                     PATCH /api/requests/:id and POST /api/requests/:id/documents are
-                                                     requireStaffAccess, and GET /api/requests returns every request
-                                                     to both roles (REQUEST_REVIEWER_ROLES). Neither role submits new
-                                                     requests through this flow (Staff's old submission form was
-                                                     removed 2026-08-27; Administrator never had one) — the
-                                                     submitter-side routes (POST /api/requests, PATCH .../edit, POST
-                                                     .../submit, DELETE, POST .../withdraw) stay requireRequester
-                                                     (Auth. Personnel/potential_partner, plus Administrator for
-                                                     historical reasons — neither Staff nor a real submission UI use it).
-                                                   - Document Requests: Administrator and Staff share the same full
-                                                     Fulfill/Reject authority (PATCH /api/document-requests/:id,
-                                                     POST .../documents, and the print/PDF routes are all
-                                                     requireStaffAccess/requireAuth + canAccessDocumentRequest, which
-                                                     treats both roles as universal reviewers). Only
-                                                     Administrator/Auth. Personnel/potential_partner ever submit one
-                                                     (requireRequester) — Staff was never part of that and still isn't.
-                                                   - Reports & Analytics: Administrator and Staff share the exact same
-                                                     Reports page (/staff/reports), including the Custom Report
-                                                     Builder, comparisons, PDF/Excel export, and DSS/Strategic
-                                                     Insights (every /api/reports/* route is requireStaffAccess).
-                                                     EXCEPTION: the Audit Trail tab (GET /api/activitylogs and its
-                                                     PDF/Excel export) scopes Staff to only their own logged actions
-                                                     by email (activityLogFilterFor) — Administrator alone sees every
-                                                     record system-wide. Enforced at the database query level, not
-                                                     hidden in the UI.
-                                                   - Notifications: Administrator and Staff share the exact same
-                                                     Notifications page (/staff/notifications) and its one API call
-                                                     (GET /api/notifications, opened to requireAuth 2026-08-27) — but
-                                                     the query is always scoped to the caller's own targetEmail, so
-                                                     data never crosses accounts. Staff is included in the
-                                                     Partnership/Document Request "new submission" broadcast
-                                                     (REQUEST_REVIEWER_ROLES) alongside Administrator, so both
-                                                     reviewer roles are notified the same way.
-                                                   - Settings: "Settings" below is each role's own account settings
-                                                     (Personal Details + Change Password), genuinely Full for
-                                                     everyone. Admin Settings' Integrations tab (org-wide Google
-                                                     Calendar connection) is a separate, Administrator-only
-                                                     capability — see the dedicated row below. */ %>
+                                            <% /* Re-audited 2026-09-20 against the gating middleware on every page route
+                                                   (requireAdmin / requirePersonnel / requirePartner / requireStaffAccess /
+                                                   requireUploader / requireRequester / requireAuth, denyDepartmentPage) and the
+                                                   API route each page calls. Changes since the 2026-08-27 audit that this reflects:
+                                                   - Calendar: create/edit/delete is requireStaffAccess (Administrator AND CIRL Staff,
+                                                     since 2026-09-14). College Staff/Partner view it and JOIN meetings they are invited
+                                                     to (POST /api/calendarevents/:id/join, checked server-side); Administrator/CIRL
+                                                     Staff read the attendance list. The org-wide Google Calendar connection stays
+                                                     requireAdmin.
+                                                   - Dashboard: College Staff and Partner have none (/personnel/dashboard and
+                                                     /partner/dashboard only redirect to Monitoring).
+                                                   - Document Library: the pages are closed to College Staff (denyDepartmentPage) and
+                                                     Partner (/partner/documents redirects). Administrator/CIRL Staff browse their own
+                                                     uploads and may open any request attachment (GET /uploads/documents/:filename).
+                                                   - Notifications: College Staff and Partner keep the header bell (own notifications)
+                                                     but not the Notifications page.
+                                                   - Requests: College Staff has Document Requests only; Partner has Partnership Requests
+                                                     plus "Submission Of MOA/MOU" (which uses the Document Request endpoints).
+                                                     POST /api/requests is still requireRequester, i.e. open to College Staff at the API
+                                                     level even though its page was removed - noted in the table, not changed here.
+                                                   - Reports: Administrator and CIRL Staff (requireStaffAccess); Audit Trail scoped to
+                                                     the caller for CIRL Staff (activityLogFilterFor).
+                                                   - User Management: requireStaffAccess, but CIRL Staff can never create, edit or
+                                                     delete an Administrator account or grant the Administrator role.
+                                                   Each cell carries a level: full (green), scoped (blue: own records / view only /
+                                                   submit only / join only) or none (red). */ %>
+                                            <% var F = function (t) { return { t: t, l: 'full' }; },
+                                                   S = function (t) { return { t: t, l: 'scoped' }; },
+                                                   N = function (t) { return { t: t || 'No', l: 'none' }; }; %>
                                             <% var perms = [
-                                                ['Dashboard',              'Full', 'Full',        'Full',        'Full'],
-                                                ['Calendar',               'Full', 'View Only',   'View Only',   'View Only'],
-                                                ['Monitoring',             'Full', 'Own Only',    'Own Only',    'Full'],
-                                                ['Registry',               'Full (CRUD)', 'No',          'No',          'Full (CRUD)'],
-                                                ['Document Library',       'Own + Review Attachments', 'Own Only', 'Own Only', 'Own + Review Attachments'],
-                                                ['User Management',        'Full', 'No',          'No',          'Full (except Administrator accounts)'],
-                                                ['Partnership Requests',   'Full (Review/Approve/Reject)', 'Submit Only', 'Submit Only', 'Full (Review/Approve/Reject)'],
-                                                ['Document Requests',      'Full (Review/Fulfill/Reject)', 'Submit Only', 'Submit Only', 'Full (Review/Fulfill/Reject)'],
-                                                ['Notifications',          'Own Only', 'Own Only', 'Own Only', 'Own Only'],
-                                                ['Reports & Analytics',    'Full', 'No',          'No',          'Full, Own Audit Trail Only'],
-                                                ['Settings (own account)', 'Full', 'Full',        'Full',        'Full'],
-                                                ['Admin Settings (Integrations)', 'Full', 'No', 'No', 'No'],
+                                                { feature: 'Dashboard', admin: F('Full'), college: N(), partner: N(), staff: F('Full'),
+                                                  note: 'College Staff and Partner have no Dashboard; they land on Monitoring.' },
+                                                { feature: 'Calendar', admin: F('Full (create / edit / delete)'), college: S('View Only'), partner: S('View Only'), staff: F('Full (create / edit / delete)'),
+                                                  note: 'Only Administrator and CIRL Staff manage events. Everyone sees just the events that are public or name them; Administrator sees all.' },
+                                                { feature: 'Meetings (invitations &amp; attendance)', admin: F('Full (invite, see who joined)'), college: S('Join When Invited'), partner: S('Join When Invited'), staff: F('Full (invite, see who joined)'),
+                                                  note: 'Invitations are e-mailed by Google Calendar once it is connected. Join opens at the meeting start and is checked on the server, which records the join time.' },
+                                                { feature: 'Monitoring', admin: F('Full'), college: S('Own Only'), partner: S('Own Only'), staff: F('Full'),
+                                                  note: 'Administrator and CIRL Staff: partnership overview and registry. College Staff and Partner: only their own submitted requests.' },
+                                                { feature: 'Registry (inside Monitoring)', admin: F('Full (CRUD)'), college: N(), partner: N(), staff: F('Full (CRUD)'),
+                                                  note: 'Add, edit, renew and delete partnerships.' },
+                                                { feature: 'Document Library', admin: S('Own + Review Attachments'), college: N(), partner: N(), staff: S('Own + Review Attachments'),
+                                                  note: 'The library lists a user\'s own uploads; reviewers can also open any request attachment. College Staff and Partner have no library page, but files they submit are still archived for review.' },
+                                                { feature: 'User Management', admin: F('Full'), college: N(), partner: N(), staff: S('Full (except Administrator accounts)'),
+                                                  note: 'CIRL Staff cannot create, edit or delete an Administrator account, or grant the Administrator role.' },
+                                                { feature: 'Partnership Requests', admin: F('Full (Review / Approve / Reject)'), college: N(), partner: S('Submit Only'), staff: F('Full (Review / Approve / Reject)'),
+                                                  note: 'Partners submit and track their own. College Staff has no Partnership Request page (the submit API itself is still open to the role).' },
+                                                { feature: 'Document Requests', admin: F('Full (Review / Fulfill / Reject)'), college: S('Submit Only'), partner: S('Submit MOA/MOU Only'), staff: F('Full (Review / Fulfill / Reject)'),
+                                                  note: 'Partners use the &ldquo;Submission Of MOA/MOU&rdquo; form. Reviewers get the printable form and PDF.' },
+                                                { feature: 'Notifications', admin: S('Own Only'), college: S('Bell Only (own)'), partner: S('Bell Only (own)'), staff: S('Own Only'),
+                                                  note: 'Always the user\'s own notifications. College Staff and Partner have the header bell but no Notifications page.' },
+                                                { feature: 'Reports &amp; Analytics', admin: F('Full'), college: N(), partner: N(), staff: S('Full, Own Audit Trail Only'),
+                                                  note: 'Audit Trail: Administrator sees every record; CIRL Staff sees only their own actions.' },
+                                                { feature: 'Settings (own account)', admin: F('Full'), college: F('Full'), partner: F('Full'), staff: F('Full'),
+                                                  note: 'Personal details (Partner: organization profile) and password.' },
+                                                { feature: 'Google Calendar connection (Admin Settings)', admin: F('Full'), college: N(), partner: N(), staff: N(),
+                                                  note: 'Only Administrator connects, checks or disconnects the organization\'s Google account.' }
                                             ]; %>
-                                            <% function permBadge(v){
-                                                if (v === 'Full') return '<span class="badge bg-success-subtle text-success"><i class="ri-check-double-line me-1"></i>Full</span>';
-                                                if (v === 'No') return '<span class="badge bg-danger-subtle text-danger"><i class="ri-close-line me-1"></i>No</span>';
-                                                return '<span class="badge bg-info-subtle text-info"><i class="ri-shield-check-line me-1"></i>' + v + '</span>';
+                                            <% function permBadge(c){
+                                                if (c.l === 'full') return '<span class="badge bg-success-subtle text-success"><i class="ri-check-double-line me-1"></i>' + c.t + '</span>';
+                                                if (c.l === 'none') return '<span class="badge bg-danger-subtle text-danger"><i class="ri-close-line me-1"></i>' + c.t + '</span>';
+                                                return '<span class="badge bg-info-subtle text-info"><i class="ri-shield-check-line me-1"></i>' + c.t + '</span>';
                                             } %>
                                             <% perms.forEach(function(p){ %>
                                             <tr>
-                                                <td class="fw-medium"><%= p[0] %></td>
-                                                <td class="text-center"><%- permBadge(p[1]) %></td>
-                                                <td class="text-center"><%- permBadge(p[2]) %></td>
-                                                <td class="text-center"><%- permBadge(p[3]) %></td>
-                                                <td class="text-center"><%- permBadge(p[4]) %></td>
+                                                <td class="fw-medium"><%- p.feature %></td>
+                                                <td class="text-center"><%- permBadge(p.admin) %></td>
+                                                <td class="text-center"><%- permBadge(p.college) %></td>
+                                                <td class="text-center"><%- permBadge(p.partner) %></td>
+                                                <td class="text-center"><%- permBadge(p.staff) %></td>
+                                                <td class="text-muted fs-12"><%- p.note %></td>
                                             </tr>
                                             <% }); %>
                                         </tbody>
@@ -222,7 +188,7 @@
                                 </div>
                                 <div class="p-3 border-top">
                                     <span class="badge bg-success-subtle text-success me-2"><i class="ri-check-double-line me-1"></i>Full</span>
-                                    <span class="badge bg-info-subtle text-info me-2"><i class="ri-shield-check-line me-1"></i>Scoped (own records / view only / submit only)</span>
+                                    <span class="badge bg-info-subtle text-info me-2"><i class="ri-shield-check-line me-1"></i>Scoped (own records / view only / submit only / join only)</span>
                                     <span class="badge bg-danger-subtle text-danger"><i class="ri-close-line me-1"></i>No Access</span>
                                 </div>
                             </div>
