@@ -74,7 +74,7 @@ describe('pages subscribe to live updates and use the shared helper', () => {
   test('Partner Monitoring / College Staff Monitoring: counters, rows and the renewal card re-read on live updates; no page reload', () => {
     const partner = read('views', 'potential_partner', 'partner_monitoring.ejs');
     const college = read('views', 'auth. personnel', 'personnel_monitoring.ejs');
-    expect(partner).toContain("CIPRMS.live(['request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged']");
+    expect(partner).toContain("CIPRMS.live(['request.updated', 'request.statusChanged', 'documentRequest.updated', 'documentRequest.statusChanged', 'partnership.updated', 'partnership.statusChanged']");
     expect(college).toContain("CIPRMS.live(['documentRequest.updated', 'documentRequest.statusChanged'");
     expect(partner).not.toContain('location.reload');
     expect(college).not.toContain('location.reload');
