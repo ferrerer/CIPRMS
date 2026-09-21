@@ -1107,7 +1107,7 @@
         const by = escapeHtml(r.requestedBy || r.by || '—');
         const inst = escapeHtml(r.institution || r.inst || '—');
         const country = escapeHtml(r.country || '—');
-        const type = r.type || '—';
+        const type = r.isSubmission ? 'MOA/MOU Submission' : (r.type || '—');
         const date = r.date || '—';
         const status = r.status || 'Pending';
         const canAct = IS_ADMIN && (status === 'Pending' || status === 'Under Review');
@@ -1173,7 +1173,7 @@
           </div>
           <div class="col-sm-6">
             <p class="detail-label">Request Type</p>
-            <p class="detail-value mb-0">${r.isRenewal ? 'Renewal of Existing Partnership' : 'New Partnership'}</p>
+            <p class="detail-value mb-0">${r.isSubmission ? 'MOA/MOU Submission' : r.isRenewal ? 'Renewal of Existing Partnership' : 'New Partnership'}</p>
           </div>
           <div class="col-sm-6">
             <p class="detail-label">Requested By</p>
@@ -1640,7 +1640,8 @@
       // sourceRequestId). Renewal requests are unaffected — approving one
       // still directly extends the already-linked partnership as before.
       // (This one stays a normal page navigation: it opens a different page, the Registry form.)
-      if (decision === 'Approved' && !r.isRenewal) {
+      // A partner's MOA/MOU submission is not a request to create a partnership, so approving it just marks it approved.
+      if (decision === 'Approved' && !r.isRenewal && !r.isSubmission) {
         bootstrap.Modal.getInstance(document.getElementById('pr-modal'))?.hide();
         window.location.href = REGISTRY_BASE_PATH + '?fromRequest=' + r.id;
         return;

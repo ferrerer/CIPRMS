@@ -708,7 +708,8 @@ app.get('/api/partnerships', requireUploader, async (req, res) => {
 // and Reports pages so they never receive other organizations' registry data,
 // unlike the full /api/partnerships feed above.
 async function partnershipsOwnedBy(db, email) {
-  const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
+  // A MOA/MOU submission is a file the partner sends CIRL, not a partnership — approving one never links a registry row.
+  const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved', isSubmission: { $ne: true } }).toArray();
   const names = [...new Set(myApproved.map(r => r.institution).filter(Boolean))];
   if (names.length === 0) return [];
   const patterns = names.map(name => new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'));
@@ -782,7 +783,7 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, announce('request')
 
     // Ownership check — same institution-name match used by /api/partnerships/mine.
     const email = req.session.user ? req.session.user.email : '';
-    const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
+    const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved', isSubmission: { $ne: true } }).toArray();
     const myNames = new Set(myApproved.map(r => (r.institution || '').trim().toLowerCase()).filter(Boolean));
     const partnershipName = (partnership.inst || partnership.institution || '').trim().toLowerCase();
     if (!partnershipName || !myNames.has(partnershipName)) {
@@ -845,12 +846,19 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
   const {
     institution, country, type, nature, notes, requestedBy, isDraft,
     category, region, unit, startDate, endDate, attachmentLink,
-    isRenewal, renewalPartnershipId
+    isRenewal, renewalPartnershipId, isSubmission
   } = req.body;
 
-  const draft = isDraft === true;
+  // "Submission Of MOA/MOU" (Partner only): the partner sends CIRL their MOA/MOU file/notes. It is filed as a Partnership
+  // Request (so reviewers handle it under Partnership Requests/Submission, not Document Requests) but is not a request
+  // to create a partnership — no country/type/nature, never a draft, and approving it never touches the registry.
+  const submission = isSubmission === true && !!req.session.user && req.session.user.role === 'potential_partner';
+  const draft = isDraft === true && !submission;
   // Drafts are allowed to be incomplete — only a real submission requires the core fields.
-  if (!draft && (!institution || !country || !type || !nature)) {
+  if (submission && !(institution || '').trim()) {
+    return res.status(400).json({ error: 'Institution is required.' });
+  }
+  if (!draft && !submission && (!institution || !country || !type || !nature)) {
     return res.status(400).json({ error: 'Missing required fields: institution, country, type, nature.' });
   }
   // The Partner form offers only MOA and MOU (the only agreement types the partnership registry accepts —
@@ -862,11 +870,13 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
   try {
     const db = getDb();
 
-    // Prevent duplicate active requests for the same institution (drafts don't count).
-    if (!draft && institution) {
+    // Prevent duplicate active requests for the same institution (drafts and MOA/MOU submissions don't count — a
+    // partner may send several files, and a pending submission must not block a real partnership request).
+    if (!draft && !submission && institution) {
       const existing = await db.collection('requests').findOne({
         institution,
-        status: { $in: ['Pending', 'Under Review'] }
+        status: { $in: ['Pending', 'Under Review'] },
+        isSubmission: { $ne: true }
       });
       if (existing) {
         return res.status(409).json({ error: 'A pending request for this institution already exists.' });
@@ -881,7 +891,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       institution: (institution || '').trim(),
       country: (country || '').trim(),
       type: type || '',
-      nature: (nature || '').trim(),
+      nature: submission ? 'MOA/MOU Submission' : (nature || '').trim(),
       category: category || '',
       region: region || '',
       unit: unit || '',
@@ -894,13 +904,16 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       status: draft ? 'Draft' : 'Pending',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       updatedAt: new Date().toISOString(),
+      ...(submission ? { isSubmission: true } : {}),
       ...(isRenewal ? { isRenewal: true, renewalPartnershipId: renewalPartnershipId } : {})
     };
 
     await db.collection('requests').insertOne(entry);
     if (!draft) {
       await logActivity(db, req.session.user, 'SUBMIT',
-        `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
+        submission
+          ? `MOA/MOU submission sent: ${entry.institution} by ${entry.requestedBy}`
+          : `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
 
       // Administrator and Staff — both review Partnership/Renewal Requests
       // (PATCH /api/requests/:id is requireStaffAccess-gated as of the
@@ -917,16 +930,20 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
         tag: isRenewal ? 'Renewal Request' : 'Partnership Request',
         icon: isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
         color: isRenewal ? 'info' : 'primary',
-        title: isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
-        desc: isRenewal
-          ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
-          : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
+        title: submission ? `New MOA/MOU submission: ${entry.institution}`
+          : isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
+        desc: submission
+          ? `${entry.requestedBy} sent a MOA/MOU submission for ${entry.institution}.`
+          : isRenewal
+            ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
+            : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
       }, role => prLinkForRole(role, nextId));
 
       // Give the submitter their own copy in the Document Library — skipped
       // when an OCR attachment already exists, since that upload was already
-      // archived there (avoids a duplicate entry for one submission).
-      if (['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
+      // archived there (avoids a duplicate entry for one submission). A MOA/MOU
+      // submission archives the file the partner attaches instead of a request record.
+      if (!submission && ['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
         await archiveRequestRecordToLibrary(db, {
           requestType: 'partnership', requestId: nextId, institution: entry.institution,
           type: entry.type, submittedBy: entry.requestedBy, submittedByEmail: entry.submittedByEmail
@@ -1000,6 +1017,7 @@ app.post('/api/requests/:id/submit', requireRequester, denyCollegeStaffPartnersh
     const existing = await db.collection('requests').findOne({
       institution: target.institution,
       status: { $in: ['Pending', 'Under Review'] },
+      isSubmission: { $ne: true },
       id: { $ne: id }
     });
     if (existing) {
@@ -1129,22 +1147,23 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
       const label = updated.isRenewal ? 'Renewal Request' : 'Partnership Request';
       const submitter = await db.collection('users').findOne({ email: updated.submittedByEmail });
       const link = prLinkForRole(submitter && submitter.role, id);
+      const what = updated.isSubmission ? 'MOA/MOU submission' : updated.isRenewal ? 'renewal request' : 'partnership request';
       let title, desc, icon, color;
       if (status === 'Under Review') {
         title = `Additional documents requested: ${updated.institution}`;
-        desc = `The Administrator has requested additional documents or information for your ${updated.isRenewal ? 'renewal' : 'partnership'} request (${updated.institution}).${notes ? ' Note: ' + notes : ''}`;
+        desc = `The Administrator has requested additional documents or information for your ${what} (${updated.institution}).${notes ? ' Note: ' + notes : ''}`;
         icon = 'ri-file-add-line'; color = 'warning';
       } else {
-        title = `${label} ${status}: ${updated.institution}`;
+        title = `${updated.isSubmission ? 'MOA/MOU Submission' : label} ${status}: ${updated.institution}`;
         icon = status === 'Approved' ? 'ri-checkbox-circle-line' : 'ri-close-circle-line';
         color = status === 'Approved' ? 'success' : 'danger';
         desc = status === 'Approved'
           ? (updated.isRenewal
             ? `Your renewal request for ${updated.institution} has been approved. The partnership has been extended.`
-            : `Your partnership request for ${updated.institution} has been approved.`)
+            : `Your ${what} for ${updated.institution} has been approved.`)
           : (updated.isRenewal
             ? `Your renewal request for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`
-            : `Your partnership request for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
+            : `Your ${what} for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
       }
       await notifyUsers(db, [updated.submittedByEmail], { module: 'request', tag: label, icon, color, title, desc, link });
     }
@@ -1229,10 +1248,10 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
       let documentId = null, fileLink = null;
       if (req.file) {
         ({ documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
-          documentType: expandDocTypeLabel(target.type),
+          documentType: target.isSubmission ? 'MOA/MOU Submission' : expandDocTypeLabel(target.type),
           institution: target.institution,
           partner: target.institution,
-          title: `${target.type || 'Document'} – ${target.institution} (Request #${id})`
+          title: `${target.isSubmission ? 'MOA/MOU Submission' : (target.type || 'Document')} – ${target.institution} (Request #${id})`
         }, {
           uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
           uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
@@ -1249,10 +1268,15 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
         note, fileType: req.file ? req.file.mimetype : null, fileSize: req.file ? req.file.size : 0
       };
       const setFields = { updatedAt: new Date().toISOString() };
+      // The file that goes with a brand-new MOA/MOU submission is part of the submission itself: it is not a "revised
+      // draft", so it neither starts the review nor sends reviewers a second notification. Only the owner, only on a
+      // submission that has no document yet, and only when the page says it is the initial attachment.
+      const initialSubmissionFile = !!target.isSubmission && isOwner && req.body.initial === '1'
+        && !(Array.isArray(target.supportingDocuments) && target.supportingDocuments.length);
       // A new version puts the request back "in collaboration" — reuses the
       // existing Under Review status rather than inventing a new one (it
       // already means exactly this for Approve/Reject purposes too).
-      if (target.status === 'Pending') setFields.status = 'Under Review';
+      if (target.status === 'Pending' && !initialSubmissionFile) setFields.status = 'Under Review';
       await db.collection('requests').updateOne({ id }, { $push: { supportingDocuments: docRecord }, $set: setFields });
       const updated = await db.collection('requests').findOne({ id });
 
@@ -1277,7 +1301,7 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
           link: prLinkForRole(submitter && submitter.role, id),
           downloadLink: fileLink
         });
-      } else if (isOwner) {
+      } else if (isOwner && !initialSubmissionFile) {
         const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
         await notifyReviewers(db, reviewers, {
           module: 'request',
@@ -5305,7 +5329,7 @@ async function partnershipAudience(db, institution) {
   const staff = realtime.audience.roles(REQUEST_REVIEWER_ROLES);
   if (!institution) return staff;
   const pattern = new RegExp('^' + String(institution).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
-  const owners = await db.collection('requests').find({ status: 'Approved', institution: pattern }).project({ submittedByEmail: 1 }).toArray();
+  const owners = await db.collection('requests').find({ status: 'Approved', isSubmission: { $ne: true }, institution: pattern }).project({ submittedByEmail: 1 }).toArray();
   return realtime.audience.merge(staff, realtime.audience.emails(owners.map(o => o.submittedByEmail)));
 }
 

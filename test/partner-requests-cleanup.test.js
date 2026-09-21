@@ -1,7 +1,7 @@
 // Potential Partner: Requests ("Submission Of MOA/MOU"), Partnership Request form, Monitoring and Settings cleanup.
-// The Partner submission rides on the EXISTING document-request endpoints (create + optional file upload),
-// so notes-only, file/image-only and file+notes must all be accepted with no backend change — and nothing may
-// change for Administrator, CIRL Staff or College Staff.
+// The Partner submission is filed as a PARTNERSHIP REQUEST (POST /api/requests with isSubmission, then an optional
+// file upload on /api/requests/:id/documents), so notes-only, file/image-only and file+notes must all be accepted —
+// and it must never show up under Document Requests. Nothing may change for Administrator, CIRL Staff or College Staff.
 const request = require('supertest');
 const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
@@ -12,8 +12,12 @@ beforeAll(async () => { await connectDB(); });
 // here and deleted explicitly — otherwise each run would leave real-looking records in the shared database.
 const createdDocRequestIds = [];
 const track = res => { if (res && res.body && res.body.request) createdDocRequestIds.push(res.body.request.id); return res; };
+// Partnership-request submissions with empty notes are not swept by cleanupAll() (it matches on the test tag in notes).
+const createdRequestIds = [];
+const trackReq = res => { if (res && res.body && res.body.request) createdRequestIds.push(res.body.request.id); return res; };
 afterAll(async () => {
   if (createdDocRequestIds.length) await getDb().collection('documentrequests').deleteMany({ id: { $in: createdDocRequestIds } });
+  if (createdRequestIds.length) await getDb().collection('requests').deleteMany({ id: { $in: createdRequestIds } });
   // cleanupAll() does not sweep the profiles collection either; the "profile endpoint untouched" test below stores one
   await getDb().collection('profiles').deleteMany({ email: { $regex: '^jesttest\\.', $options: 'i' } });
   await cleanupAll();
@@ -67,34 +71,88 @@ describe('Partner → Requests page', () => {
     for (const id of ['f-inst', 'f-country', 'f-type', 'f-nature', 'f-start', 'f-end', 'f-notes']) expect(html).toContain(`id="${id}"`);
   });
 
-  test('client script keeps the notes-or-file rule and the two-step flow on the existing endpoints', () => {
-    expect(html).toContain("CIPRMS.api('/api/document-requests'");
-    expect(html).toContain("'/api/document-requests/' + id + '/documents'");
+  test('client script files the submission as a Partnership Request (not a Document Request), keeping the notes-or-file rule and the two-step flow', () => {
+    expect(html).toContain("CIPRMS.api('/api/requests'");
+    expect(html).toContain('isSubmission: true');
+    expect(html).toContain("'/api/requests/' + id + '/documents'");
+    expect(html).not.toContain('/api/document-requests');
     expect(html).toContain("if (!notes && !file && !moaPendingId)"); // needs a note OR a file — never both
   });
 });
 
-describe('Partner submission: notes only / file only / file + notes (existing endpoints, no backend change)', () => {
+describe('Partner submission: notes only / file only / file + notes (filed as a Partnership Request)', () => {
   let partner, agent;
   beforeAll(async () => { ({ agent, user: partner } = await agentFor('potential_partner')); });
 
-  const create = notes => agent.post('/api/document-requests').send({ institution: 'jesttest Partner University', documentTypes: [MOA_MOU_TYPE], notes }).then(track);
-  const stored = id => getDb().collection('documentrequests').findOne({ id });
+  const create = notes => agent.post('/api/requests').send({ institution: 'jesttest Partner University', notes, isSubmission: true }).then(trackReq);
+  const stored = id => getDb().collection('requests').findOne({ id });
 
-  test('NOTES ONLY (no file) is accepted and stored against the Partner', async () => {
+  test('NOTES ONLY (no file) is accepted, stored as a Partnership Request submission against the Partner', async () => {
     const res = await create('jesttest notes only: here is our MOA draft summary');
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     const doc = await stored(res.body.request.id);
     expect(doc.notes).toBe('jesttest notes only: here is our MOA draft summary');
-    expect(doc.documentType).toBe(MOA_MOU_TYPE);
-    expect(doc.requestedByEmail).toBe(partner.email);
+    expect(doc.isSubmission).toBe(true);
+    expect(doc.nature).toBe(MOA_MOU_TYPE);
+    expect(doc.status).toBe('Pending');
+    expect(doc.submittedByEmail).toBe(partner.email);
     expect(doc.supportingDocuments || []).toHaveLength(0);
+  });
+
+  test('it lands in Partnership Requests for reviewers and NOT in Document Requests', async () => {
+    const res = await create('jesttest routes to partnership requests');
+    const id = res.body.request.id;
+    const { agent: admin } = await agentFor('Administrator');
+    expect((await admin.get('/api/requests')).body.some(r => r.id === id && r.isSubmission === true)).toBe(true);
+    const docs = (await admin.get('/api/document-requests')).body;
+    expect(docs.some(r => r.documentType === MOA_MOU_TYPE && r.notes === 'jesttest routes to partnership requests')).toBe(false);
+    expect((await agent.get('/api/requests/mine')).body.some(r => r.id === id)).toBe(true);
+  });
+
+  test('only a Partner can file a submission; a College Staff account sending isSubmission just cannot use the flag', async () => {
+    const { agent: college } = await agentFor('Auth. Personnel');
+    const res = await college.post('/api/requests').send({ institution: 'jesttest College Org', notes: 'jesttest college flag', isSubmission: true });
+    // the Partnership Request endpoint is closed to College Staff altogether
+    expect(res.status).toBe(403);
+  });
+
+  test('an institution is still required, and pending submissions never block a real Partnership Request or another submission', async () => {
+    expect((await agent.post('/api/requests').send({ institution: '  ', notes: 'jesttest no inst', isSubmission: true })).status).toBe(400);
+    const first = await create('jesttest submission one');
+    const second = await create('jesttest submission two');
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    const real = await agent.post('/api/requests').send({ institution: 'jesttest Partner University', country: 'Japan', type: 'MOA', nature: 'Research', notes: 'jesttest real request while submissions pending' }).then(trackReq);
+    expect(real.status).toBe(200);
+  });
+
+  test('approving a submission only marks it approved — it is not linked to any registry partnership', async () => {
+    const made = await create('jesttest approve me');
+    const { agent: admin } = await agentFor('Administrator');
+    const res = await admin.patch('/api/requests/' + made.body.request.id).send({ status: 'Approved' });
+    expect(res.status).toBe(200);
+    expect(res.body.request.status).toBe('Approved');
+    expect(res.body.request.linkedPartnershipId).toBeUndefined();
+    // an approved submission must not make the Partner the "owner" of a registry partnership with the same institution name
+    const owned = await agent.get('/api/partnerships/mine');
+    expect(owned.body.some(p => (p.inst || p.institution) === 'jesttest Partner University')).toBe(false);
+  });
+
+  test('the file that goes with a new submission does not start a review or re-notify; a later upload does', async () => {
+    const made = await create('jesttest initial file');
+    const id = made.body.request.id;
+    const first = await agent.post('/api/requests/' + id + '/documents').field('initial', '1').attach('document', PNG_HEADER, 'first.png');
+    expect(first.status).toBe(200);
+    expect((await stored(id)).status).toBe('Pending');
+    const later = await agent.post('/api/requests/' + id + '/documents').attach('document', PNG_HEADER, 'second.png');
+    expect(later.status).toBe(200);
+    expect((await stored(id)).status).toBe('Under Review');
   });
 
   test('FILE/IMAGE + NOTES is accepted; the file is archived through the normal upload workflow', async () => {
     const made = await create('jesttest file + notes');
-    const up = await agent.post('/api/document-requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'signed-moa.png');
+    const up = await agent.post('/api/requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'signed-moa.png');
     expect(up.status).toBe(200);
     const doc = await stored(made.body.request.id);
     expect(doc.notes).toBe('jesttest file + notes');
@@ -102,14 +160,14 @@ describe('Partner submission: notes only / file only / file + notes (existing en
     expect(doc.supportingDocuments[0].originalFilename).toBe('signed-moa.png');
     expect(doc.supportingDocuments[0].uploaderRole).toBe('potential_partner');
     // archived into the Document Library exactly like every other upload
-    const lib = await getDb().collection('documents').findOne({ requestId: made.body.request.id, requestType: 'document' });
+    const lib = await getDb().collection('documents').findOne({ requestId: made.body.request.id, requestType: 'partnership' });
     expect(lib).not.toBeNull();
   });
 
   test('FILE/IMAGE ONLY (empty notes) is accepted', async () => {
     const made = await create('');
     expect(made.status).toBe(200);
-    const up = await agent.post('/api/document-requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'only-a-file.png');
+    const up = await agent.post('/api/requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'only-a-file.png');
     expect(up.status).toBe(200);
     const doc = await stored(made.body.request.id);
     expect(doc.notes).toBe('');
@@ -118,23 +176,23 @@ describe('Partner submission: notes only / file only / file + notes (existing en
 
   test('the upload step alone needs a file OR a note — a completely empty upload is still rejected (400)', async () => {
     const made = await create('jesttest empty-upload probe');
-    const empty = await agent.post('/api/document-requests/' + made.body.request.id + '/documents').send({});
+    const empty = await agent.post('/api/requests/' + made.body.request.id + '/documents').send({});
     expect(empty.status).toBe(400);
     expect(empty.body.error).toMatch(/file, a note, or both/i);
   });
 
   test('a disallowed file type is still refused', async () => {
     const made = await create('jesttest bad file probe');
-    const bad = await agent.post('/api/document-requests/' + made.body.request.id + '/documents').attach('document', Buffer.from('not an image'), 'notes.exe');
+    const bad = await agent.post('/api/requests/' + made.body.request.id + '/documents').attach('document', Buffer.from('not an image'), 'notes.exe');
     expect(bad.status).toBe(400);
   });
 
   test('the SAME submission is visible to reviewers (Administrator and CIRL Staff) with its notes and file — review behaviour is unchanged', async () => {
     const made = await create('jesttest visible to reviewers');
-    await agent.post('/api/document-requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'for-reviewers.png');
+    await agent.post('/api/requests/' + made.body.request.id + '/documents').attach('document', PNG_HEADER, 'for-reviewers.png');
     for (const role of ['Administrator', 'Staff']) {
       const { agent: reviewer } = await agentFor(role);
-      const list = (await reviewer.get('/api/document-requests')).body;
+      const list = (await reviewer.get('/api/requests')).body;
       const mine = list.find(r => r.id === made.body.request.id);
       expect(mine).toBeDefined();
       expect(mine.notes).toBe('jesttest visible to reviewers');
@@ -169,6 +227,15 @@ describe('Partner → Monitoring', () => {
     const head = html.slice(html.indexOf('id="pr-monitor-body"') - 900, html.indexOf('id="pr-monitor-body"'));
     expect(head).toContain('<th>Administrator</th><th class="text-end">Actions</th>');
     expect(html).not.toContain('colspan="9"'); // the empty/error rows match the (now 8-column) table
+  });
+
+  test('a "My MOA/MOU Submissions" record sits on the page and is kept out of the Partnership Requests table', () => {
+    expect(textOf(html)).toContain('My MOA/MOU Submissions');
+    expect(html).toContain('id="moa-monitor-body"');
+    expect(html).toContain('function renderMoaTable');
+    expect(html).toContain('function partnershipOnly');
+    // earlier submissions (saved as Document Requests before the change) stay visible as read-only history
+    expect(html).toContain("'/api/document-requests/mine'");
   });
 
   test('the rest of the page is intact: Partnership Requests, Approval Progress, Renewal Status, stat cards and the View Draft modal', () => {
