@@ -474,8 +474,22 @@ function loadPartnerships(live) {
         locationResolvedName: p.locationResolvedName, locationResolvedAt: p.locationResolvedAt
       };
     });
-    if (live) { applyFilter(); } else { filtered = partnerships.slice(); buildGrid(); }
+    if (live) { applyFilter(); } else { filtered = partnerships.slice(); if (!applyStatusFromQuery()) buildGrid(); }
   });
+}
+
+// Status pre-filter from the URL, e.g. the dashboard's Resource Optimization card
+// links to /lifecycle?status=Expired. Only a status the Status dropdown offers is
+// applied. Returns true when it filtered (applyFilter() has already rebuilt the grid).
+function applyStatusFromQuery() {
+  var st = new URLSearchParams(window.location.search).get('status');
+  var sel = document.getElementById('reg-status');
+  if (!st || !sel) return false;
+  var known = Array.prototype.some.call(sel.options, function(o) { return o.value === st; });
+  if (!known) return false;
+  sel.value = st;
+  applyFilter();
+  return true;
 }
 loadPartnerships(false);
 if (window.CIPRMS && CIPRMS.live) {

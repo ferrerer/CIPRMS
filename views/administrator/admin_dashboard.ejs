@@ -223,9 +223,9 @@
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-expansion"><%=
                                                                     insightExpansion %></p>
-                                                            <a href="<%= isStaffRole ? '/staff/reports' : '/reports' %>"
-                                                                class="btn btn-link text-info p-0 fw-medium">View Region
-                                                                Data <i
+                                                            <a href="<%= isStaffRole ? '/staff/requests' : '/partnership-requests' %>?status=Pending"
+                                                                class="btn btn-link text-info p-0 fw-medium">View Pending
+                                                                Requests <i
                                                                     class="ri-arrow-right-line align-middle ms-1"></i></a>
                                                         </div>
                                                     </div>
@@ -247,9 +247,9 @@
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-optimization">
                                                                 <%= insightOptimization %></p>
-                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>?status=Expired"
                                                                 class="btn btn-link text-success p-0 fw-medium">Review
-                                                                Inactive Partners <i
+                                                                Expired Partnerships <i
                                                                     class="ri-arrow-right-line align-middle ms-1"></i></a>
                                                         </div>
                                                     </div>

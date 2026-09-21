@@ -6969,11 +6969,11 @@ async function computeDashboardStats(db) {
   }
 
   // ── DSS: Expansion Opportunity ────────────────────────────────────────────
-  const openRequests = allRequests.filter(r => r.status === 'Pending' || r.status === 'Under Review');
+  const pendingRequests = allRequests.filter(r => r.status === 'Pending');
   let insightExpansion;
-  if (openRequests.length) {
+  if (pendingRequests.length) {
     const byCountry = {};
-    openRequests.forEach(r => { const c = r.country || 'an unspecified country'; byCountry[c] = (byCountry[c] || 0) + 1; });
+    pendingRequests.forEach(r => { const c = r.country || 'an unspecified country'; byCountry[c] = (byCountry[c] || 0) + 1; });
     const [topCountry, topCount] = Object.entries(byCountry).sort((a, b) => b[1] - a[1])[0];
     insightExpansion = `${topCount} pending request${topCount > 1 ? 's' : ''} target${topCount > 1 ? '' : 's'} partnerships in ${topCountry}. Consider prioritizing this region for new agreements.`;
   } else {

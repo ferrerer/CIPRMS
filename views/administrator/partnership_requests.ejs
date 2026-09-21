@@ -19,21 +19,23 @@
   <style>
     /* ── Hero Banner ── */
     .pr-hero {
-      background: linear-gradient(135deg, #405189 0%, #0ab39c 100%);
+      background: var(--vz-card-bg, #fff);
+      border: 1px solid var(--vz-border-color, #e9ecef);
       border-radius: 12px;
       padding: 1.4rem 1.75rem;
-      color: #fff;
+      color: var(--vz-body-color, #212529);
       margin-bottom: 1.5rem;
       display: flex;
       align-items: center;
       gap: 1rem;
-      box-shadow: 0 4px 20px rgba(64, 81, 137, .25);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .05);
     }
 
     .pr-hero-icon {
       width: 54px;
       height: 54px;
-      background: rgba(255, 255, 255, .18);
+      background: #eef1fb;
+      color: #405189;
       border-radius: 12px;
       display: flex;
       align-items: center;
@@ -51,7 +53,7 @@
     .pr-hero p {
       margin: .15rem 0 0;
       font-size: .82rem;
-      opacity: .85;
+      color: var(--vz-secondary-color, #6c757d);
     }
 
     /* ── Stat cards ── */
@@ -114,9 +116,14 @@
 
     .section-tab.active {
       border-color: #405189;
-      background: linear-gradient(135deg, #405189 0%, #5a72d4 100%);
+      background: var(--vz-card-bg, #fff);
+      color: #405189;
+      box-shadow: 0 4px 14px rgba(64,81,137,.18);
+    }
+
+    .section-tab.active .tab-count {
+      background: #405189;
       color: #fff;
-      box-shadow: 0 4px 14px rgba(64,81,137,.3);
     }
 
     .section-tab-icon {
@@ -138,7 +145,7 @@
     }
 
     .section-tab.active .section-tab-icon {
-      background: rgba(255,255,255,.18);
+      background: #405189;
       color: #fff;
     }
 
@@ -153,9 +160,15 @@
       color: #0ab39c;
     }
     .section-tab[id="tab-dr"].active {
-      background: linear-gradient(135deg, #0ab39c 0%, #17c653 100%);
+      background: var(--vz-card-bg, #fff);
+      color: #0ab39c;
       border-color: #0ab39c;
-      box-shadow: 0 4px 14px rgba(10,179,156,.3);
+      box-shadow: 0 4px 14px rgba(10,179,156,.18);
+    }
+    .section-tab[id="tab-dr"].active .section-tab-icon,
+    .section-tab[id="tab-dr"].active .tab-count {
+      background: #0ab39c;
+      color: #fff;
     }
 
     .section-tab-body {
@@ -285,6 +298,15 @@
       background: #1e2533;
       color: #ced4da;
       border-color: rgba(255, 255, 255, .12);
+    }
+    [data-bs-theme="dark"] .section-tab.active {
+      background: #1e2533;
+      color: #7094f5;
+      border-color: #405189;
+    }
+    [data-bs-theme="dark"] .section-tab[id="tab-dr"].active {
+      color: #3bc2b0;
+      border-color: #0ab39c;
     }
     [data-bs-theme="dark"] .section-tab:hover {
       background: #262d3d;
@@ -1779,6 +1801,17 @@
       }
     }
 
+    // Status pre-filter from the URL, e.g. the dashboard's Expansion Opportunity
+    // card links to /partnership-requests?status=Pending. Only known statuses apply.
+    function applyStatusFromQuery() {
+      const status = new URLSearchParams(window.location.search).get('status');
+      if (!status) return;
+      const btn = Array.from(document.querySelectorAll('#pr-filter-tabs .btn')).find(b => b.textContent.trim() === status);
+      if (!btn) return;
+      switchSection('pr');
+      setPRStatusFilter(status, btn);
+    }
+
     /* ─── LIVE UPDATES ───
        Another reviewer, or the requester, changed a request: re-read both lists from the server (the source of truth), redraw
        the tables and counters, flash the rows that actually changed, and refresh a detail modal that is open on one of them.
@@ -1825,6 +1858,7 @@
       await Promise.all([loadPR(), loadDR()]);
       updateStats();
       openFromQuery();
+      applyStatusFromQuery();
       if (window.CIPRMS && CIPRMS.live) {
         CIPRMS.live(['request.updated', 'request.statusChanged', 'documentRequest.updated', 'documentRequest.statusChanged'], refreshLive, { debounce: 250 });
       }
