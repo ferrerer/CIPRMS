@@ -5309,12 +5309,14 @@ async function partnershipAudience(db, institution) {
   return realtime.audience.merge(staff, realtime.audience.emails(owners.map(o => o.submittedByEmail)));
 }
 
-// Mirrors GET /api/calendarevents: Administrator sees every event; everybody else sees an event with no recipient list, one
-// that names them, or one they created.
+// Mirrors GET /api/calendarevents: Administrator sees every event; CIRL Staff also see an event with no recipient list, one
+// that names them, or one they created; College Staff and Partners only see an event that names them or is for "All Users".
 function calendarAudience(ev) {
   if (!ev) return realtime.audience.roles(['Administrator']);
-  if (!Array.isArray(ev.recipientEmails)) return realtime.audience.all();
-  return realtime.audience.merge(realtime.audience.roles(['Administrator']), realtime.audience.emails([...ev.recipientEmails, ev.createdByEmail]));
+  if (ev.forEveryone) return realtime.audience.all();
+  const invited = [...(ev.recipientEmails || []), ...(ev.participantEmails || []), ...(ev.googleAttendeeEmails || []), ev.createdByEmail];
+  const staffRoles = Array.isArray(ev.recipientEmails) ? ['Administrator'] : ['Administrator', 'Staff'];
+  return realtime.audience.merge(realtime.audience.roles(staffRoles), realtime.audience.emails(invited));
 }
 
 async function publishChange(topic, req, body, prior) {
@@ -5867,16 +5869,32 @@ function calendarEventView(ev, user, now) {
 // feature, and events created with no/"all" recipients, carry no
 // `recipientEmails` field at all, so they stay visible to everyone exactly as
 // before (closes the "existing calendar functionality unaffected" requirement).
+//
+// College Staff and Partners are stricter: an event with no recipient list is NOT for them. They only see an event that
+// names them (recipient / participant / Google attendee) or one explicitly created for "All Users" (forEveryone).
+const INVITE_ONLY_CALENDAR_ROLES = ['Auth. Personnel', 'potential_partner'];
+function calendarFeedFilter(user) {
+  if (user.role === 'Administrator') return {};
+  if (INVITE_ONLY_CALENDAR_ROLES.includes(user.role)) {
+    const mine = [...new Set([user.email, meetingTime.emailKey(user.email)].filter(Boolean))];
+    return { $or: [
+      { forEveryone: true },
+      { recipientEmails: { $in: mine } },
+      { participantEmails: { $in: mine } },
+      { googleAttendeeEmails: { $in: mine } },
+      { createdByEmail: { $in: mine } }
+    ] };
+  }
+  // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
+  // meeting they scope to other people, so without this their own event vanished from their calendar the
+  // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
+  return { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+}
 app.get('/api/calendarevents', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const user = req.session.user;
-    const filter = user.role === 'Administrator'
-      ? {}
-      // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
-      // meeting they scope to other people, so without this their own event vanished from their calendar the
-      // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
-      : { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+    const filter = calendarFeedFilter(user);
     const docs = await db.collection('calendarevents').find(filter).toArray();
     const now = new Date();
     res.json(docs.map(d => calendarEventView(d, user, now)));
@@ -6087,6 +6105,9 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     const base = {
       ...fields,
       ...(isScoped ? { recipientEmails: targetEmails } : {}),
+      // Explicit "All Users" marker: College Staff and Partners only see unscoped events that carry it
+      // (an event created with no recipients at all is internal, not for them).
+      ...(Array.isArray(rawRecipients) && rawRecipients.includes('all') ? { forEveryone: true } : {}),
       // Every invited CIPRMS user (visibility for a scoped event is
       // recipientEmails; this is the always-populated "who was invited" list
       // that the Join control and the attendance view rely on).

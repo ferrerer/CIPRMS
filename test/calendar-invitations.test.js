@@ -424,6 +424,19 @@ describe('Join control — College Staff and Partner', () => {
     expect(await feedEvent(agents.partnerB, startedMeeting.id)).toBeUndefined();
   });
 
+  test('College Staff and Partners only see events that name them or are for All Users — an event with no recipients is not for them', async () => {
+    const now = Date.now();
+    const noRecipients = (await createEvent(agents.admin, { title: title('No Recipients'), start: manilaWall(now + 2 * HOUR), recipients: [] })).body.event;
+    const forAll = (await createEvent(agents.admin, { title: title('For All Users'), start: manilaWall(now + 3 * HOUR), recipients: ['all'] })).body.event;
+    for (const who of ['collegeA', 'partnerA']) {
+      expect(await feedEvent(agents[who], noRecipients.id)).toBeUndefined();
+      expect(await feedEvent(agents[who], forAll.id)).toBeDefined();
+      expect(await feedEvent(agents[who], futureMeeting.id)).toBeDefined(); // invited by e-mail
+    }
+    // Administrator still sees everything, including the internal no-recipient event.
+    expect(await feedEvent(agents.admin, noRecipients.id)).toBeDefined();
+  });
+
   test('joining requires a session, an existing event, and a Meeting-type event', async () => {
     expect((await request(app).post(`/api/calendarevents/${startedMeeting.id}/join`).send()).status).toBe(302);
     expect((await agents.collegeA.post('/api/calendarevents/99999999/join').send()).status).toBe(404);
