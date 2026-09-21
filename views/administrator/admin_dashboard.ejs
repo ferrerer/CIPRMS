@@ -472,6 +472,9 @@
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
         }).addTo(map);
 
+        // Markers live in their own layer so a live refresh can clear and redraw them.
+        const markerLayer = L.layerGroup().addTo(map);
+
         const STATUS_COLOR = { active: '#17c653', expiring: '#f7b84b', expired: '#f06548' };
         const STATUS_RING = { active: '#d1fae5', expiring: '#fef3c7', expired: '#fee2e2' };
         const STATUS_LABEL = { active: 'Active', expiring: 'Expiring Soon', expired: 'Expired' };
@@ -575,6 +578,7 @@
             // Group by identical coordinates (exact and approximate kept apart) so several
             // partnerships in one place become ONE marker whose popup lists them all,
             // instead of markers stacked on top of each other.
+            markerLayer.clearLayers();
             const groups = new Map();
             let unmapped = 0, approxCount = 0, onMap = 0;
             partnerships.forEach(function (p) {
@@ -601,7 +605,7 @@
                     marker = L.marker([g.lat, g.lng], { icon: makeGroupIcon(g.items.length, worst, g.approx) })
                         .bindPopup(groupPopupHtml(g.items, g.approx), { maxWidth: 280 });
                 }
-                marker.addTo(map);
+                marker.addTo(markerLayer);
             });
 
             // Coverage note: what is on the map, what is approximate, and how many
@@ -685,7 +689,11 @@
             return isNaN(d) ? (s || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
+        // The charts are rebuilt on every live refresh, so the previous ones are destroyed first.
+        var dashCharts = [];
         function renderCharts(stats) {
+            dashCharts.forEach(function (c) { try { c.destroy(); } catch (_) { /* already gone */ } });
+            dashCharts = [];
             var typeChart = new ApexCharts(document.getElementById('type-status-chart'), {
                 chart: { type: 'bar', height: 300, toolbar: { show: false } },
                 plotOptions: { bar: { horizontal: false, columnWidth: '45%', borderRadius: 4 } },
@@ -703,6 +711,7 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             typeChart.render();
+            dashCharts.push(typeChart);
 
             // byCountry (unlike byInstitution) is never capped server-side —
             // see /api/partnerships/stats in cirl.js — so countryTotal here is
@@ -842,6 +851,7 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             countryChart.render();
+            dashCharts.push(countryChart);
 
             const unitEntries = Object.entries(stats.byUnit || {}).sort((a, b) => b[1] - a[1]);
             var collegeChart = new ApexCharts(document.getElementById('college-chart'), {
@@ -854,29 +864,45 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             collegeChart.render();
+            dashCharts.push(collegeChart);
         }
 
         // ── DSS & Expiring table are server-side rendered — no loading state. ──
         // Only the charts, map, and top-countries list require client-side JS.
 
-        // 1. Stats API → charts only (counters already rendered by EJS)
-        fetch('/api/partnerships/stats')
-            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(stats => { renderCharts(stats); })
-            .catch(err => {
-                console.error('Stats API failed:', err);
-                renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
-            });
+        // Loads (and, on a live update, reloads) everything the page draws client-side: the charts, the map and the
+        // Top Partner Countries list. `no-store` so a stale cached copy can never be shown. Resolves false when a
+        // background refresh failed, so CIPRMS.live retries it later; a failed refresh never wipes what is on screen.
+        function loadDashboardData(live) {
+            // 1. Stats API → charts only (counters already rendered by EJS)
+            const statsDone = fetch('/api/partnerships/stats', { cache: 'no-store' })
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(stats => { renderCharts(stats); return true; })
+                .catch(err => {
+                    console.error('Stats API failed:', err);
+                    if (!live) renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
+                    return false;
+                });
 
-        // 2. Partnerships list → map + top countries only
-        fetch('/api/partnerships')
-            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(partnerships => {
-                const list = Array.isArray(partnerships) ? partnerships : [];
-                renderMap(list);
-                renderTopCountries(list);
-            })
-            .catch(err => { console.error('Map data failed:', err); });
+            // 2. Partnerships list → map + top countries only
+            const listDone = fetch('/api/partnerships', { cache: 'no-store' })
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(partnerships => {
+                    const list = Array.isArray(partnerships) ? partnerships : [];
+                    renderMap(list);
+                    renderTopCountries(list);
+                    return true;
+                })
+                .catch(err => { console.error('Map data failed:', err); return false; });
+
+            return Promise.all([statsDone, listDone]).then(r => r.indexOf(false) === -1);
+        }
+        loadDashboardData(false);
+
+        // Live updates: a partnership was added, edited, renewed or deleted (Monitoring, Requests, another admin…).
+        if (window.CIPRMS && CIPRMS.live) {
+            CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function () { return loadDashboardData(true); }, { debounce: 250 });
+        }
 
     </script>
 

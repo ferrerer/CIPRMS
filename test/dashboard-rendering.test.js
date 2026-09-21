@@ -34,6 +34,18 @@ describe('Dashboard "Top Partner Countries" widget (the Potential Partner dashbo
     expect(res.status).toBe(200);
     expect(res.text).toContain('id="top-countries-list"');
   });
+
+  test('the Top Partner Countries list, map and charts re-read the data on a live partnership update (they used to load once and go stale)', async () => {
+    for (const [role, path] of [['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']]) {
+      const agent = request.agent(app);
+      await loginAs(agent, await createTestUser({ role }));
+      const res = await agent.get(path);
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("CIPRMS.live(['partnership.updated', 'partnership.statusChanged']");
+      expect(res.text).toContain('function loadDashboardData');
+      expect(res.text).toContain("fetch('/api/partnerships', { cache: 'no-store' })");
+    }
+  });
 });
 
 // 2026-09-19: "Partnership by Country" (a DIFFERENT widget from "Top Partner
