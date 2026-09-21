@@ -5067,9 +5067,12 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     const { id: _clientId, _id: _clientMongoId, ...safeBody } = req.body;
     const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
-    // Unit/Department is optional — normalize to an empty string rather than
-    // storing it as undefined/missing when the admin leaves it blank.
-    const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(), password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
+    // Unit/Department, Institution and Position are optional — normalize to an empty string rather than
+    // storing them as undefined/missing when the admin leaves them blank. They are fixed at registration: the
+    // account owner cannot change them from Settings (only User Management edits them).
+    const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(),
+      institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
+      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
     await db.collection('users').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
     const { password: _, ...safeEntry } = entry; // don't return the password hash
@@ -5144,6 +5147,9 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     // to a trimmed string (never leave it as undefined/null in the update).
     if (updateData.unit !== undefined) {
       updateData.unit = (updateData.unit || '').trim();
+    }
+    for (const field of ['institution', 'position']) {
+      if (updateData[field] !== undefined) updateData[field] = typeof updateData[field] === 'string' ? updateData[field].trim() : '';
     }
 
     // Never let an admin lock everyone out: block deactivating your own account,
@@ -6504,44 +6510,60 @@ app.post('/api/google-calendar/disconnect', requireAdmin, async (req, res) => {
 });
 
 // ── MONGO-BACKED PROFILE STORES ───────────────────────────────────────────────
-// Admin profile GET
-app.get('/api/admin/profile', requireAdmin, async (req, res) => {
+// A request stores the requestor's name when it is created, so renaming an account in Settings would leave every
+// request they already submitted under the old name. Keep the account's own requests (matched by e-mail, the same
+// ownership key the routes use) in step with the new name. Only the requestor field is touched — never a reviewer's.
+async function propagateRequestorName(db, email, name) {
+  if (!email || !name) return;
+  await db.collection('requests').updateMany({ submittedByEmail: email }, { $set: { requestedBy: name } });
+  await db.collection('documentrequests').updateMany({ requestedByEmail: email }, { $set: { requestedBy: name } });
+}
+
+// Department/College, Institution/School and Designation/Position are set once, when the account is registered in User
+// Management (users.unit / users.institution / users.position), and cannot be changed from Settings. The Settings
+// profile endpoints therefore read them from the account itself and accept ONLY the person's own name.
+function registeredProfile(userDoc) {
+  if (!userDoc) return {};
+  return {
+    name: userDoc.name || '', email: userDoc.email || '',
+    dept: userDoc.unit || '', position: userDoc.position || '', institution: userDoc.institution || ''
+  };
+}
+
+async function readOwnProfile(req, res) {
   try {
     const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'admin' });
-    res.json(doc ? doc.profile : {});
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    res.json(registeredProfile(userDoc));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
 
-// Admin profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening): it is the authenticated identity, not an editable
-// profile field, and almost every ownership check in this app is keyed on
-// req.session.user.email. Any `email` in the request body is ignored — the
-// stored/returned profile always uses the real session email.
-app.post('/api/admin/profile', requireAdmin, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
+// Email is intentionally NOT accepted from the client (2026-09-06 security hardening): it is the authenticated
+// identity, not an editable profile field, and almost every ownership check in this app is keyed on
+// req.session.user.email. Any `email` — and any dept/position/institution — in the request body is ignored.
+async function saveOwnName(req, res) {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ error: 'Name is required.' });
   const email = req.session.user.email;
   try {
     const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'admin' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
-    // The per-request session sync above re-reads users.name, so the rename must
-    // be stored on the users document too — otherwise it reverts on the next page.
+    // The per-request session sync re-reads users.name, so the rename must be stored on the users document —
+    // otherwise it reverts on the next page.
     await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
+    await propagateRequestorName(db, email, name);
     req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    res.json({ success: true, profile: registeredProfile(userDoc) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
+
+// Admin profile GET / POST
+app.get('/api/admin/profile', requireAdmin, readOwnProfile);
+app.post('/api/admin/profile', requireAdmin, saveOwnName);
 
 // Admin password POST
 app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, res) => {
@@ -6570,40 +6592,9 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
   }
 });
 
-// Personnel profile GET
-app.get('/api/personnel/profile', requirePersonnel, async (req, res) => {
-  try {
-    const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'personnel' });
-    res.json(doc ? doc.profile : {});
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Personnel profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening) — see the identical note on /api/admin/profile above.
-app.post('/api/personnel/profile', requirePersonnel, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
-  const email = req.session.user.email;
-  try {
-    const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'personnel' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
-    // Persist the rename on the users document (see /api/admin/profile above).
-    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
-    req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Personnel profile GET / POST — name only; see registeredProfile() above.
+app.get('/api/personnel/profile', requirePersonnel, readOwnProfile);
+app.post('/api/personnel/profile', requirePersonnel, saveOwnName);
 
 // Personnel password POST
 app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, async (req, res) => {
@@ -6628,41 +6619,9 @@ app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, 
   }
 });
 
-// Staff profile GET (2026-08-27 View-Only → Staff migration — mirrors the
-// Personnel profile store above exactly, keyed to its own 'staff' role doc).
-app.get('/api/staff/profile', requireStaffAccess, async (req, res) => {
-  try {
-    const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'staff' });
-    res.json(doc ? doc.profile : {});
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Staff profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening) — see the identical note on /api/admin/profile above.
-app.post('/api/staff/profile', requireStaffAccess, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
-  const email = req.session.user.email;
-  try {
-    const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'staff' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
-    // Persist the rename on the users document (see /api/admin/profile above).
-    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
-    req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Staff profile GET / POST — name only; see registeredProfile() above.
+app.get('/api/staff/profile', requireStaffAccess, readOwnProfile);
+app.post('/api/staff/profile', requireStaffAccess, saveOwnName);
 
 // Staff password POST
 app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async (req, res) => {
@@ -7415,6 +7374,7 @@ app.post('/api/partner/profile', requirePartner, async (req, res) => {
     if (contactName) {
       req.session.user.name = contactName;
       await db.collection('users').updateOne({ email: req.session.user.email }, { $set: { name: contactName, organization: organization || '' } });
+      await propagateRequestorName(db, req.session.user.email, contactName);
     }
     res.json({ success: true, profile });
   } catch (err) {

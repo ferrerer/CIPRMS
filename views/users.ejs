@@ -75,7 +75,7 @@
                                                 <th>Name</th>
                                                 <th>Email</th>
                                                 <th>Role</th>
-                                                <th>Unit</th>
+                                                <th>Department</th>
                                                 <th>Last Login</th>
                                                 <th>Status</th>
                                                 <th>Actions</th>
@@ -240,8 +240,17 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Unit / Department</label>
-                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE (optional)">
+                        <label class="form-label">Department / College</label>
+                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Institution / School</label>
+                        <input type="text" class="form-control" id="u-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Designation / Position</label>
+                        <input type="text" class="form-control" id="u-position" placeholder="e.g. Director, Coordinator">
+                        <div class="form-text">Department, institution and position are set here when the account is registered. The user cannot change them from Settings.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
@@ -372,7 +381,7 @@
   function openAddUser() {
     editingId = null;
     document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
-    ['u-name','u-email','u-unit','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    ['u-name','u-email','u-unit','u-institution','u-position','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
     document.getElementById('u-role').value = 'Auth. Personnel';
     document.getElementById('u-pwd-required').style.display = '';
     document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
@@ -390,11 +399,13 @@
     document.getElementById('u-email').value = u.email;
     document.getElementById('u-role').value  = u.role;
     document.getElementById('u-unit').value  = u.unit || '';
+    document.getElementById('u-institution').value = u.institution || '';
+    document.getElementById('u-position').value = u.position || '';
     document.getElementById('u-password').value = '';
     document.getElementById('u-pwd-required').style.display = 'none';
     document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
     document.getElementById('u-password').placeholder = 'New password (optional)';
-    ['u-name','u-email','u-unit','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    ['u-name','u-email','u-unit','u-institution','u-position','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
     getModal().show();
   }
 
@@ -409,6 +420,8 @@
     const email    = document.getElementById('u-email').value.trim();
     const role     = document.getElementById('u-role').value;
     const unit     = document.getElementById('u-unit').value.trim();
+    const institution = document.getElementById('u-institution').value.trim();
+    const position = document.getElementById('u-position').value.trim();
     const password = document.getElementById('u-password').value;
     let valid = true;
 
@@ -434,12 +447,12 @@
 
     if (editingId) {
       // EDIT — only send password if the admin typed a new one
-      const payload = { name, email, role, unit };
+      const payload = { name, email, role, unit, institution, position };
       if (password) payload.password = password;
       apiPatch(editingId, payload)
         .then(data => {
           if (data.success) {
-            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit });
+            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit, institution, position });
             getModal().hide();
             renderUsers();
             showToast(`<i class="ri-checkbox-circle-fill me-1"></i>${name} updated.`, '#405189');
@@ -450,7 +463,7 @@
     } else {
       // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
       const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-      apiPost({ name, email, role, unit, password, login: 'Never', status: 'Active', createdAt: today })
+      apiPost({ name, email, role, unit, institution, position, password, login: 'Never', status: 'Active', createdAt: today })
         .then(data => {
           if (data.success) {
             users.unshift(data.user);

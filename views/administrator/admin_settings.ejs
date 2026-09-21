@@ -111,25 +111,17 @@
                           <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. admin@cspc.edu.ph" disabled title="Email is tied to your login and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label" for="s-dept">Department / College <span class="text-danger">*</span></label>
-                          <select class="form-select" id="s-dept" onchange="updateCard()">
-                            <option value="">Select...</option>
-                            <option>CIRL</option>
-                            <option>CCS</option>
-                            <option>CHS</option>
-                            <option>CTDE</option>
-                            <option>CTHBM</option>
-                            <option>CAS</option>
-                            <option>CEA</option>
-                          </select>
+                          <label class="form-label" for="s-dept">Department / College</label>
+                          <input type="text" class="form-control" id="s-dept" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label" for="s-position">Designation / Position <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="s-position" placeholder="e.g. Director, Coordinator" oninput="updateCard()">
+                          <label class="form-label" for="s-position">Designation / Position</label>
+                          <input type="text" class="form-control" id="s-position" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-12">
-                          <label class="form-label" for="s-institution">Institution / School <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="s-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges" oninput="updateCard()">
+                          <label class="form-label" for="s-institution">Institution / School</label>
+                          <input type="text" class="form-control" id="s-institution" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
+                          <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position and institution are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
                         </div>
                       </div>
                       <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
@@ -240,11 +232,9 @@
 
   function updateCard() {
     const name = document.getElementById('s-name').value.trim();
-    const dept = document.getElementById('s-dept').value;
-    const pos  = document.getElementById('s-position').value.trim();
-    const inst = document.getElementById('s-institution').value.trim();
-    const parts = name.split(' ').filter(Boolean);
-    const initials = parts.length >= 2 ? (parts[0][0]+parts[parts.length-1][0]).toUpperCase() : (parts[0] ? parts[0][0].toUpperCase() : 'A');
+    // Only the name is editable: department, position and institution are fixed when the account is registered.
+    if (!name)
+      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
     const av = document.getElementById('hero-avatar');
     if (!av.dataset.hasPhoto) { av.textContent = initials; av.style.backgroundImage = ''; }
     document.getElementById('hero-name').textContent = name || 'Administrator';
@@ -295,11 +285,9 @@
 
   async function saveSettings() {
     const name = document.getElementById('s-name').value.trim();
-    const dept = document.getElementById('s-dept').value;
-    const position = document.getElementById('s-position').value.trim();
-    const institution = document.getElementById('s-institution').value.trim();
-    if (!name || !dept || !position || !institution)
-      return showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields.', '#f06548');
+    // Only the name is editable: department, position and institution are fixed when the account is registered.
+    if (!name)
+      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
     const btn = document.getElementById('save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
     try {
@@ -307,7 +295,7 @@
       // and cannot be changed from this form (server ignores it either way).
       const res = await fetch('/api/admin/profile', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, dept, position, institution })
+        body: JSON.stringify({ name })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');
@@ -323,9 +311,7 @@
   }
 
   function resetForm() {
-    ['s-name','s-position','s-institution'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('s-dept').value = '';
-    updateCard();
+    loadProfile();   // Cancel: back to the saved name; the other fields are read-only
   }
 
   async function changePassword(e) {
