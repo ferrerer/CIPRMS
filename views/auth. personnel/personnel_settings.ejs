@@ -54,7 +54,7 @@
                 </div>
                 <input id="photo-input" type="file" accept="image/*" class="d-none" onchange="handlePhotoChange(event)">
                 <h5 class="mb-1" id="hero-name">—</h5>
-                <p class="text-muted mb-3" id="hero-role">College Staff</p>
+                <p class="text-muted mb-3" id="hero-role">College Dean</p>
                 <div class="border-top pt-3 text-start">
                   <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
                     <i class="ri-building-2-line text-primary"></i>
@@ -64,9 +64,13 @@
                     <i class="ri-briefcase-line text-primary"></i>
                     <span id="info-position">—</span>
                   </div>
-                  <div class="d-flex align-items-center gap-2 text-muted small">
+                  <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
                     <i class="ri-map-pin-line text-primary"></i>
                     <span id="info-institution">—</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="ri-phone-line text-primary"></i>
+                    <span id="info-phone">—</span>
                   </div>
                 </div>
               </div>
@@ -106,6 +110,11 @@
                           <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. personnel@cspc.edu.ph" disabled title="Email is tied to your login and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
+                          <label class="form-label" for="s-contact">Contact Number</label>
+                          <input type="tel" inputmode="numeric" class="form-control" id="s-contact" maxlength="25" placeholder="e.g. 0917-123-4567" autocomplete="tel" oninput="onContactInput()">
+                          <div class="form-text text-danger" id="s-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                        </div>
+                        <div class="col-md-6">
                           <label class="form-label" for="s-dept">Department / College</label>
                           <input type="text" class="form-control" id="s-dept" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
@@ -113,9 +122,11 @@
                           <label class="form-label" for="s-position">Designation / Position</label>
                           <input type="text" class="form-control" id="s-position" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
-                        <div class="col-12">
+                        <div class="col-md-6">
                           <label class="form-label" for="s-institution">Institution / School</label>
                           <input type="text" class="form-control" id="s-institution" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
+                        </div>
+                        <div class="col-12">
                           <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position and institution are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
                         </div>
                       </div>
@@ -213,6 +224,7 @@
     const dept = document.getElementById('s-dept').value;
     const pos  = document.getElementById('s-position').value.trim();
     const inst = document.getElementById('s-institution').value.trim();
+    const phone = document.getElementById('s-contact').value.trim();
     const parts = name.split(' ').filter(Boolean);
     const initials = parts.length >= 2 ? (parts[0][0]+parts[parts.length-1][0]).toUpperCase() : (parts[0] ? parts[0][0].toUpperCase() : '?');
     const av = document.getElementById('hero-avatar');
@@ -221,6 +233,17 @@
     document.getElementById('info-dept').textContent = dept || '—';
     document.getElementById('info-position').textContent = pos || '—';
     document.getElementById('info-institution').textContent = inst || '—';
+    document.getElementById('info-phone').textContent = phone || '—';
+  }
+
+  // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
+  function onContactInput() {
+    const el = document.getElementById('s-contact');
+    const cleaned = el.value.replace(/[^0-9+()\-\s]/g, '');
+    document.getElementById('s-contact-warn').style.display = cleaned !== el.value ? '' : 'none';
+    el.value = cleaned;
+    updateCard();
+    syncButtons();
   }
 
   function applyPhoto(dataUrl) {
@@ -254,12 +277,14 @@
   // The button reads "Update Settings"; after a successful save it reads "Saved Changes" until something is
   // changed again. Cancel is only visible while there is an unsaved change.
   var savedName = '';        // the name as last loaded from / saved to the server
+  var savedContact = '';     // the contact number as last loaded from / saved to the server
   var justSaved = false;     // true from a successful save until the next edit
 
   function syncButtons() {
     var btn = document.getElementById('save-btn');
     if (btn.disabled) return;   // a save is in flight — it repaints the button itself when it finishes
-    var dirty = document.getElementById('s-name').value.trim() !== savedName;
+    var dirty = document.getElementById('s-name').value.trim() !== savedName
+             || document.getElementById('s-contact').value.trim() !== savedContact;
     if (dirty) justSaved = false;
     document.getElementById('cancel-btn').style.display = dirty ? '' : 'none';
     btn.classList.toggle('btn-success', justSaved);
@@ -280,7 +305,9 @@
       if (data.dept)        document.getElementById('s-dept').value        = data.dept;
       if (data.position)    document.getElementById('s-position').value    = data.position;
       if (data.institution) document.getElementById('s-institution').value = data.institution;
+      document.getElementById('s-contact').value = data.contactNumber || '';
       savedName = document.getElementById('s-name').value.trim();
+      savedContact = document.getElementById('s-contact').value.trim();
       justSaved = false;
       updateCard();
     } catch(_) { updateCard(); }
@@ -289,9 +316,12 @@
 
   async function saveSettings() {
     const name = document.getElementById('s-name').value.trim();
-    // Only the name is editable: department, position and institution are fixed when the account is registered.
+    const contactNumber = document.getElementById('s-contact').value.trim();
+    // The name and the contact number are editable: department, position and institution are fixed when the account is registered.
     if (!name)
       return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
+    if (contactNumber && contactNumber.replace(/\D/g, '').length < 7)
+      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter a valid contact number (at least 7 digits).', '#f06548');
     const btn = document.getElementById('save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
     try {
@@ -299,7 +329,7 @@
       // and cannot be changed from this form (server ignores it either way).
       const res = await fetch('/api/personnel/profile', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name })
+        body: JSON.stringify({ name, contactNumber })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');
@@ -307,6 +337,7 @@
       // Header/sidebar name is server-rendered; refresh it now instead of on the next page load.
       document.querySelectorAll('.user-name-text, .sidebar-user-name-text').forEach(el => el.textContent = name);
       savedName = name;
+      savedContact = contactNumber;
       justSaved = true;
       showToast('<i class="ri-checkbox-circle-line me-1"></i>Settings saved!', '#0ab39c');
     } catch(err) {
@@ -318,7 +349,7 @@
   }
 
   function resetForm() {
-    loadProfile();   // Cancel: back to the saved name; the other fields are read-only
+    loadProfile();   // Cancel: back to the saved name and contact number; the other fields are read-only
   }
 
   async function changePassword(e) {

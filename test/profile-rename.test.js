@@ -24,7 +24,7 @@ async function agentFor(role) {
 }
 
 describe('Settings rename → requestor name on requests', () => {
-  test('College Staff: the new name shows on the request form page and on their existing Document Requests', async () => {
+  test('College Dean: the new name shows on the request form page and on their existing Document Requests', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const made = await agent.post('/api/document-requests').send({ institution: 'jesttest College', documentTypes: ['jesttest doc'], notes: 'jesttest rename' });
     expect(made.status).toBe(200);
@@ -81,7 +81,7 @@ describe('Department / Institution / Position are fixed at registration', () => 
   }
 
   test.each([
-    ['College Staff', 'Auth. Personnel', '/api/personnel/profile'],
+    ['College Dean', 'Auth. Personnel', '/api/personnel/profile'],
     ['CIRL Staff', 'Staff', '/api/staff/profile'],
     ['Administrator', 'Administrator', '/api/admin/profile']
   ])('%s: Settings shows the registered values and ignores any attempt to change them', async (_label, role, url) => {
@@ -118,7 +118,7 @@ describe('Department / Institution / Position are fixed at registration', () => 
         expect(tag[0]).toContain(' readonly ');
       }
       expect(html).not.toContain('<select class="form-select" id="s-dept"');
-      expect(html).toContain("body: JSON.stringify({ name })");
+      expect(html).toContain("body: JSON.stringify({ name, contactNumber })");   // the name and the contact number are all Settings sends
     }
   });
 
@@ -130,12 +130,13 @@ describe('Department / Institution / Position are fixed at registration', () => 
       expect(start).toBeGreaterThan(-1);
       const body = html.slice(start, html.indexOf('function applyPhoto', start));
       // every variable the function reads must be declared inside it
-      for (const v of ['name', 'dept', 'pos', 'inst', 'parts', 'initials']) expect(body).toContain(`const ${v} =`);
+      for (const v of ['name', 'dept', 'pos', 'inst', 'phone', 'parts', 'initials']) expect(body).toContain(`const ${v} =`);
       expect(body).toContain('av.textContent = initials');
+      expect(body).toContain("document.getElementById('info-phone').textContent = phone");
     }
   });
 
-  test('College Staff Settings: Cancel is hidden until something is changed, and the save button reads "Saved Changes" after saving', async () => {
+  test('College Dean Settings: Cancel is hidden until something is changed, and the save button reads "Saved Changes" after saving', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const html = (await agent.get('/personnel/settings')).text;
     const cancel = html.match(/<button[^>]*id="cancel-btn"[^>]*>/);
@@ -160,11 +161,81 @@ describe('Department / Institution / Position are fixed at registration', () => 
   });
 });
 
+describe('Contact Number in Settings (Administrator, CIRL Staff, College Dean)', () => {
+  const CASES = [
+    ['Administrator', 'Administrator', '/api/admin/profile', '/admin/settings'],
+    ['CIRL Staff', 'Staff', '/api/staff/profile', '/staff/settings'],
+    ['College Dean', 'Auth. Personnel', '/api/personnel/profile', '/personnel/settings']
+  ];
+
+  test.each(CASES)('%s: the number is saved with the name, comes back on the profile, and is stored on the account', async (_label, role, url) => {
+    const { agent, user } = await agentFor(role);
+    expect((await agent.get(url)).body.contactNumber).toBe('');                       // nothing yet
+
+    const save = await agent.post(url).send({ name: 'Has A Number', contactNumber: '  0917-123-4567 ' });
+    expect(save.status).toBe(200);
+    expect(save.body.profile).toMatchObject({ name: 'Has A Number', contactNumber: '0917-123-4567' });   // trimmed
+    expect((await agent.get(url)).body.contactNumber).toBe('0917-123-4567');
+    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber).toBe('0917-123-4567');
+
+    // a save that does not mention the number leaves it alone (an older page, a script)
+    expect((await agent.post(url).send({ name: 'Still Has A Number' })).body.profile.contactNumber).toBe('0917-123-4567');
+    // an empty one clears it
+    const cleared = await agent.post(url).send({ name: 'Still Has A Number', contactNumber: '   ' });
+    expect(cleared.body.profile.contactNumber).toBe('');
+    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber).toBe('');
+  });
+
+  test.each([['letters', '0917-ABC-4567'], ['too short', '12345'], ['script', '<script>1234567</script>'], ['too long', '1'.repeat(30)]])(
+    'a %s number is refused with a plain message and nothing (not even the name) is saved', async (_why, bad) => {
+      const { agent, user } = await agentFor('Auth. Personnel');
+      const before = await getDb().collection('users').findOne({ email: user.email });
+      const res = await agent.post('/api/personnel/profile').send({ name: 'Should Not Save', contactNumber: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/valid contact number/i);
+      const after = await getDb().collection('users').findOne({ email: user.email });
+      expect(after.name).toBe(before.name);
+      expect(after.contactNumber || '').toBe('');
+    });
+
+  test('a non-string number is ignored, not stored', async () => {
+    const { agent, user } = await agentFor('Staff');
+    const res = await agent.post('/api/staff/profile').send({ name: 'Numeric', contactNumber: 9171234567 });
+    expect(res.status).toBe(200);
+    expect((await getDb().collection('users').findOne({ email: user.email })).contactNumber || '').toBe('');
+  });
+
+  test.each(CASES)('%s Settings page has the Contact Number field, warns about letters, shows it on the profile card and sends it on save', async (_label, role, _url, page) => {
+    const { agent } = await agentFor(role);
+    const html = (await agent.get(page)).text;
+    const tag = html.match(/<input[^>]*id="s-contact"[^>]*>/);
+    expect(tag).not.toBeNull();
+    expect(tag[0]).toContain('type="tel"');
+    expect(tag[0]).not.toContain('readonly');                                          // unlike department/position/institution, this one is editable
+    expect(tag[0]).not.toContain('disabled');
+    expect(html).toContain('id="s-contact-warn"');
+    expect(html).toContain('id="info-phone"');
+    expect(html).toContain("data.contactNumber || ''");
+  });
+
+  test('College Dean: changing only the number counts as a change (Cancel appears, Saved Changes goes back to Update Settings)', async () => {
+    const { agent } = await agentFor('Auth. Personnel');
+    const html = (await agent.get('/personnel/settings')).text;
+    expect(html).toContain("var savedContact = ''");
+    expect(html).toContain("document.getElementById('s-contact').value.trim() !== savedContact");
+    expect(html).toContain('savedContact = contactNumber;');                            // only after the server accepted the save
+    expect(html).toContain('oninput="onContactInput()"');
+    // the number input is what runs syncButtons() for this page
+    const fn = html.slice(html.indexOf('function onContactInput()'), html.indexOf('function applyPhoto'));
+    expect(fn).toContain('syncButtons();');
+  });
+});
+
 describe('Changing the password ends the session — the person signs in again with the new password', () => {
   test.each([
     ['Administrator', 'Administrator', '/api/admin/password'],
     ['CIRL Staff', 'Staff', '/api/staff/password'],
-    ['College Staff', 'Auth. Personnel', '/api/personnel/password'],
+    ['College Dean', 'Auth. Personnel', '/api/personnel/password'],
     ['Partner', 'potential_partner', '/api/partner/password']
   ])('%s: the session is ended, the old password stops working and the new one signs in', async (_label, role, url) => {
     const { agent, user } = await agentFor(role);

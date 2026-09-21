@@ -463,7 +463,7 @@
                     </h4>
                     <div class="page-title-right d-flex align-items-center gap-2">
                       <ol class="breadcrumb m-0">
-                        <li class="breadcrumb-item"><a href="<%= isStaffRole ? '/staff/dashboard' : '/dashboard' %>">CIPRMS</a></li>
+                        <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                         <li class="breadcrumb-item active">Requests</li>
                       </ol>
                     </div>
@@ -1276,7 +1276,7 @@
        route, same timeline renderer). */
     var ROLE_LABEL = {
       'Administrator': 'Administrator', 'Staff': 'CIRL Staff',
-      'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner',
+      'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner',
       'Requester': 'Requester'
     };
 

@@ -47,7 +47,7 @@ describe('Calendar layout (Administrator and CIRL Staff share one template)', ()
     expect(res.text).toContain("classList.toggle('cal-card-fill'");
   });
 
-  test('the calendar keeps its management controls for Administrator/Staff and stays view-only for College Staff', async () => {
+  test('the calendar keeps its management controls for Administrator/Staff and stays view-only for College Dean', async () => {
     for (const agent of [adminAgent, staffAgent]) {
       const html = (await agent.get(agent === adminAgent ? '/calendar' : '/staff/calendar')).text;
       expect(html).toContain('id="btn-new-event"');
@@ -70,7 +70,7 @@ describe('Calendar: one compact layout for every role, and a saved event is neve
   test.each([
     ['Administrator', () => adminAgent, '/calendar'],
     ['CIRL Staff', () => staffAgent, '/staff/calendar'],
-    ['College Staff', () => collegeAgent, '/personnel/calendar'],
+    ['College Dean', () => collegeAgent, '/personnel/calendar'],
     ['Partner', () => partnerAgent, '/partner/calendar']
   ])('%s: the same layout classes, helpers and rules (no fixed 400px box, no stretched card)', async (_role, agent, url) => {
     const res = await agent().get(url);

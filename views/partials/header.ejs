@@ -11,7 +11,7 @@
         <% var homeDashboard = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/dashboard' : user.role === 'Auth. Personnel' ? '/personnel/monitoring' : user.role === 'potential_partner' ? '/partner/monitoring' : '/staff/dashboard') : '/'; %>
         <% var notificationsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Auth. Personnel' ? '/personnel/notifications' : user.role === 'potential_partner' ? '/partner/notifications' : user.role === 'Staff' ? '/staff/notifications' : '/notifications') : '/notifications'; %>
         <%
-            // College Staff (backend role "Auth. Personnel") and Potential Partner: no Search bar, and no link to the
+            // College Dean (backend role "Auth. Personnel") and Potential Partner: no Search bar, and no link to the
             // Notifications PAGE (that page is closed/removed for both). Their Notifications bell and Profile/user menu are
             // the same as every other role's. Administrator and Staff keep the full header.
             var isDeptUser = (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel');
@@ -145,6 +145,8 @@
                                     </div>
                                 </div>
                             </div>
+<%# College Dean and Partner get the plain list: no "Alerts" tab (it was only the unread subset of the same list). %>
+<% if (!reducedHeader) { %>
                             <div class="px-2 pt-2">
                                 <ul class="nav nav-tabs dropdown-tabs nav-tabs-custom" data-dropdown-tabs="true" id="notificationItemsTab" role="tablist">
                                     <li class="nav-item waves-effect waves-light">
@@ -155,6 +157,7 @@
                                     </li>
                                 </ul>
                             </div>
+<% } %>
                         </div>
                         <div class="tab-content" id="notificationItemsTabContent">
                             <div class="tab-pane fade show active py-2 ps-2" id="all-noti-tab" role="tabpanel">
@@ -167,16 +170,16 @@
                                 </div>
 <% } %>
                             </div>
+<% if (!reducedHeader) { %>
                             <div class="tab-pane fade py-2 ps-2" id="alerts-tab" role="tabpanel">
                                 <div class="notif-scroll pe-2" id="notif-alerts-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
-<% if (!reducedHeader) { %>
                                 <div class="my-2 text-center view-all">
                                     <a href="<%= notificationsHref %>" class="btn btn-soft-primary btn-sm">View Unread Notifications <i class="ri-arrow-right-line align-middle"></i></a>
                                 </div>
-<% } %>
                             </div>
+<% } %>
                         </div>
                     </div>
                 </div>
@@ -188,7 +191,7 @@
                             <img class="rounded-circle header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
                             <span class="text-start ms-xl-2">
                                 <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text"><%= typeof user !== 'undefined' && user ? user.name || 'User' : 'User' %></span>
-                                <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : user.role === 'Auth. Personnel' ? 'College Staff' : user.role === 'Staff' ? 'CIRL Staff' : (user.role || '')) : '' %></span>
+                                <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : user.role === 'Auth. Personnel' ? 'College Dean' : user.role === 'Staff' ? 'CIRL Staff' : (user.role || '')) : '' %></span>
                             </span>
                         </span>
                     </button>
@@ -393,3 +396,60 @@ refreshNotifBadge();
     }
 })();
 </script>
+
+<% if (typeof isDeptUser !== 'undefined' && isDeptUser) { %>
+<script>
+// College Dean: the ☰ button HIDES the whole sidebar (and brings it back) so the page can use the full width —
+// Velzon's own ☰ only shrinks it to an icon strip. The choice is remembered per user, next to the theme and sidebar
+// size in ui-state-init.ejs. Phones and small tablets keep Velzon's own slide-in menu, which the button still opens.
+(function () {
+    var btn = document.getElementById('topnav-hamburger-icon');
+    if (!btn || !window.CIPRMS_USER) return;
+    var root = document.documentElement;
+    var KEY = 'ciprmsUiState_' + String(window.CIPRMS_USER.id);
+    var DESKTOP_MIN = 768;
+
+    function isDesktop() { return window.innerWidth >= DESKTOP_MIN; }
+    function savedHidden() {
+        try { return !!JSON.parse(localStorage.getItem(KEY) || '{}').sidebarHidden; } catch (e) { return false; }
+    }
+    function save(hidden) {
+        try {
+            var s = JSON.parse(localStorage.getItem(KEY) || '{}');
+            s.sidebarHidden = hidden;
+            localStorage.setItem(KEY, JSON.stringify(s));
+        } catch (e) { /* storage unavailable: the choice just lasts for this page */ }
+    }
+    var hiddenNow = savedHidden();
+    function apply() {
+        // The saved choice only applies where there IS a permanent sidebar to hide.
+        if (isDesktop() && hiddenNow) root.setAttribute('data-sidebar-visibility', 'hidden');
+        else root.removeAttribute('data-sidebar-visibility');
+        btn.setAttribute('aria-pressed', isDesktop() && hiddenNow ? 'true' : 'false');
+        btn.setAttribute('title', isDesktop() ? (hiddenNow ? 'Show sidebar' : 'Hide sidebar') : 'Toggle sidebar menu');
+    }
+
+    // Registered here, before Velzon's app.js (bottom of the page) adds its own click handler to this button, so on a
+    // desktop-width window this runs first and stops that one; on a small screen it steps aside and Velzon's runs.
+    btn.addEventListener('click', function (e) {
+        if (!isDesktop()) return;
+        e.stopImmediatePropagation();
+        hiddenNow = !hiddenNow;
+        save(hiddenNow);
+        apply();
+    });
+    window.addEventListener('resize', apply);
+    apply();
+})();
+</script>
+<% } %>
+<% if (typeof isDeptUser !== 'undefined' && isDeptUser) { %>
+<style>
+    /* With the sidebar hidden Velzon moves the logo into the top bar, but it picks the white-text logo for a dark
+       sidebar even though this app's top bar is light — so the "CIPRMS" wordmark vanished. Pick by theme instead. */
+    html[data-sidebar-visibility="hidden"] .horizontal-logo .logo-dark { display: inline-block !important; }
+    html[data-sidebar-visibility="hidden"] .horizontal-logo .logo-light { display: none !important; }
+    html[data-sidebar-visibility="hidden"][data-bs-theme="dark"] .horizontal-logo .logo-dark { display: none !important; }
+    html[data-sidebar-visibility="hidden"][data-bs-theme="dark"] .horizontal-logo .logo-light { display: inline-block !important; }
+</style>
+<% } %>

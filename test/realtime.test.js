@@ -123,7 +123,7 @@ describe('the stream itself', () => {
 describe('Partnership Request status changes reach only the people allowed to see that request', () => {
   let reqId, m;
 
-  test('Partner A submits: Administrator, CIRL Staff and A are told; Partner B and College Staff are not', async () => {
+  test('Partner A submits: Administrator, CIRL Staff and A are told; Partner B and College Dean are not', async () => {
     m = mark();
     const res = await agents.partnerA.post('/api/requests').send({ institution: 'jesttest Realtime Org ' + Date.now(), country: 'Testland', type: 'MOA', nature: 'Research', notes: 'jesttest secret note' });
     expect(res.status).toBe(200); reqId = res.body.request.id; requestIds.push(reqId);
@@ -203,7 +203,7 @@ describe('Partnership Request status changes reach only the people allowed to se
 });
 
 describe('Document Requests', () => {
-  test('a College Staff submission goes to the reviewers and to that College Staff account only', async () => {
+  test('a College Dean submission goes to the reviewers and to that College Dean account only', async () => {
     const m = mark();
     const res = await agents.college.post('/api/document-requests').send({ institution: 'jesttest DR Realtime', documentTypes: ['Certificate'], notes: 'jesttest' });
     expect(res.status).toBe(200); const id = res.body.request.id; docRequestIds.push(id);
@@ -220,7 +220,7 @@ describe('Document Requests', () => {
 });
 
 describe('Partnership registry changes', () => {
-  test('reach Administrator, CIRL Staff and the Partner whose approved request is tied to it — not another Partner or College Staff', async () => {
+  test('reach Administrator, CIRL Staff and the Partner whose approved request is tied to it — not another Partner or College Dean', async () => {
     const last = await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray();
     const pid = last[0].id + 1, inst = 'jesttest Live Registry ' + Date.now();
     await db.collection('partnerships').insertOne({ id: pid, inst, country: 'Testland', type: 'MOA', start: '2026-01-01', end: '2031-01-01', status: 'Active', remarks: 'jesttest' }); partnershipIds.push(pid);

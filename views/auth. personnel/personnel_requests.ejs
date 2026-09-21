@@ -219,7 +219,7 @@
                 </div>
 
                 <!-- ═══════════ PANEL: DOCUMENT REQUEST ═══════════ -->
-                <%# College Staff submits Document Requests only — Partnership Requests are closed to this role. %>
+                <%# College Dean submits Document Requests only — Partnership Requests are closed to this role. %>
                 <div id="panel-dr">
 
                     <!-- Submission Form Section -->
@@ -295,7 +295,7 @@
                                             </div>
                                         </div>
                                         <div class="d-flex justify-content-end gap-2 mt-4">
-                                            <button type="button" class="btn btn-light px-4" onclick="resetForm()">Clear</button>
+                                            <button type="button" class="btn btn-light px-4" id="clear-req-btn" style="display:none" onclick="resetForm()">Clear</button>
                                             <button type="button" class="btn btn-success px-5 fw-bold" id="submit-req-btn" onclick="submitRequest()">
                                                 Submit Request
                                             </button>
@@ -368,7 +368,7 @@
     /* Searchable multi-select combobox: predefined suggestions + free-text
        custom entries, rendered as removable chips. Mounted on
        #<prefix>-combo / #<prefix>-chips / #<prefix>-input / #<prefix>-dropdown. */
-    function createDocCombo(prefix) {
+    function createDocCombo(prefix, onChange) {
         var selected = [];
         var chips = document.getElementById(prefix + '-chips');
         var input = document.getElementById(prefix + '-input');
@@ -386,6 +386,7 @@
                     input.classList.remove('is-invalid');
                 });
             });
+            if (onChange) onChange();
         }
 
         function addValue(raw) {
@@ -400,6 +401,7 @@
             input.classList.remove('is-invalid');
             closeDropdown();
             input.focus();
+            if (onChange) onChange();   // renderChips() above ran while the typed text was still in the field
         }
 
         function closeDropdown() {
@@ -438,10 +440,17 @@
 
         input.addEventListener('focus', openDropdown);
         input.addEventListener('input', openDropdown);
+        // "focus" only fires when the field GAINS focus. After a document is picked (or Escape is pressed) the field
+        // keeps focus, so clicking it again fired nothing and the list only came back after clicking somewhere else
+        // and then into the field. A click, or the Down arrow, opens it whenever it is closed.
+        input.addEventListener('click', openDropdown);
         input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (input.value.trim()) addValue(input.value);
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                openDropdown();
             } else if (e.key === 'Backspace' && !input.value && selected.length) {
                 selected.pop();
                 renderChips();
@@ -453,17 +462,40 @@
 
         return {
             getValues: function () { return selected.slice(); },
-            clear: function () { selected = []; renderChips(); input.value = ''; closeDropdown(); },
+            hasText: function () { return !!input.value.trim(); },
+            clear: function () { selected = []; input.value = ''; renderChips(); closeDropdown(); },
             markInvalid: function () { input.classList.add('is-invalid'); },
             clearInvalid: function () { input.classList.remove('is-invalid'); }
         };
     }
 
-    var fTypeCombo = createDocCombo('f-type');
+    // Clear only exists while someone is filling the form in: it appears as soon as anything is entered (a picked or
+    // typed document, purpose, contact number, document form, or an office the person typed themselves) and goes away
+    // again when the form is empty — after Clear, after a successful submit, or when they delete what they typed. The
+    // office pre-filled from the profile is not something they entered, so it never counts.
+    function formHasInput() {
+        var inst = document.getElementById('f-inst');
+        return fTypeCombo.getValues().length > 0
+            || fTypeCombo.hasText()
+            || !!(inst && inst.type !== 'hidden' && inst.value.trim())
+            || !!document.getElementById('f-contact').value.trim()
+            || !!document.getElementById('f-notes').value.trim()
+            || !!document.querySelector('input[name="f-form"]:checked');
+    }
+    function syncClearButton() {
+        var btn = document.getElementById('clear-req-btn');
+        if (btn) btn.style.display = formHasInput() ? '' : 'none';
+    }
+
+    var fTypeCombo = createDocCombo('f-type', syncClearButton);
+    var docForm = document.getElementById('docRequestForm');
+    docForm.addEventListener('input', syncClearButton);
+    docForm.addEventListener('change', syncClearButton);
 
     function resetForm() {
         document.getElementById('docRequestForm').reset();
         fTypeCombo.clear();
+        syncClearButton();
     }
 
     function setDrDateTimeDisplay() {
@@ -519,6 +551,7 @@
                 showToast('<i class="ri-checkbox-circle-line me-2"></i> Document request submitted!', '#15803d');
                 document.getElementById('docRequestForm').reset();
                 fTypeCombo.clear();
+                syncClearButton();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
                 showToast('<i class="ri-error-warning-line me-2"></i> ' + (data.error || 'Error submitting request.'), '#f06548');

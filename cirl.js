@@ -213,6 +213,15 @@ app.use(async (req, res, next) => {
   }
 });
 
+// Where the "CIPRMS" breadcrumb (and any other "home" link) of the signed-in user goes: Administrator → /dashboard,
+// CIRL Staff → /staff/dashboard, College Dean and Partner → their Monitoring page. Several page templates are shared
+// between roles (the Administrator's own views also render for Staff and College Dean), so a link written into the
+// template can only be right for one of them — the page reads this instead.
+app.use((req, res, next) => {
+  res.locals.homeHref = req.session && req.session.user ? homeForRole(req.session.user.role) : '/';
+  next();
+});
+
 // ── PASSPORT CONFIG ───────────────────────────────────────────────────────────
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
@@ -267,7 +276,7 @@ function requirePersonnel(req, res, next) {
 }
 
 /**
- * College Staff (backend role "Auth. Personnel") has a deliberately
+ * College Dean (backend role "Auth. Personnel") has a deliberately
  * reduced UI: Monitoring, Requests (Document Requests only) and Calendar.
  * This guard sits behind requirePersonnel on the pages that role does not
  * get — the Notifications PAGE and Document Library — and bounces ONLY an
@@ -302,8 +311,8 @@ function requireRequester(req, res, next) {
 
 /**
  * Chained AFTER requireRequester on the Partnership Request routes (/api/requests: create, edit a draft,
- * submit a draft, delete a draft, withdraw). requireRequester also admits College Staff (backend role
- * "Auth. Personnel") because the Document Request routes share it — but College Staff no longer has a
+ * submit a draft, delete a draft, withdraw). requireRequester also admits College Dean (backend role
+ * "Auth. Personnel") because the Document Request routes share it — but College Dean no longer has a
  * Partnership Request workflow (its page and form were removed; Document Requests are all it submits), so
  * the API is closed to it here on the server rather than left to a hidden button. A JSON 403, not a
  * redirect: this is an API refusal. Administrator and Partner pass unchanged; Staff never reaches this
@@ -312,7 +321,7 @@ function requireRequester(req, res, next) {
 function denyCollegeStaffPartnershipRequests(req, res, next) {
   const user = req.session && req.session.user;
   if (user && user.role === 'Auth. Personnel') {
-    return res.status(403).json({ error: 'College Staff cannot submit Partnership Requests. Use a Document Request instead.' });
+    return res.status(403).json({ error: 'College Dean cannot submit Partnership Requests. Use a Document Request instead.' });
   }
   return next();
 }
@@ -389,10 +398,11 @@ function homeForRole(role) {
 // permission check, API payloads, <option value="…"> and role filters keep "Staff",
 // "Auth. Personnel" and "potential_partner". Only what people SEE is renamed:
 //   Staff             → "CIRL Staff"
-//   Auth. Personnel   → "College Staff"   (shown earlier as "Department/Colleges")
+//   Auth. Personnel   → "College Dean"   (shown earlier as "Department/Colleges")
 //   potential_partner → "Partner"
-const ROLE_LABELS = { 'Staff': 'CIRL Staff', 'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner' };
+const ROLE_LABELS = { 'Staff': 'CIRL Staff', 'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner' };
 const PREVIOUS_COLLEGE_STAFF_LABEL = 'Department/Colleges'; // stored in some audit text written between the two renames
+const EARLIER_COLLEGE_LABEL = 'College Staff';               // what the role was called before "College Dean" — may be in older stored text
 function displayRoleName(role) {
   return Object.prototype.hasOwnProperty.call(ROLE_LABELS, role) ? ROLE_LABELS[role] : role;
 }
@@ -404,6 +414,7 @@ function displayRoleText(text) {
   return text
     .split('Auth. Personnel').join(ROLE_LABELS['Auth. Personnel'])
     .split(PREVIOUS_COLLEGE_STAFF_LABEL).join(ROLE_LABELS['Auth. Personnel'])
+    .split(EARLIER_COLLEGE_LABEL).join(ROLE_LABELS['Auth. Personnel'])
     .replace(/\(Staff\)/g, '(' + ROLE_LABELS['Staff'] + ')')
     .replace(/\brole: Staff\b/g, 'role: ' + ROLE_LABELS['Staff']);
 }
@@ -5344,7 +5355,7 @@ async function partnershipAudience(db, institution) {
 }
 
 // Mirrors GET /api/calendarevents: Administrator sees every event; CIRL Staff also see an event with no recipient list, one
-// that names them, or one they created; College Staff and Partners only see an event that names them or is for "All Users".
+// that names them, or one they created; College Dean and Partners only see an event that names them or is for "All Users".
 function calendarAudience(ev) {
   if (!ev) return realtime.audience.roles(['Administrator']);
   if (ev.forEveryone) return realtime.audience.all();
@@ -5484,7 +5495,7 @@ function expandDocTypeLabel(shortCode) {
 // A notification stores the link that was right for its recipient's role WHEN IT WAS CREATED. Clicking that
 // stored link later went wrong whenever the route no longer suited the reader: an old "/calendar" link opened
 // by CIRL Staff (requirePersonnel bounces them to their home = the Dashboard), a removed page such as
-// /viewonly/request-access (404), a College Staff "partnership request" link (that role has no Partnership
+// /viewonly/request-access (404), a College Dean "partnership request" link (that role has no Partnership
 // Request page any more) or a Partner "document request" link (Monitoring has no such table any more, so the
 // click just landed on the Monitoring home). notificationHref() re-resolves the destination for the role that is
 // actually reading it, from the stored link/module/tag, and only ever returns a page that role can open. The
@@ -5528,7 +5539,7 @@ function notificationHref(role, n) {
   if (reqKind !== 'pr' && reqKind !== 'dr') reqKind = /partnership/i.test(n.tag || '') ? 'pr' : /document/i.test(n.tag || '') ? 'dr' : null;
   if ((kind === 'requests' || kind === 'monitoring') && reqKind) {
     if ((role === 'Administrator' || role === 'Staff') && id) return pages.requests + '?open=' + reqKind + '&id=' + id;
-    if (role === 'Auth. Personnel' && id) return reqKind === 'dr' ? pages.monitoring + '?type=dr&id=' + id : pages.monitoring;   // no Partnership Request page for College Staff
+    if (role === 'Auth. Personnel' && id) return reqKind === 'dr' ? pages.monitoring + '?type=dr&id=' + id : pages.monitoring;   // no Partnership Request page for College Dean
     if (role === 'potential_partner') {
       if (reqKind === 'dr') return pages.requests + '?tab=dr';                       // MOA/MOU submissions live on the Requests page itself
       if (id) return pages.monitoring + '?type=pr&id=' + id;
@@ -5536,7 +5547,7 @@ function notificationHref(role, n) {
   }
   if (kind === 'requests') return pages.requests;
   if (kind === 'monitoring') return pages.monitoring;
-  // Administrator and CIRL Staff still have a real Dashboard; College Staff and Partner do not (Monitoring is their home)
+  // Administrator and CIRL Staff still have a real Dashboard; College Dean and Partner do not (Monitoring is their home)
   if (kind === 'dashboard') return pages.dashboard || pages.monitoring;
   return pages.fallback;
 }
@@ -5854,23 +5865,26 @@ function attendanceRecordFor(ev, email) {
   return (Array.isArray(ev.attendance) ? ev.attendance : []).find(a => a.emailKey === key) || null;
 }
 
-// What the signed-in user needs to render the Join control. `startsAt` and
-// `serverNow` come from the server: the browser counts down to `startsAt`
-// against the server's clock, and the server re-checks on the actual Join
-// request, so a wrong device clock can neither unlock nor block a join.
+// What the signed-in user needs to render the Join control. `startsAt`, `endsAt`
+// and `serverNow` come from the server: the browser only shows Join while the
+// meeting is on (start ≤ now < end, by the server's clock), and the server
+// re-checks both bounds on the actual Join request, so a wrong device clock can
+// neither unlock nor block a join. The Meet link itself is never in here — it
+// is only handed out by the Join request, and only while the meeting is on.
 function buildMyInvite(ev, user, now) {
   if (!isMeetingEvent(ev)) return null;
   if (!eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { invited: false };
-  const start = meetingTime.eventStartInstant(ev);
+  const win = meetingTime.eventJoinWindow(ev);
   const record = attendanceRecordFor(ev, user.email);
   return {
     invited: true,
     joined: !!record,
     joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
     joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
-    startsAt: start ? start.toISOString() : null,
+    startsAt: win ? win.start.toISOString() : null,
+    endsAt: win ? win.end.toISOString() : null,
     serverNow: now.toISOString(),
-    canJoinNow: !!start && now >= start,
+    canJoinNow: !!win && now >= win.start && now < win.end,
     timeZone: meetingTime.appTimeZone()
   };
 }
@@ -5886,6 +5900,9 @@ const CALENDAR_EVENT_PRIVATE_FIELDS = [
 ];
 function calendarEventView(ev, user, now) {
   const view = { ...ev, myInvite: buildMyInvite(ev, user, now) };
+  // The Google Meet address is only released by the Join request while the meeting is on — the feed never carries it,
+  // not even to the people who manage the calendar.
+  delete view.googleMeetLink;
   if (canManageCalendarRole(user)) {
     view.participantCount = eventParticipantKeys(ev).size;
     view.joinedCount = Array.isArray(ev.attendance) ? ev.attendance.length : 0;
@@ -5904,7 +5921,7 @@ function calendarEventView(ev, user, now) {
 // `recipientEmails` field at all, so they stay visible to everyone exactly as
 // before (closes the "existing calendar functionality unaffected" requirement).
 //
-// College Staff and Partners are stricter: an event with no recipient list is NOT for them. They only see an event that
+// College Dean and Partners are stricter: an event with no recipient list is NOT for them. They only see an event that
 // names them (recipient / participant / Google attendee) or one explicitly created for "All Users" (forEveryone).
 const INVITE_ONLY_CALENDAR_ROLES = ['Auth. Personnel', 'potential_partner'];
 function calendarFeedFilter(user) {
@@ -6079,6 +6096,7 @@ async function recordGoogleSyncOnEvent(db, ev, sync) {
   if (sync.ok && sync.googleEventId) set.googleEventId = sync.googleEventId;
   if (sync.ok && sync.organizerEmail) set.googleOrganizerEmail = sync.organizerEmail;
   if (sync.ok && sync.htmlLink) set.googleHtmlLink = sync.htmlLink;
+  if (sync.ok && sync.meetLink) set.googleMeetLink = sync.meetLink;
   await db.collection('calendarevents').updateOne({ id: ev.id }, { $set: set });
   Object.assign(ev, set);
 }
@@ -6139,7 +6157,7 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     const base = {
       ...fields,
       ...(isScoped ? { recipientEmails: targetEmails } : {}),
-      // Explicit "All Users" marker: College Staff and Partners only see unscoped events that carry it
+      // Explicit "All Users" marker: College Dean and Partners only see unscoped events that carry it
       // (an event created with no recipients at all is internal, not for them).
       ...(Array.isArray(rawRecipients) && rawRecipients.includes('all') ? { forEveryone: true } : {}),
       // Every invited CIPRMS user (visibility for a scoped event is
@@ -6301,14 +6319,24 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
     if (!eventParticipantKeys(ev).has(key)) {
       return res.status(403).json({ error: 'You are not an invited participant of this meeting.' });
     }
-    const start = meetingTime.eventStartInstant(ev);
-    if (!start) return res.status(409).json({ error: 'This meeting has no valid start time.' });
+    const win = meetingTime.eventJoinWindow(ev);
+    if (!win) return res.status(409).json({ error: 'This meeting has no valid start time.' });
     const now = new Date();
-    if (now < start) {
+    if (now < win.start) {
       return res.status(403).json({
         error: 'This meeting has not started yet. You can join when it starts.',
         code: 'MEETING_NOT_STARTED',
-        startsAt: start.toISOString(),
+        startsAt: win.start.toISOString(),
+        endsAt: win.end.toISOString(),
+        serverNow: now.toISOString()
+      });
+    }
+    if (now >= win.end) {
+      return res.status(403).json({
+        error: 'This meeting has ended.',
+        code: 'MEETING_ENDED',
+        startsAt: win.start.toISOString(),
+        endsAt: win.end.toISOString(),
         serverNow: now.toISOString()
       });
     }
@@ -6321,7 +6349,16 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
       { $push: { attendance: { email: user.email, emailKey: key, userId: user.id, name: user.name, role: user.role, joinedAt: now } } }
     );
     const fresh = await db.collection('calendarevents').findOne({ id });
-    res.json({ success: true, alreadyJoined: result.modifiedCount === 0, myInvite: buildMyInvite(fresh, user, new Date()) });
+
+    // The Google Meet room the person is sent to. Google can attach it a moment after the event is created, so when
+    // none is stored yet it is read from the Google event now (and kept). No link is not an error: the attendance is
+    // recorded either way and the page tells the person there is no Meet room to open.
+    let meetLink = fresh.googleMeetLink || null;
+    if (!meetLink && fresh.googleEventId) {
+      meetLink = await googleCalendarService.getGoogleMeetLink(db, fresh.googleEventId);
+      if (meetLink) await db.collection('calendarevents').updateOne({ id }, { $set: { googleMeetLink: meetLink } });
+    }
+    res.json({ success: true, alreadyJoined: result.modifiedCount === 0, meetLink, myInvite: buildMyInvite(fresh, user, new Date()) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6530,8 +6567,23 @@ function registeredProfile(userDoc) {
   if (!userDoc) return {};
   return {
     name: userDoc.name || '', email: userDoc.email || '',
-    dept: userDoc.unit || '', position: userDoc.position || '', institution: userDoc.institution || ''
+    dept: userDoc.unit || '', position: userDoc.position || '', institution: userDoc.institution || '',
+    contactNumber: userDoc.contactNumber || ''
   };
+}
+
+// The contact number is the one thing besides the name that a person edits in Settings. Digits and the usual phone
+// punctuation only, at least 7 digits when one is given; empty clears it. Returns { value } (undefined = not sent, so
+// the stored number is left alone) or { error }.
+const CONTACT_NUMBER_RE = /^[0-9+()\-\s]{1,25}$/;
+function parseContactNumber(raw) {
+  if (typeof raw !== 'string') return { value: undefined };
+  const value = raw.trim();
+  if (!value) return { value: '' };
+  if (!CONTACT_NUMBER_RE.test(value) || value.replace(/\D/g, '').length < 7) {
+    return { error: 'Enter a valid contact number — numbers only (spaces and + ( ) - are fine), at least 7 digits.' };
+  }
+  return { value };
 }
 
 async function readOwnProfile(req, res) {
@@ -6547,15 +6599,20 @@ async function readOwnProfile(req, res) {
 // Email is intentionally NOT accepted from the client (2026-09-06 security hardening): it is the authenticated
 // identity, not an editable profile field, and almost every ownership check in this app is keyed on
 // req.session.user.email. Any `email` — and any dept/position/institution — in the request body is ignored.
+// Only the name and the contact number are saved.
 async function saveOwnName(req, res) {
   const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
   if (!name) return res.status(400).json({ error: 'Name is required.' });
+  const contact = parseContactNumber(req.body.contactNumber);
+  if (contact.error) return res.status(400).json({ error: contact.error });
   const email = req.session.user.email;
   try {
     const db = getDb();
     // The per-request session sync re-reads users.name, so the rename must be stored on the users document —
     // otherwise it reverts on the next page.
-    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
+    await db.collection('users').updateOne({ id: req.session.user.id }, {
+      $set: { name, ...(contact.value !== undefined ? { contactNumber: contact.value } : {}) }
+    });
     await propagateRequestorName(db, email, name);
     req.session.user.name = name;
     const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
@@ -7114,7 +7171,7 @@ app.get('/admin/settings', requireAdmin, (req, res) => {
 });
 
 // ── AUTH. PERSONNEL ROUTES ────────────────────────────────────────────────────
-// College Staff (stored role "Auth. Personnel") sees Monitoring, Requests, Calendar and Settings/Profile
+// College Dean (stored role "Auth. Personnel") sees Monitoring, Requests, Calendar and Settings/Profile
 // (plus the header Notifications bell). It has NO Dashboard page (the
 // personnel_dashboard view was deliberately removed), and the Notifications
 // PAGE and Document Library below are closed to that role via

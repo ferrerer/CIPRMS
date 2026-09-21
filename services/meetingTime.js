@@ -128,6 +128,20 @@ function eventEndInstant(ev, tz) {
   return parseEventInstant(ev.end, zone);
 }
 
+/**
+ * The span during which a meeting is "on" and can be joined: from its start until its end. An event saved with
+ * no end (or one that is not after the start) lasts one hour — one day for an all-day event — the same span
+ * the Google Calendar event is given, so CIPRMS and Google agree on when the meeting is over.
+ * Returns { start, end } (Dates) or null when the event has no valid start.
+ */
+function eventJoinWindow(ev, tz) {
+  const start = eventStartInstant(ev, tz);
+  if (!start) return null;
+  let end = eventEndInstant(ev, tz);
+  if (!end || end <= start) end = new Date(start.getTime() + (ev.allDay ? 24 : 1) * 60 * 60 * 1000);
+  return { start, end };
+}
+
 /** Server-side wall-clock formatting, so a displayed time never depends on the viewer's browser timezone. */
 function formatTimeInTz(date, tz) {
   return new Intl.DateTimeFormat('en-US', { timeZone: tz || appTimeZone(), hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
@@ -177,6 +191,7 @@ module.exports = {
   addDaysToDateOnly,
   eventStartInstant,
   eventEndInstant,
+  eventJoinWindow,
   formatTimeInTz,
   formatDateTimeInTz,
   isValidEmail,

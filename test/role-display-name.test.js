@@ -1,6 +1,6 @@
 // Role DISPLAY names are presentation-only:
 //   stored role "Staff"           → shown as "CIRL Staff"
-//   stored role "Auth. Personnel" → shown as "College Staff"   (it was shown as "Department/Colleges" for a while)
+//   stored role "Auth. Personnel" → shown as "College Dean"   (it was shown as "Department/Colleges" for a while)
 //   stored role "potential_partner" → shown as "Partner" (unchanged)
 // The stored / session / RBAC VALUES must not change (sessions, the users collection, every permission check,
 // <option value="…">, role filters, API payloads). These tests pin down BOTH halves.
@@ -12,7 +12,7 @@ const { createTestUser, loginAs, cleanupAll, uniqueEmail, getDb } = require('./h
 
 const COLLEGE_INTERNAL = 'Auth. Personnel'; // stored value — must NOT change
 const STAFF_INTERNAL = 'Staff'; // stored value — must NOT change
-const COLLEGE = 'College Staff'; // what users see
+const COLLEGE = 'College Dean'; // what users see
 const CIRL = 'CIRL Staff'; // what users see
 const PREVIOUS = 'Department/Colleges'; // an earlier display name — must not linger anywhere visible
 
@@ -28,8 +28,9 @@ afterAll(async () => {
 // <option value="…"> attributes), then drop tags (so attribute values are not counted as visible).
 const stripNonVisible = html => html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '');
 const textOf = html => stripNonVisible(html).replace(/<[^>]+>/g, ' ');
-// A bare "Staff" that is NOT already qualified as "CIRL Staff" / "College Staff" is an un-renamed role label.
-const bareStaff = html => (textOf(html).match(/(?<!CIRL )(?<!College )\bStaff\b/g) || []);
+// A bare "Staff" that is NOT already qualified as "CIRL Staff" is an un-renamed role label — which also catches a
+// leftover "College Staff" now that the role reads "College Dean".
+const bareStaff = html => (textOf(html).match(/(?<!CIRL )\bStaff\b/g) || []);
 
 async function agentFor(role) {
   const user = await createTestUser({ role });
@@ -41,7 +42,7 @@ async function agentFor(role) {
   return { agent, user, login };
 }
 
-describe('College Staff (stored "Auth. Personnel") — every page it can open shows the new name only', () => {
+describe('College Dean (stored "Auth. Personnel") — every page it can open shows the new name only', () => {
   let agent;
   beforeAll(async () => { ({ agent } = await agentFor(COLLEGE_INTERNAL)); });
 
@@ -54,15 +55,15 @@ describe('College Staff (stored "Auth. Personnel") — every page it can open sh
       expect(visible).not.toContain(PREVIOUS);
     });
 
-  test('header subtitle, sidebar role label and Settings hero all read exactly "College Staff"', async () => {
+  test('header subtitle, sidebar role label and Settings hero all read exactly "College Dean"', async () => {
     const mon = (await agent.get('/personnel/monitoring')).text;
-    expect(mon).toMatch(/user-name-sub-text">College Staff</);
-    expect(mon).toMatch(/id="sidebar-role-label"[\s\S]*?<span class="align-middle">College Staff<\/span>/);
-    expect((await agent.get('/personnel/settings')).text).toContain('id="hero-role">College Staff<');
+    expect(mon).toMatch(/user-name-sub-text">College Dean</);
+    expect(mon).toMatch(/id="sidebar-role-label"[\s\S]*?<span class="align-middle">College Dean<\/span>/);
+    expect((await agent.get('/personnel/settings')).text).toContain('id="hero-role">College Dean<');
   });
 
   test('the admin-layout sidebar (reached via /calendar) uses the new label too', async () => {
-    expect((await agent.get('/calendar')).text).toMatch(/class="align-middle">College Staff</);
+    expect((await agent.get('/calendar')).text).toMatch(/class="align-middle">College Dean</);
   });
 });
 
@@ -134,7 +135,7 @@ describe('Administrator / Staff see both new names wherever a role is shown — 
     expect(res.text).toContain(`<option value="Staff">${CIRL}</option>`);
   });
 
-  test('Partner and College Staff timelines label both roles with the new names', async () => {
+  test('Partner and College Dean timelines label both roles with the new names', async () => {
     for (const [role, path] of [['potential_partner', '/partner/monitoring'], [COLLEGE_INTERNAL, '/personnel/monitoring']]) {
       const { agent } = await agentFor(role);
       const res = await agent.get(path);
@@ -184,7 +185,7 @@ describe('The stored role values, sessions and RBAC are UNCHANGED', () => {
     expect((await agent.get('/api/me')).body.user.role).toBe(role);
   });
 
-  test('permissions are exactly as before: CIRL Staff keeps staff access (but not Administrator management); College Staff stays out of admin/staff areas', async () => {
+  test('permissions are exactly as before: CIRL Staff keeps staff access (but not Administrator management); College Dean stays out of admin/staff areas', async () => {
     const { agent: staff } = await agentFor(STAFF_INTERNAL);
     expect((await staff.get('/api/users')).status).toBe(200);
     expect((await staff.get('/api/activitylogs')).status).toBe(200);
@@ -246,7 +247,9 @@ describe('Audit trail: stored text is raw; every DISPLAY of it uses the new name
       { id: base, action: 'ADD', record: 'User created: jesttest Legacy College (Auth. Personnel) — jesttest.legacy1@example.com', by: 'jesttest Legacy Actor', role: COLLEGE_INTERNAL, date: 'Sep 1, 2026, 09:00 AM' },
       { id: base + 1, action: 'ADD', record: 'User created: jesttest Legacy Interim (Department/Colleges) — jesttest.legacy2@example.com', by: 'jesttest Legacy Actor', role: COLLEGE_INTERNAL, date: 'Sep 1, 2026, 09:01 AM' },
       { id: base + 2, action: 'ADD', record: 'User created: jesttest Legacy Staff (Staff) — jesttest.legacy3@example.com', by: 'jesttest Legacy Staff Actor', role: STAFF_INTERNAL, date: 'Sep 1, 2026, 09:02 AM' },
-      { id: base + 3, action: 'EDIT', record: 'User updated: jesttest Legacy Edit — role: Staff, status: Active', by: 'jesttest Legacy Actor', role: 'Administrator', date: 'Sep 1, 2026, 09:03 AM' }
+      { id: base + 3, action: 'EDIT', record: 'User updated: jesttest Legacy Edit — role: Staff, status: Active', by: 'jesttest Legacy Actor', role: 'Administrator', date: 'Sep 1, 2026, 09:03 AM' },
+      // written while the role was still called "College Staff"
+      { id: base + 4, action: 'ADD', record: 'User created: jesttest Legacy Earlier (College Staff) — jesttest.legacy4@example.com', by: 'jesttest Legacy Actor', role: COLLEGE_INTERNAL, date: 'Sep 1, 2026, 09:04 AM' }
     ]);
 
     const raw = (await admin.get('/api/activitylogs')).body;
@@ -260,6 +263,8 @@ describe('Audit trail: stored text is raw; every DISPLAY of it uses the new name
     expect(find('jesttest Legacy College').role).toBe(COLLEGE);
     expect(find('jesttest Legacy Interim').record).toContain(`(${COLLEGE})`);
     expect(find('jesttest Legacy Interim').record).not.toContain(PREVIOUS);
+    expect(find('jesttest Legacy Earlier').record).toContain(`(${COLLEGE})`);
+    expect(find('jesttest Legacy Earlier').record).not.toContain('College Staff');
     expect(find('jesttest Legacy Staff').record).toContain(`(${CIRL})`);
     expect(find('jesttest Legacy Staff').role).toBe(CIRL);
     expect(find('jesttest Legacy Edit').record).toContain(`role: ${CIRL}`);

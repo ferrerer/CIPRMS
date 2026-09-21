@@ -78,3 +78,23 @@ test('Missing institution is still rejected even with a valid documentTypes arra
   });
   expect(res.status).toBe(400);
 });
+
+test('The Document(s) Requested list opens on click and on the Down arrow, not only when the field first gains focus (regression: it stayed shut until you clicked elsewhere and back)', async () => {
+  const html = (await personnelAgent.get('/personnel/requests')).text;
+  expect(html).toContain("input.addEventListener('focus', openDropdown);");
+  expect(html).toContain("input.addEventListener('click', openDropdown);");
+  expect(html).toContain("e.key === 'ArrowDown'");
+});
+
+test('Clear on the College Dean request form is hidden until something is entered, and goes away again when the form is empty', async () => {
+  const html = (await personnelAgent.get('/personnel/requests')).text;
+  const clear = html.match(/<button[^>]*id="clear-req-btn"[^>]*>/);
+  expect(clear).not.toBeNull();
+  expect(clear[0]).toContain('display:none');                       // not visible on an untouched form
+  expect(clear[0]).toContain('onclick="resetForm()"');
+  expect(html).toContain('function syncClearButton');
+  expect(html).toContain("createDocCombo('f-type', syncClearButton)");   // picking / removing / typing a document counts
+  expect(html).toContain("docForm.addEventListener('input', syncClearButton)");
+  // clearing and a successful submit both hide it again
+  expect(html.match(/syncClearButton\(\);/g).length).toBeGreaterThanOrEqual(2);
+});

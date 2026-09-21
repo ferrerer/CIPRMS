@@ -1,7 +1,7 @@
 // Potential Partner: Requests ("Submission Of MOA/MOU"), Partnership Request form, Monitoring and Settings cleanup.
 // The Partner submission is filed as a PARTNERSHIP REQUEST (POST /api/requests with isSubmission, then an optional
 // file upload on /api/requests/:id/documents), so notes-only, file/image-only and file+notes must all be accepted —
-// and it must never show up under Document Requests. Nothing may change for Administrator, CIRL Staff or College Staff.
+// and it must never show up under Document Requests. Nothing may change for Administrator, CIRL Staff or College Dean.
 const request = require('supertest');
 const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
@@ -110,10 +110,10 @@ describe('Partner submission: notes only / file only / file + notes (filed as a 
     expect((await agent.get('/api/requests/mine')).body.some(r => r.id === id)).toBe(true);
   });
 
-  test('only a Partner can file a submission; a College Staff account sending isSubmission just cannot use the flag', async () => {
+  test('only a Partner can file a submission; a College Dean account sending isSubmission just cannot use the flag', async () => {
     const { agent: college } = await agentFor('Auth. Personnel');
     const res = await college.post('/api/requests').send({ institution: 'jesttest College Org', notes: 'jesttest college flag', isSubmission: true });
-    // the Partnership Request endpoint is closed to College Staff altogether
+    // the Partnership Request endpoint is closed to College Dean altogether
     expect(res.status).toBe(403);
   });
 
@@ -273,8 +273,8 @@ describe('Partner → Settings', () => {
   });
 });
 
-describe('Nothing changes for Administrator, CIRL Staff or College Staff', () => {
-  test('College Staff keeps its Document Request form and its Monitoring "My Document Requests" section', async () => {
+describe('Nothing changes for Administrator, CIRL Staff or College Dean', () => {
+  test('College Dean keeps its Document Request form and its Monitoring "My Document Requests" section', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const req = (await agent.get('/personnel/requests')).text;
     expect(req).toContain('id="docRequestForm"');
@@ -294,7 +294,7 @@ describe('Nothing changes for Administrator, CIRL Staff or College Staff', () =>
     }
   });
 
-  test('a College Staff document request still works exactly as before (document types required)', async () => {
+  test('a College Dean document request still works exactly as before (document types required)', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const missing = await agent.post('/api/document-requests').send({ institution: 'jesttest College' });
     expect(missing.status).toBe(400);
