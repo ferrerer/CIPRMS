@@ -186,10 +186,21 @@ app.use(passport.session());
 // deleting, or demoting a user in User Management has no effect on a session
 // that's already logged in — the old snapshot keeps granting access until it
 // happens to expire or the user manually logs out. Re-check against the real
-// users record on every request so a revoked/changed account takes effect
-// immediately, not up to 2 hours later.
+// users record so a revoked/changed account takes effect quickly, not up to
+// 2 hours later.
+//
+// 2026-09-22 perf fix: this used to re-run on EVERY request, adding a full
+// MongoDB round-trip (often the dominant cost of a page load on Atlas's
+// network latency) to every single page navigation, noticeably laggy when
+// clicking between pages. Throttled to once per REVALIDATE_INTERVAL_MS per
+// session instead — still catches a revoked/edited account within a few
+// seconds (nowhere near the old 2-hour session-expiry fallback), just not on
+// literally every click.
+const REVALIDATE_INTERVAL_MS = 15000;
 app.use(async (req, res, next) => {
   if (!req.session || !req.session.user) return next();
+  const now = Date.now();
+  if (req.session.revalidatedAt && now - req.session.revalidatedAt < REVALIDATE_INTERVAL_MS) return next();
   try {
     const db = getDb();
     const dbUser = await db.collection('users').findOne(
@@ -207,6 +218,7 @@ app.use(async (req, res, next) => {
     req.session.user.role = dbUser.role;
     req.session.user.name = dbUser.name;
     req.session.user.unit = dbUser.unit || '';
+    req.session.revalidatedAt = now;
     next();
   } catch (err) {
     next(err);
