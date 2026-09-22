@@ -10,21 +10,6 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
-    <style>
-        /* The title/breadcrumb bar stays visible under the fixed topbar (70px, same offset
-           .page-content already uses) while the request table scrolls underneath it.
-           Sticky has to go on the ROW, not .page-title-box itself: .page-title-box's own
-           parent (.col-12) is exactly as tall as .page-title-box, so it has no room to
-           stick within — the row is what has real height to spare as the rest of the
-           page's rows scroll past underneath it. */
-        #dr-mon-title-row {
-            position: sticky;
-            top: 70px;
-            z-index: 999;
-            background-color: var(--vz-body-bg);
-            padding-block: .5rem;
-        }
-    </style>
 </head>
 <body>
 
@@ -36,7 +21,7 @@
         <div class="page-content">
             <div class="container-fluid">
 
-                <div class="row" id="dr-mon-title-row">
+                <div class="row">
                   <div class="col-12">
                     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
