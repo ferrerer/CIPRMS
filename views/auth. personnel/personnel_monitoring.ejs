@@ -10,6 +10,17 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        /* The title/breadcrumb bar stays visible under the fixed topbar (70px, same offset
+           .page-content already uses) while the request table scrolls underneath it. */
+        .page-title-box {
+            position: sticky;
+            top: 70px;
+            z-index: 999;
+            background-color: var(--vz-body-bg);
+            padding-block: .5rem;
+        }
+    </style>
 </head>
 <body>
 
