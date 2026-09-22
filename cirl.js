@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -140,6 +141,14 @@ app.set('views', path.join(__dirname, 'views'));
 // always reads "http" and secure (HTTPS-only) session cookies never get set,
 // breaking login in production.
 app.set('trust proxy', 1);
+// 2026-09-22 perf fix: gzip every response (HTML pages, CSS/JS/JSON) — none of it was
+// compressed before. GET /api/realtime/stream (the EventSource below) is explicitly
+// excluded: it's a long-lived SSE connection that pushes events one at a time with no
+// res.flush() after each write, so anything compression buffered would just sit there
+// undelivered until the connection eventually closes instead of arriving live.
+app.use(compression({
+  filter: (req, res) => req.path === '/api/realtime/stream' ? false : compression.filter(req, res)
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 // 2026-09-22 perf fix: neither of these set a Cache-Control header before now, so a
