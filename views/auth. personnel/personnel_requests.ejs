@@ -235,6 +235,13 @@
                                         </div>
                                         <div class="dr-form-code">CSPC-F-CIRL-04</div>
                                     </div>
+                                    <div class="alert alert-success d-flex align-items-center gap-2 mt-3 mb-0 d-none" id="dr-success-banner" role="status">
+                                        <i class="ri-checkbox-circle-fill fs-18"></i>
+                                        <div>
+                                            <strong>Request submitted successfully.</strong>
+                                            You can fill out and submit another request below.
+                                        </div>
+                                    </div>
                                     <form id="docRequestForm">
                                         <div class="dr-form-table">
                                             <div class="dr-row">
@@ -493,6 +500,17 @@
     function syncClearButton() {
         var btn = document.getElementById('clear-req-btn');
         if (btn) btn.style.display = formHasInput() ? '' : 'none';
+        // Once the requestor starts a new request, the previous "submitted successfully" banner no longer applies.
+        hideSuccessBanner();
+    }
+
+    function showSuccessBanner() {
+        var el = document.getElementById('dr-success-banner');
+        if (el) el.classList.remove('d-none');
+    }
+    function hideSuccessBanner() {
+        var el = document.getElementById('dr-success-banner');
+        if (el && !el.classList.contains('d-none')) el.classList.add('d-none');
     }
 
     var fTypeCombo = createDocCombo('f-type', syncClearButton);
@@ -560,6 +578,7 @@
                 document.getElementById('docRequestForm').reset();
                 fTypeCombo.clear();
                 syncClearButton();
+                showSuccessBanner();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             } else {
                 showToast('<i class="ri-error-warning-line me-2"></i> ' + (data.error || 'Error submitting request.'), '#f06548');
