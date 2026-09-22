@@ -26,7 +26,7 @@
                     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
                       <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
+                        <ol class="breadcrumb m-0" id="page-breadcrumb">
                           <li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Monitoring</li>
                         </ol>
@@ -305,6 +305,28 @@
         btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
     }
 
+    // ── Breadcrumb — reflects whichever Document Request modal is currently
+    // open on top of Monitoring, e.g. CIPRMS > Monitoring > Document Request >
+    // <institution> [> Draft Collaboration]. `labels` is everything after
+    // "CIPRMS"; the last one renders as the active (non-link) crumb. ────────
+    function setBreadcrumb(labels) {
+        var ol = document.getElementById('page-breadcrumb');
+        if (!ol) return;
+        var html = '<li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>';
+        labels.forEach(function (label, i) {
+            var isLast = i === labels.length - 1;
+            html += isLast
+                ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+                : '<li class="breadcrumb-item"><a href="/personnel/monitoring">' + escapeHtml(label) + '</a></li>';
+        });
+        ol.innerHTML = html;
+    }
+    function resetBreadcrumb() { setBreadcrumb(['Monitoring']); }
+
+    function drRequestLabel(r) {
+        return (r.institution || ('Document Request #' + r.id)) + ' — #' + r.id;
+    }
+
     // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
     // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
     // item.link can be a submitter's free-text attachmentLink. Only allow
@@ -459,16 +481,23 @@
     // draft modal closes for real (not the temporary hide-for-preview above,
     // which is why this checks draftPreviewReturnTo first).
     var draftDetailReturnTo = null;
-    function wireDraftModalReturn(draftModalId, detailModalId) {
+    function wireDraftModalReturn(draftModalId, detailModalId, onReturn) {
         document.getElementById(draftModalId).addEventListener('hidden.bs.modal', function () {
             if (draftPreviewReturnTo === draftModalId) return;
             if (draftDetailReturnTo === detailModalId) {
                 draftDetailReturnTo = null;
                 new bootstrap.Modal(document.getElementById(detailModalId)).show();
+                if (onReturn) onReturn();
+            } else {
+                resetBreadcrumb();   // opened without a detail modal to return to — nothing left on top of Monitoring
             }
         });
     }
-    wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal');
+    // Restore the Document Request-level breadcrumb (drops "Draft Collaboration") when swapping back to Details.
+    wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal', function () {
+        var r = myDocRequests.find(function (x) { return x.id === currentDraftDRId; });
+        if (r) setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r)]);
+    });
 
     function openDraftPreviewModal(prefix, idx) {
         var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
@@ -572,6 +601,7 @@
         currentDraftDRId = id;
         document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
         renderDRDraftTimeline(r);
+        setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r), 'Draft Collaboration']);
         var drDetailInstance = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'));
         if (drDetailInstance) { draftDetailReturnTo = 'dr-detail-modal'; drDetailInstance.hide(); }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-draft-modal')).show();
@@ -623,6 +653,7 @@
         document.getElementById('drd-purpose').textContent = r.notes || '—';
         document.getElementById('drd-remark').textContent = r.remark || '—';
         document.getElementById('drd-docs').innerHTML = renderAttachedDocs(r);
+        setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r)]);
 
         var footer = '<button class="btn btn-soft-info" onclick="openDRDraftModal(' + id + ')"><i class="ri-file-list-3-line me-1"></i>View Draft</button>' +
             '<a href="/api/document-requests/' + id + '/pdf" class="btn btn-soft-info"><i class="ri-file-download-line me-1"></i>Download PDF</a>';
@@ -634,6 +665,12 @@
 
         bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-detail-modal')).show();
     }
+
+    // A real close (Close button, Esc, backdrop click, or after Cancel) drops the breadcrumb back to Monitoring.
+    // "View Draft" also hides this modal, but sets draftDetailReturnTo first (checked here) so that swap doesn't count.
+    document.getElementById('dr-detail-modal').addEventListener('hidden.bs.modal', function () {
+        if (!draftDetailReturnTo) resetBreadcrumb();
+    });
 
     function cancelDocRequest(id, btn) {
         if (!confirm('Cancel this document request?')) return;
