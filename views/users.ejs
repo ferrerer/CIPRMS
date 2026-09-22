@@ -30,7 +30,7 @@
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                             <h4 class="mb-sm-0"><i class="ri-team-line me-2 text-primary"></i>User Management</h4>
                             <div class="page-title-right">
-                                <ol class="breadcrumb m-0">
+                                <ol class="breadcrumb m-0" id="page-breadcrumb">
                                     <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                     <li class="breadcrumb-item active">User Management</li>
                                 </ol>
@@ -322,6 +322,22 @@
     });
   }
 
+  // ── Breadcrumb — reflects whichever user is currently open in the Add/Edit modal ──
+  var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+  function setBreadcrumb(labels) {
+    var ol = document.getElementById('page-breadcrumb');
+    if (!ol) return;
+    var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+    labels.forEach(function (label, i) {
+      var isLast = i === labels.length - 1;
+      html += isLast
+        ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+        : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + escapeHtml(label) + '</a></li>';
+    });
+    ol.innerHTML = html;
+  }
+  function resetBreadcrumb() { setBreadcrumb(['User Management']); }
+
   // â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Label only — the stored/RBAC value stays 'Auth. Personnel' (option values, filters, API).
   function formatRole(role) {
@@ -402,6 +418,7 @@
     document.getElementById('u-pwd-required').style.display = '';
     document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
     document.getElementById('u-password').placeholder = 'Enter password';
+    setBreadcrumb(['User Management', 'New User']);
     getModal().show();
   }
 
@@ -424,11 +441,15 @@
     document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
     document.getElementById('u-password').placeholder = 'New password (optional)';
     ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    setBreadcrumb(['User Management', u.name]);
     getModal().show();
   }
 
   function getModal() {
-    if (!bsModal) bsModal = new bootstrap.Modal(document.getElementById('usr-modal'));
+    if (!bsModal) {
+      bsModal = new bootstrap.Modal(document.getElementById('usr-modal'));
+      document.getElementById('usr-modal').addEventListener('hidden.bs.modal', resetBreadcrumb);
+    }
     return bsModal;
   }
 

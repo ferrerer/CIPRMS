@@ -26,7 +26,7 @@
                     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
                       <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
+                        <ol class="breadcrumb m-0" id="page-breadcrumb">
                           <li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Monitoring</li>
                         </ol>
@@ -309,6 +309,23 @@
         });
     }
 
+    // ── Breadcrumb — reflects whichever record's Draft/Renewal modal is currently open,
+    // e.g. CIPRMS > Monitoring > Partnership Request > <institution — #id>. ──
+    function setBreadcrumb(labels) {
+        var ol = document.getElementById('page-breadcrumb');
+        if (!ol) return;
+        var html = '<li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>';
+        labels.forEach(function (label, i) {
+            var isLast = i === labels.length - 1;
+            html += isLast
+                ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+                : '<li class="breadcrumb-item"><a href="/partner/monitoring">' + escapeHtml(label) + '</a></li>';
+        });
+        ol.innerHTML = html;
+    }
+    function resetBreadcrumb() { setBreadcrumb(['Monitoring']); }
+    function prRequestLabel(r) { return (r.institution || ('Request #' + r.id)) + ' — #' + r.id; }
+
     // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
     // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
     // item.link can be a submitter's free-text attachmentLink. Only allow
@@ -393,6 +410,13 @@
             if (returnEl) bootstrap.Modal.getOrCreateInstance(returnEl).show();
         }
     });
+    // A real close of pr-draft-modal (not a swap-hide for the preview above, which sets
+    // draftPreviewReturnTo to this same id right before hiding it) drops the breadcrumb.
+    document.getElementById('pr-draft-modal').addEventListener('hidden.bs.modal', function () {
+        if (draftPreviewReturnTo === 'pr-draft-modal') return;
+        resetBreadcrumb();
+    });
+    document.getElementById('renewal-request-modal').addEventListener('hidden.bs.modal', resetBreadcrumb);
 
     function openDraftPreviewModal(prefix, idx) {
         var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
@@ -497,6 +521,7 @@
         document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('pr-draft-file').value = '';
         document.getElementById('pr-draft-note').value = '';
+        setBreadcrumb(['Monitoring', r.isSubmission ? 'MOA/MOU Submission' : 'Partnership Request', prRequestLabel(r), 'Draft Collaboration']);
         bootstrap.Modal.getOrCreateInstance(document.getElementById('pr-draft-modal')).show();
     }
 
@@ -794,6 +819,7 @@
         document.getElementById('rr-end-date').value = '';
         document.getElementById('rr-notes').value = '';
         document.getElementById('rr-error').classList.add('d-none');
+        setBreadcrumb(['Monitoring', p.inst || p.institution || ('Partnership #' + id), 'Request Renewal']);
         if (!renewalModal) renewalModal = new bootstrap.Modal(document.getElementById('renewal-request-modal'));
         renewalModal.show();
     }

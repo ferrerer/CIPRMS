@@ -462,7 +462,7 @@
                       <i class="ri-handshake-line me-2 text-primary"></i>Requests
                     </h4>
                     <div class="page-title-right d-flex align-items-center gap-2">
-                      <ol class="breadcrumb m-0">
+                      <ol class="breadcrumb m-0" id="page-breadcrumb">
                         <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                         <li class="breadcrumb-item active">Requests</li>
                       </ol>
@@ -1263,6 +1263,7 @@
             <i class="ri-check-line me-1"></i>Approve</button>
         ` : ''}`;
 
+      setBreadcrumb(['Requests', 'Partnership Request', prRequestLabel(r)]);
       modalInstance('pr-modal').show();
     }
 
@@ -1291,6 +1292,27 @@
       if (!bytes) return '';
       return bytes > 1e6 ? (bytes / 1e6).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB';
     }
+
+    // ── Breadcrumb — reflects whichever request modal is currently open on top of
+    // Requests, e.g. CIPRMS > Requests > Partnership Request > <institution — #id>
+    // [> Draft Collaboration]. Reused via MODAL_REOPEN below: reopening pr-modal/
+    // dr-modal through openPRDetail/openDRDetail already re-sets it correctly. ──
+    var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+    function setBreadcrumb(labels) {
+      var ol = document.getElementById('page-breadcrumb');
+      if (!ol) return;
+      var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+      labels.forEach(function (label, i) {
+        var isLast = i === labels.length - 1;
+        html += isLast
+          ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+          : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + escapeHtml(label) + '</a></li>';
+      });
+      ol.innerHTML = html;
+    }
+    function resetBreadcrumb() { setBreadcrumb(['Requests']); }
+    function prRequestLabel(r) { return (r.institution || r.inst || ('Request #' + r.id)) + ' — #REQ-' + String(r.id).padStart(3, '0'); }
+    function drRequestLabel(r) { return (r.institution || ('Document Request #' + r.id)) + ' — #' + r.id; }
 
     // ── Modal helpers ──────────────────────────────────────────────────────────────────────
     // Bootstrap 5 does not support two modals open at once: the page's scroll lock belongs to
@@ -1341,6 +1363,17 @@
         const back = MODAL_RETURN_TO[id];
         delete MODAL_RETURN_TO[id];
         if (back) (MODAL_REOPEN[back] || function () { modalInstance(back).show(); })();
+        else resetBreadcrumb();   // nothing to swap back to — this was the top of the stack
+      });
+    });
+
+    // pr-modal/dr-modal have no swap-in listener of their own (they're the bottom of the
+    // stack), so their real close (not a swap-out for Draft/Preview) is exactly when
+    // MODAL_SWAPPING wasn't set for them — same guard style as the block above.
+    ['pr-modal', 'dr-modal'].forEach(function (id) {
+      document.getElementById(id).addEventListener('hidden.bs.modal', function () {
+        if (MODAL_SWAPPING[id]) { delete MODAL_SWAPPING[id]; return; }
+        resetBreadcrumb();
       });
     });
 
@@ -1519,6 +1552,7 @@
       document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('dr-draft-file').value = '';
       document.getElementById('dr-draft-note').value = '';
+      setBreadcrumb(['Requests', 'Document Request', drRequestLabel(r), 'Draft Collaboration']);
       swapToModal('dr-draft-modal', 'dr-modal');
     }
 
@@ -1570,6 +1604,7 @@
       document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('pr-draft-file').value = '';
       document.getElementById('pr-draft-note').value = '';
+      setBreadcrumb(['Requests', 'Partnership Request', prRequestLabel(r), 'Draft Collaboration']);
       swapToModal('pr-draft-modal', 'pr-modal');
     }
 
@@ -1799,6 +1834,7 @@
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
           <i class="ri-close-line me-1"></i>Close</button>`;
 
+      setBreadcrumb(['Requests', 'Document Request', drRequestLabel(r)]);
       modalInstance('dr-modal').show();
     }
 

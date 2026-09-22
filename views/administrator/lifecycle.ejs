@@ -56,7 +56,7 @@
                                         class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                                         <h4 class="mb-sm-0">Monitoring</h4>
                                         <div class="page-title-right">
-                                            <ol class="breadcrumb m-0">
+                                            <ol class="breadcrumb m-0" id="page-breadcrumb">
                                                 <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                                 <li class="breadcrumb-item active">Monitoring</li>
                                             </ol>
@@ -386,6 +386,31 @@
          /api/partnerships already enforce this server-side; this flag (read by
          lifecycle-gridjs.init.js) hides those row actions for Staff too. -->
     <script>var CAN_MANAGE_LIFECYCLE = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;</script>
+    <!-- Breadcrumb — reflects whichever partnership record is currently open in a modal
+         (View/Edit/Renew/Delete), e.g. CIPRMS > Monitoring > <institution>. The open/close
+         hooks live in lifecycle-gridjs.init.js, which reads BREADCRUMB_BASE and calls these. -->
+    <script>
+      var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+      var BREADCRUMB_BASE = ['Monitoring'];
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+      function setBreadcrumb(labels) {
+        var ol = document.getElementById('page-breadcrumb');
+        if (!ol) return;
+        var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+        labels.forEach(function (label, i) {
+          var isLast = i === labels.length - 1;
+          html += isLast
+            ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+            : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + escapeHtml(label) + '</a></li>';
+        });
+        ol.innerHTML = html;
+      }
+      function resetBreadcrumb() { setBreadcrumb(BREADCRUMB_BASE); }
+    </script>
     <!-- gridjs init -->
     <script src="/velzon/assets/js/pages/lifecycle-gridjs.init.js"></script>
     <!-- App js -->
