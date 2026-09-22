@@ -1722,7 +1722,10 @@ app.post('/api/document-requests/:id/documents', requireAuth, announce('document
 
       const isReviewer = REQUEST_REVIEWER_ROLES.includes(actor.role);
       const isOwner = target.requestedByEmail && target.requestedByEmail === actor.email;
-      if (!isReviewer && !isOwner) {
+      // College Dean (role "Auth. Personnel") can submit a Document Request and track its drafts, but does not
+      // upload new versions itself — only a reviewer (Administrator/Staff) or an owning potential_partner may.
+      const canUpload = isReviewer || (isOwner && actor.role === 'potential_partner');
+      if (!canUpload) {
         if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(403).json({ error: 'You are not authorized to upload documents to this request.' });
       }

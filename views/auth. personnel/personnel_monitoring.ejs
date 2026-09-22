@@ -176,21 +176,8 @@
                     </div>
                     <div class="modal-body">
                         <div id="dr-draft-timeline" class="mb-3"></div>
-                        <div id="dr-draft-upload-wrap" class="border-top pt-3">
-                            <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
-                            <div class="mb-2">
-                                <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
-                            </div>
-                            <div class="mb-2">
-                                <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
-                            </div>
-                            <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
-                                <i class="ri-upload-2-line me-1"></i>Upload
-                            </button>
-                            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. CIRL is notified of your revision.</small>
-                        </div>
-                        <div id="dr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
-                            <i class="ri-lock-line me-1"></i>This document request has already been decided — no further documents can be added.
+                        <div class="alert alert-secondary fs-13 mb-0 border-top pt-3">
+                            <i class="ri-information-line me-1"></i>Draft versions are uploaded by CIRL — track every version above as they come in.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -349,7 +336,6 @@
     // Review/Fulfilled — is already normalized before it ever reaches this
     // page).
     var DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
-    var DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
     var DR_STAGE_LABEL = {
         'Received': 'Received — Awaiting Processing',
         'Preparing': 'Preparing Documents',
@@ -586,41 +572,9 @@
         currentDraftDRId = id;
         document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
         renderDRDraftTimeline(r);
-        var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
-        document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
-        document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
-        document.getElementById('dr-draft-file').value = '';
-        document.getElementById('dr-draft-note').value = '';
         var drDetailInstance = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'));
         if (drDetailInstance) { draftDetailReturnTo = 'dr-detail-modal'; drDetailInstance.hide(); }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-draft-modal')).show();
-    }
-
-    function uploadDRDraftDocument() {
-        var fileInput = document.getElementById('dr-draft-file');
-        var noteInput = document.getElementById('dr-draft-note');
-        var file = fileInput.files[0];
-        if (!file || !currentDraftDRId) { showToast('Choose a file first.', '#f06548'); return; }
-        var btn = document.getElementById('dr-draft-upload-btn');
-        var originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
-        var formData = new FormData();
-        formData.append('document', file);
-        formData.append('note', noteInput.value.trim());
-        CIPRMS.api('/api/document-requests/' + currentDraftDRId + '/documents', { method: 'POST', body: formData, quiet: true })
-            .then(function (result) {
-                if (!result.ok) throw new Error(result.error || 'Upload failed.');
-                var idx = myDocRequests.findIndex(function (x) { return x.id === currentDraftDRId; });
-                if (idx !== -1 && result.data.request) myDocRequests[idx] = result.data.request;
-                renderDRDraftTimeline(myDocRequests.find(function (x) { return x.id === currentDraftDRId; }));
-                renderDRTable();
-                fileInput.value = '';
-                noteInput.value = '';
-                showToast('New draft version uploaded.', '#0ab39c');
-            })
-            .catch(function (e) { showToast(e.message, '#f06548'); })
-            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
     }
 
     var myDocRequests = [];
@@ -793,12 +747,7 @@
         if (shown('dr-detail-modal') && currentDRDetailId && myDocRequests.some(function (x) { return x.id === currentDRDetailId; })) openDRDetail(currentDRDetailId);
         if (shown('dr-draft-modal') && currentDraftDRId) {
             var r = myDocRequests.find(function (x) { return x.id === currentDraftDRId; });
-            if (r) {
-                renderDRDraftTimeline(r);
-                var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
-                document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
-                document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
-            }
+            if (r) renderDRDraftTimeline(r);
         }
     }
 
