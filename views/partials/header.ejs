@@ -198,7 +198,10 @@
                     <div class="dropdown-menu dropdown-menu-end">
                         <h6 class="dropdown-header">Welcome!</h6>
                 <% var settingsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/admin/settings' : user.role === 'Auth. Personnel' ? '/personnel/settings' : user.role === 'potential_partner' ? '/partner/settings' : user.role === 'Staff' ? '/staff/settings' : '/') : '/'; %>
+<% // College Dean (role "Auth. Personnel"): "Profile" and "Settings" both linked to the same page — keep only "Settings". %>
+<% if (!(typeof user !== 'undefined' && user && user.role === 'Auth. Personnel')) { %>
                 <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Profile</span></a>
+<% } %>
 <% if (!reducedHeader) { %>
                 <a class="dropdown-item" href="<%= notificationsHref %>"><i class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Notifications</span></a>
 <% } %>
