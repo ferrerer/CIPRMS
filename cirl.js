@@ -142,8 +142,17 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/velzon/assets', express.static(path.join(__dirname, 'assets')));
+// 2026-09-22 perf fix: neither of these set a Cache-Control header before now, so a
+// browser revalidated EVERY css/js/font/image on EVERY full-page navigation (this app
+// has no client-side router — every sidebar click is a fresh page load) — dozens of
+// round-trips per click on top of the page's own request, compounding the session-
+// revalidation lag fixed above. /velzon/assets is the Velzon theme's vendor libraries,
+// which never change day to day in this project, so it can cache long; /public is this
+// app's own CSS/JS, touched far more often, so it gets a short cache just long enough to
+// eliminate repeat round-trips within one browsing session without risking a stale asset
+// surviving past the next deploy for very long.
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '10m' }));
+app.use('/velzon/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1d' }));
 if (!process.env.SESSION_SECRET) {
   console.warn('⚠️  SESSION_SECRET is not set in .env — using an insecure generated fallback for this run only.');
 }
