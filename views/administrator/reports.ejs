@@ -16,6 +16,27 @@
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <!-- Shared Country option list (same one the Registry Add/Edit Partnership Country combobox uses) — backs
+         the Custom Report Builder's Country filter below, so there is one country list in the app, not two. -->
+    <script src="/velzon/assets/js/shared/country-options.js"></script>
+    <!-- Custom Report Builder — searchable Country filter (2026-09-23). Same visual language (rounded corners,
+         shadow, bounded/scrollable results, hover highlight, dark-mode variant) as the Registry page's Country
+         combobox, defined independently here since this is a separate template with its own CSS. -->
+    <style>
+      .cr-country-wrap { position: relative; }
+      .cr-country-dropdown {
+        position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+        background: #fff; border: 1px solid #dfe3ea; border-radius: 8px;
+        box-shadow: 0 10px 28px rgba(20,25,45,.14); max-height: 220px; overflow-y: auto; padding: 6px;
+        display: none;
+      }
+      .cr-country-option { padding: 8px 10px; border-radius: 6px; font-size: .85rem; color: #313a46; cursor: pointer; }
+      .cr-country-option:hover { background: #f0f2fb; color: #405189; }
+      .cr-country-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+      [data-bs-theme="dark"] .cr-country-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+      [data-bs-theme="dark"] .cr-country-option { color: #d3d5db; }
+      [data-bs-theme="dark"] .cr-country-option:hover { background: #363c4c; color: #a9bcf5; }
+    </style>
 </head>
 
 <body>
@@ -331,7 +352,10 @@
                                                     </div>
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">Country</label>
-                                                        <input type="text" class="form-control" id="cr-country" placeholder="e.g. Japan (blank = all)">
+                                                        <div class="cr-country-wrap">
+                                                            <input type="text" class="form-control" id="cr-country" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                                            <div class="cr-country-dropdown" id="cr-country-dropdown" role="listbox"></div>
+                                                        </div>
                                                     </div>
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">College / Unit</label>
@@ -1011,6 +1035,16 @@
             getReportModal().show();
             showRpmLoading();
             var mySeq = ++_previewRequestSeq;
+            // Audit is not a partnership report — it has no Partnership Filters/Group By meaning at all, and
+            // generateCustomReport() below already special-cases it to download the real activity-log
+            // PDF/Excel directly (there is no Audit JSON preview endpoint). Without this guard, Preview asked
+            // /api/reports/custom/preview anyway, which only knows how to filter `partnerships` — silently
+            // showing a generic partnership table under the "Audit" title, unrelated to the actual audit trail
+            // the two Generate buttons produce.
+            if (document.getElementById('cr-type').value === 'Audit') {
+                showRpmError('Audit reports don’t use the Partnership Filters above and have no preview — use "Generate PDF" or "Generate Excel" to download the audit trail directly.', function () { closeReportModal(); });
+                return;
+            }
             var params = buildReportQueryParams();
             fetch('/api/reports/custom/preview?' + params.toString())
                 .then(function (r) {
@@ -1589,7 +1623,66 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Load DSS stats quietly in background (elements are in the hidden insights tab)
             loadDssInsights();
+            initCustomReportCountrySearch();
         });
+
+        // ── Custom Report Builder — searchable Country filter (2026-09-23) ──────────
+        // #cr-country stays exactly what it always was: a plain <input> whose raw .value is read by
+        // buildReportQueryParams() and sent to the server unchanged (no hidden field, no new query param, no
+        // backend change) — this only adds a type-to-filter dropdown on top of it, sourced from the same
+        // COUNTRY_OPTIONS list the Registry's Country combobox uses (assets/js/shared/country-options.js),
+        // so a report filter and a real partnership's stored country are drawn from one consistent list.
+        // Matching is substring-anywhere and case-insensitive, same as the Registry combobox.
+        function initCustomReportCountrySearch() {
+            var input = document.getElementById('cr-country');
+            var dropdown = document.getElementById('cr-country-dropdown');
+            if (!input || !dropdown || typeof COUNTRY_OPTIONS === 'undefined') return;
+            var blurTimer = null;
+
+            function closeDropdown() {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                input.setAttribute('aria-expanded', 'false');
+            }
+            function selectValue(val) {
+                input.value = val;
+                closeDropdown();
+            }
+            function openDropdown() {
+                if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+                var q = input.value.trim().toLowerCase();
+                var matches = q ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
+                dropdown.innerHTML = matches.length
+                    ? matches.map(function (c) { return '<div class="cr-country-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
+                    : '<div class="cr-country-empty">No matching country.</div>';
+                dropdown.style.display = 'block';
+                input.setAttribute('aria-expanded', 'true');
+                dropdown.querySelectorAll('.cr-country-option').forEach(function (opt) {
+                    opt.addEventListener('mousedown', function (e) { e.preventDefault(); selectValue(opt.getAttribute('data-val')); });
+                });
+            }
+
+            input.addEventListener('focus', openDropdown);
+            input.addEventListener('click', openDropdown);
+            input.addEventListener('input', openDropdown);
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var q = input.value.trim().toUpperCase();
+                    var match = COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase() === q; }) || COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
+                    if (match) selectValue(match);
+                } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
+                    // Only swallow Escape while OUR dropdown is open — otherwise leave it alone (no enclosing
+                    // modal here to accidentally close, but this keeps the same safe pattern used elsewhere).
+                    e.stopPropagation();
+                    closeDropdown();
+                }
+            });
+            input.addEventListener('blur', function () { blurTimer = setTimeout(closeDropdown, 120); });
+            document.addEventListener('click', function (e) {
+                if (e.target !== input && !dropdown.contains(e.target)) closeDropdown();
+            });
+        }
     </script>
 
     <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>

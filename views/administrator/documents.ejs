@@ -150,16 +150,9 @@
                                     <% } %>
                                 </div>
 
-                                <!-- Tag Filters -->
-                                <div class="tag-pills-container mt-4 mb-2">
-                                    <button class="btn btn-sm btn-soft-primary rounded-pill px-3 active" onclick="filterTag('All', this)">All</button>
-                                    <button class="btn btn-sm btn-soft-info rounded-pill px-3" onclick="filterTag('Research', this)">Research</button>
-                                    <button class="btn btn-sm btn-soft-success rounded-pill px-3" onclick="filterTag('Student Exchange', this)">Student Exchange</button>
-                                    <button class="btn btn-sm btn-soft-primary rounded-pill px-3" onclick="filterTag('Foreign Exchange', this)">Foreign Exchange</button>
-                                    <button class="btn btn-sm btn-soft-warning rounded-pill px-3" onclick="filterTag('Training', this)">Training</button>
-                                    <button class="btn btn-sm btn-soft-danger rounded-pill px-3" onclick="filterTag('Conference', this)">Conference</button>
-                                    <button class="btn btn-sm btn-soft-secondary rounded-pill px-3" onclick="filterTag('Other', this)">Other</button>
-                                </div>
+                                <!-- Nature of Partnership filters — rebuilt from the actual MOA/MOU records on every
+                                     load/refresh by renderNaturePills() below; see that function for why. -->
+                                <div class="tag-pills-container mt-4 mb-2" id="nature-pills-container"></div>
                             </div>
                             <div class="card-body">
                                 <div class="row" id="document-grid">
@@ -312,6 +305,13 @@
         loadFolders();
         loadDocuments();
 
+        // A document this account uploaded was just archived (a fresh OCR upload) or updated/archived elsewhere —
+        // re-read the library so the grid/list and the Nature-of-Partnership pills reflect it without a full page
+        // reload. Own-uploads-only, matching this page's existing GET /api/documents scoping.
+        if (window.CIPRMS && CIPRMS.live) {
+            CIPRMS.live(['document.updated'], loadDocuments, { debounce: 250 });
+        }
+
         document.getElementById('searchLibrary').addEventListener('input', function(e) {
             currentSearch = e.target.value.toLowerCase();
             renderFiltered();
@@ -332,10 +332,11 @@
     });
 
     function loadDocuments() {
-        fetch('/api/documents')
+        return fetch('/api/documents')
             .then(r => r.json())
             .then(data => {
-                allDocs = data;
+                allDocs = Array.isArray(data) ? data : [];
+                renderNaturePills();
                 renderFiltered();
                 updateStats();
             });
@@ -378,9 +379,38 @@
 
     function filterTag(tag, el) {
         currentTag = tag;
-        document.querySelectorAll('.tag-pills-container .btn').forEach(btn => btn.classList.remove('active'));
-        el.classList.add('active');
+        document.querySelectorAll('#nature-pills-container .btn').forEach(btn => btn.classList.remove('active'));
+        if (el) el.classList.add('active');
         renderFiltered();
+    }
+
+    // Nature of Partnership filter pills — built from the ACTUAL nature values present on real MOA/MOU records
+    // (doc.nature, set by OCR extraction — see services/extractionService.js's inferNature()), not a fixed list.
+    // A pill only exists when at least one MOA/MOU document currently has that nature; "All" is always shown, and
+    // "Other" covers an MOA/MOU whose nature could not be confidently determined (never a reason to hide the
+    // document itself elsewhere in the library — only this refinement filter).
+    const NATURE_PILL_COLORS = ['btn-soft-info', 'btn-soft-success', 'btn-soft-warning', 'btn-soft-danger', 'btn-soft-primary', 'btn-soft-dark'];
+    function renderNaturePills() {
+        const container = document.getElementById('nature-pills-container');
+        if (!container) return;
+        const counts = new Map();
+        allDocs.forEach(doc => {
+            if (doc.archived) return;
+            if (doc.type !== 'MOA' && doc.type !== 'MOU') return;
+            const nature = doc.nature || 'Other';
+            counts.set(nature, (counts.get(nature) || 0) + 1);
+        });
+        const natures = [...counts.keys()].sort((a, b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b));
+        // If the currently-selected nature pill no longer has any matching document (e.g. the last one was removed,
+        // reclassified, or archived), fall back to "All" rather than silently showing an empty grid with no visible
+        // active filter to explain why.
+        if (currentTag !== 'All' && !natures.includes(currentTag)) currentTag = 'All';
+        let html = `<button class="btn btn-sm btn-soft-primary rounded-pill px-3${currentTag === 'All' ? ' active' : ''}" onclick="filterTag('All', this)">All</button>`;
+        natures.forEach((nature, i) => {
+            const color = NATURE_PILL_COLORS[i % NATURE_PILL_COLORS.length];
+            html += `<button class="btn btn-sm ${color} rounded-pill px-3${currentTag === nature ? ' active' : ''}" onclick="filterTag('${nature.replace(/'/g, "\\'")}', this)">${escHtml(nature)} <span class="badge bg-white text-dark ms-1">${counts.get(nature)}</span></button>`;
+        });
+        container.innerHTML = html;
     }
 
     // ── Folders — real, per-owner, backed by /api/document-folders* ─────────────
@@ -518,7 +548,11 @@
                 else if (currentFolder !== 'all' && currentFolder !== 'unfiled' && doc.folderId !== currentFolder) return false;
             }
             const matchesType = currentType === 'All' || doc.type === currentType;
-            const matchesTag = currentTag === 'All' || (doc.tags && doc.tags.includes(currentTag)) || doc.type === currentTag;
+            // Nature of Partnership — the real field (doc.nature), scoped to MOA/MOU records; "Other" covers an
+            // MOA/MOU with no confidently-extracted nature. Every non-MOA/MOU document (Accreditation, Contract,
+            // etc.) is left alone by this filter entirely, same as before.
+            const matchesTag = currentTag === 'All'
+                || ((doc.type === 'MOA' || doc.type === 'MOU') && (doc.nature || 'Other') === currentTag);
             const instText = (doc.institution || doc.partner || '').toLowerCase();
             // IDP upgrade (2026-07-28): also search the OCR-extracted text and
             // keywords, so scanned documents are searchable by words that only

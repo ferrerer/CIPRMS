@@ -113,6 +113,22 @@ async function connectDB() {
     } catch (indexErr) {
       console.error('⚠️  Could not create unique index on calendarevents.clientRequestId — repeated-request duplicate protection is NOT active:', indexErr.message);
     }
+    // 2026-09-22 Administrator/CIRL Staff global search (services/searchService.js). `documents.ocrText` can run to
+    // tens of thousands of characters per record (a whole scanned MOA/MOU) — a text index is what lets a keyword
+    // search of that content use an actual index instead of a full collection scan of every stored document. The
+    // short metadata fields are folded into the same index so a single $text query can also match on them; the
+    // search service additionally runs a plain regex over those same short fields for substrings a stemmed word
+    // index wouldn't catch ("Univ" -> "University") — the two result sets are merged, so this index only needs to
+    // carry the "search the actual document content" half of the feature. Non-fatal on failure, same precedent as
+    // every index above: without it, searchDocuments() falls back to its regex-only metadata match.
+    try {
+      await db.collection('documents').createIndex(
+        { ocrText: 'text', title: 'text', originalFilename: 'text', institution: 'text', partner: 'text', type: 'text', country: 'text', nature: 'text', searchKeywords: 'text' },
+        { name: 'documents_search_text', weights: { title: 5, originalFilename: 4, institution: 4, partner: 4, searchKeywords: 3, type: 2, country: 2, nature: 2, ocrText: 1 } }
+      );
+    } catch (indexErr) {
+      console.error('⚠️  Could not create text index on documents — OCR-content search will fall back to metadata-only matching:', indexErr.message);
+    }
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);

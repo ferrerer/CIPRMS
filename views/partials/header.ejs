@@ -54,12 +54,12 @@
                 <!-- App Search -->
                 <form class="app-search d-none d-md-block">
                     <div class="position-relative">
-                        <input type="text" class="form-control" placeholder="Search pages, partnerships…" autocomplete="off" id="search-options" value="">
+                        <input type="text" class="form-control" placeholder="Search partnerships, requests, documents…" autocomplete="off" id="search-options" value="<%= typeof q !== 'undefined' ? q : '' %>">
                         <span class="mdi mdi-magnify search-widget-icon"></span>
                         <span class="mdi mdi-close-circle search-widget-icon search-widget-icon-close d-none" id="search-close-options"></span>
                     </div>
                     <div class="dropdown-menu dropdown-menu-lg" id="search-dropdown">
-                        <div data-simplebar style="max-height: 320px;">
+                        <div data-simplebar style="max-height: 360px;" id="search-dropdown-body">
                             <div class="dropdown-header">
                                 <h6 class="text-overflow text-muted mb-0 text-uppercase">Recent Searches</h6>
                             </div>
@@ -84,11 +84,14 @@
                                 <span>Partnership Calendar</span>
                             </a>
                         </div>
-                        <div class="text-center pt-3 pb-1">
+                        <div class="text-center pt-3 pb-1" id="search-dropdown-footer">
                             <a href="/lifecycle" class="btn btn-primary btn-sm">View All Records <i class="ri-arrow-right-line ms-1"></i></a>
                         </div>
                     </div>
                 </form>
+                <!-- defer: #search-page-results (when present) lives in the page's own body markup, included after
+                     this header partial — this script must not look for it before the rest of the page has parsed. -->
+                <script src="/js/ciprms-search.js?v=1" defer></script>
 <% } %>
             </div>
 

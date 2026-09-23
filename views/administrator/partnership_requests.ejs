@@ -253,6 +253,7 @@
       font-weight: 600;
       font-size: .9rem;
       color: #212529;
+      overflow-wrap: anywhere; /* a long unbroken institution/document name wraps instead of overflowing the modal */
     }
 
     .detail-box {
@@ -667,7 +668,7 @@
 
   <!-- Document Request Detail Modal -->
   <div class="modal fade zoomIn" id="dr-modal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
       <div class="modal-content">
         <div class="modal-header bg-light p-3">
           <h5 class="modal-title">

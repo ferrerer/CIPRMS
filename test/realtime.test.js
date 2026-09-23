@@ -314,3 +314,53 @@ describe('the stream is not an authorization bypass', () => {
     expect(realtime.publish('request.updated', { id: 1 }, null)).toBe(0);
   });
 });
+
+// 2026-09-22: Document Library (Administrator/CIRL Staff) live updates — lets the Nature-of-Partnership filter pills
+// (and the grid/list itself) refresh without a manual reload when a document this user uploaded is archived (a
+// fresh OCR upload) or organized/edited. Scoped to the uploader's own email — the exact same own-uploads-only
+// boundary GET /api/documents already enforces (see cirl.js's OWN_SCOPE_ROLES) — so this never broadens who is told
+// about a document beyond who could already see it.
+describe('Documents (Administrator/CIRL Staff Document Library)', () => {
+  test('a metadata edit publishes document.updated to the uploader only, after the database write succeeded', async () => {
+    const last = await db.collection('documents').find({}).sort({ id: -1 }).limit(1).toArray();
+    const docId = (last[0] ? last[0].id : 0) + 1;
+    await db.collection('documents').insertOne({ id: docId, title: 'jesttest realtime doc', type: 'MOA', nature: 'Research', uploadedByEmail: users.admin.email, uploadedAt: new Date().toISOString() });
+    const m = mark();
+    const res = await agents.admin.patch('/api/documents/' + docId).send({ title: 'jesttest realtime doc renamed' });
+    expect(res.status).toBe(200);
+    expect((await db.collection('documents').findOne({ id: docId })).title).toBe('jesttest realtime doc renamed'); // already committed when the event went out
+    const ev = await waitFor(after('admin', m), e => e.type === 'document.updated' && e.data.id === docId);
+    expect(ev).toBeTruthy();
+    expect(ev.data.action).toBe('updated');
+    await sleep(400);
+    for (const k of ['staff', 'partnerA', 'partnerB', 'college']) expect(since(m, k, 'document.updated')).toEqual([]);
+    await db.collection('documents').deleteOne({ id: docId });
+  });
+
+  test('organizing (archive/unarchive, move to a folder) also publishes document.updated to the uploader only', async () => {
+    const last = await db.collection('documents').find({}).sort({ id: -1 }).limit(1).toArray();
+    const docId = (last[0] ? last[0].id : 0) + 1;
+    await db.collection('documents').insertOne({ id: docId, title: 'jesttest realtime doc 2', type: 'MOU', nature: 'Student Exchange', uploadedByEmail: users.staff.email, uploadedAt: new Date().toISOString() });
+    const m = mark();
+    const res = await agents.staff.patch('/api/documents/' + docId + '/organize').send({ archived: true });
+    expect(res.status).toBe(200);
+    const ev = await waitFor(after('staff', m), e => e.type === 'document.updated' && e.data.id === docId);
+    expect(ev).toBeTruthy();
+    await sleep(400);
+    for (const k of ['admin', 'partnerA', 'partnerB', 'college']) expect(since(m, k, 'document.updated')).toEqual([]);
+    await db.collection('documents').deleteOne({ id: docId });
+  });
+
+  test('a failed edit (not the uploader, or a bad request) publishes nothing', async () => {
+    const last = await db.collection('documents').find({}).sort({ id: -1 }).limit(1).toArray();
+    const docId = (last[0] ? last[0].id : 0) + 1;
+    await db.collection('documents').insertOne({ id: docId, title: 'jesttest realtime doc 3', type: 'MOA', uploadedByEmail: users.partnerA.email, uploadedAt: new Date().toISOString() });
+    const m = mark();
+    // /organize is gated by requireUploader (admits College Staff) plus its own explicit ownership check — College
+    // Staff here is not the uploader of this particular document, so the request is refused regardless of role.
+    expect((await agents.college.patch('/api/documents/' + docId + '/organize').send({ archived: true })).status).toBe(403);
+    await sleep(500);
+    for (const k of Object.keys(streams)) expect(since(m, k, 'document.updated')).toEqual([]);
+    await db.collection('documents').deleteOne({ id: docId });
+  });
+});

@@ -20,6 +20,15 @@ let adminAgent, personnelAgent, partnerAgent, staffAgent;
 let db;
 let createdEventIds = [];
 
+// Fixtures below that go through the real POST /api/calendarevents route need a date that is always in the
+// future (that route now rejects a brand-new event whose date/time has already passed — see cirl.js's
+// isNewEventInThePast/calendar-past-event-guard.test.js); fixtures that insert directly into MongoDB or call
+// googleCalendarService.createGoogleEvent() directly never go through that route and are unaffected either way.
+function isoInDays(days, hh, mm) {
+  const d = new Date(); d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` + (hh != null ? `T${String(hh).padStart(2, '0')}:${String(mm || 0).padStart(2, '0')}` : '');
+}
+
 beforeAll(async () => {
   db = await connectDB();
   adminAgent = request.agent(app);
@@ -144,7 +153,7 @@ describe('Existing calendar-event feature is unaffected when Google Calendar is 
 
   test('creating an event still succeeds and still has no googleEventId', async () => {
     const res = await adminAgent.post('/api/calendarevents').send({
-      title: 'jesttest Calendar Sync Regression', start: '2026-09-01T09:00', allDay: false,
+      title: 'jesttest Calendar Sync Regression', start: isoInDays(10, 9, 0), allDay: false,
       recipients: []
     });
     expect(res.status).toBe(200);
@@ -178,7 +187,7 @@ describe('googleAttendeeEmails persistence (attendee-wipe-on-update bug fix)', (
   test('a scoped event (specific individual recipient) persists recipientEmails AND googleAttendeeEmails identically', async () => {
     const target = await createTestUser({ role: 'Auth. Personnel' });
     const res = await adminAgent.post('/api/calendarevents').send({
-      title: 'jesttest Attendee Persistence Scoped', start: '2026-09-02T09:00', allDay: false,
+      title: 'jesttest Attendee Persistence Scoped', start: isoInDays(11, 9, 0), allDay: false,
       recipients: [target.email]
     });
     expect(res.status).toBe(200);
@@ -190,7 +199,7 @@ describe('googleAttendeeEmails persistence (attendee-wipe-on-update bug fix)', (
 
   test('an "all users" event persists googleAttendeeEmails but NOT recipientEmails (the exact bug scenario)', async () => {
     const res = await adminAgent.post('/api/calendarevents').send({
-      title: 'jesttest Attendee Persistence All Users', start: '2026-09-03T09:00', allDay: false,
+      title: 'jesttest Attendee Persistence All Users', start: isoInDays(12, 9, 0), allDay: false,
       recipients: ['all']
     });
     expect(res.status).toBe(200);
@@ -203,7 +212,7 @@ describe('googleAttendeeEmails persistence (attendee-wipe-on-update bug fix)', (
 
   test('an event with no recipients gets neither field', async () => {
     const res = await adminAgent.post('/api/calendarevents').send({
-      title: 'jesttest Attendee Persistence None', start: '2026-09-04T09:00', allDay: false, recipients: []
+      title: 'jesttest Attendee Persistence None', start: isoInDays(13, 9, 0), allDay: false, recipients: []
     });
     expect(res.status).toBe(200);
     createdEventIds.push(res.body.event.id);

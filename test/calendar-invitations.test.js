@@ -341,7 +341,7 @@ describe('Join control — College Staff and Partner', () => {
     startedMeeting = (await createEvent(agents.admin, { title: title('Started Meeting'), start: manilaWall(now - 30 * 60 * 1000), end: manilaWall(now + HOUR), recipients: [users.collegeA.email, users.partnerA.email, users.collegeB.email] })).body.event;
     partnerOnly = (await createEvent(agents.admin, { title: title('Partner Only'), start: manilaWall(now - HOUR), end: manilaWall(now + HOUR), recipients: [users.partnerA.email] })).body.event;
     collegeOnly = (await createEvent(agents.admin, { title: title('College Only'), start: manilaWall(now - HOUR), end: manilaWall(now + HOUR), recipients: [users.collegeA.email] })).body.event;
-    renewalWithGuests = (await createEvent(agents.admin, { title: title('Renewal Reminder'), className: 'bg-success-subtle', start: manilaWall(now - HOUR), recipients: [users.collegeA.email] })).body.event;
+    renewalWithGuests = (await createEvent(agents.admin, { title: title('Renewal Reminder'), className: 'bg-success-subtle', start: manilaWall(now + HOUR), recipients: [users.collegeA.email] })).body.event;
   });
 
   const feedEvent = async (agent, id) => (await agent.get('/api/calendarevents')).body.find(e => e.id === id);

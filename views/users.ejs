@@ -55,16 +55,23 @@
                                         <% } %>
                                     </div>
                                 </div>
-                                <div class="d-flex align-items-center gap-2 flex-wrap mt-3">
-                                    <input class="form-control form-control-sm" id="usr-filter-email" style="width:220px;"
-                                        placeholder="Filter by email…" oninput="renderUsers()">
-                                    <select class="form-select form-select-sm" id="usr-filter-role" style="width:180px;" onchange="renderUsers()">
-                                        <option value="">All Roles</option>
-                                        <option value="Administrator">Administrator</option>
-                                        <option value="Auth. Personnel">College Staff</option>
-                                        <option value="potential_partner">Partner</option>
-                                        <option value="Staff">CIRL Staff</option>
-                                    </select>
+                                <div class="row g-2 align-items-end mt-3">
+                                    <div class="col-sm-8 col-md-6 col-lg-4">
+                                        <div class="search-box">
+                                            <input class="form-control" id="usr-filter-email"
+                                                placeholder="Filter by email…" oninput="renderUsers()">
+                                            <i class="ri-search-line search-icon"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-4 col-md-3 col-lg-2">
+                                        <select class="form-select" id="usr-filter-role" onchange="renderUsers()">
+                                            <option value="">All Roles</option>
+                                            <option value="Administrator">Administrator</option>
+                                            <option value="Auth. Personnel">College Staff</option>
+                                            <option value="potential_partner">Partner</option>
+                                            <option value="Staff">CIRL Staff</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-body p-0">

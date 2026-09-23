@@ -106,7 +106,7 @@
 
                         <!-- Event Modal â€” same structure as apps-calendar.html -->
                         <div class="modal fade" id="event-modal" tabindex="-1">
-                            <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
                                 <div class="modal-content border-0">
                                     <div class="modal-header p-3 bg-info-subtle">
                                         <h5 class="modal-title" id="modal-title">Event</h5>
@@ -146,31 +146,33 @@
                                         </div>
                                         <!-- Edit/Add form -->
                                         <div id="edit-mode" class="d-none">
-                                            <div class="mb-3">
-                                                <label class="form-label">Event Type</label>
-                                                <select class="form-select" id="f-type">
-                                                    <option value="bg-primary-subtle">Meeting</option>
-                                                    <option value="bg-danger-subtle">Expiry / Deadline</option>
-                                                    <option value="bg-success-subtle">Renewal</option>
-                                                    <option value="bg-warning-subtle">Mobility / Exchange</option>
-                                                    <option value="bg-info-subtle">Partnership Review</option>
-                                                </select>
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-7">
+                                                    <label class="form-label">Event Type</label>
+                                                    <select class="form-select" id="f-type">
+                                                        <option value="bg-primary-subtle">Meeting</option>
+                                                        <option value="bg-danger-subtle">Expiry / Deadline</option>
+                                                        <option value="bg-success-subtle">Renewal</option>
+                                                        <option value="bg-warning-subtle">Mobility / Exchange</option>
+                                                        <option value="bg-info-subtle">Partnership Review</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <label class="form-label">Date <span class="text-danger">*</span></label>
+                                                    <input type="date" class="form-control" id="f-date">
+                                                </div>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Event Name <span class="text-danger">*</span></label>
                                                 <input type="text" class="form-control" id="f-title" placeholder="e.g. MOA Renewal â€“ Osaka University">
                                                 <div class="invalid-feedback">Please provide an event name.</div>
                                             </div>
-                                            <div class="mb-3">
-                                                <label class="form-label">Date <span class="text-danger">*</span></label>
-                                                <input type="date" class="form-control" id="f-date">
-                                            </div>
-                                            <div class="row mb-3">
-                                                <div class="col-6">
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-sm-6">
                                                     <label class="form-label">Start Time</label>
                                                     <input type="time" class="form-control" id="f-start">
                                                 </div>
-                                                <div class="col-6">
+                                                <div class="col-sm-6">
                                                     <label class="form-label">End Time</label>
                                                     <input type="time" class="form-control" id="f-end">
                                                 </div>
@@ -181,11 +183,11 @@
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Notes</label>
-                                                <textarea class="form-control" id="f-desc" rows="2" placeholder="Additional notes..."></textarea>
+                                                <textarea class="form-control" id="f-desc" rows="3" placeholder="Additional notes..."></textarea>
                                             </div>
-                                            <div class="mb-3" id="f-recipients-wrap">
+                                            <div class="mb-2" id="f-recipients-wrap">
                                                 <label class="form-label" id="f-recipients-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
-                                                <select class="form-select" id="f-recipients" multiple size="6">
+                                                <select class="form-select" id="f-recipients" multiple size="8">
                                                     <optgroup label="Roles">
                                                         <option value="all">All Users</option>
                                                         <option value="Administrator">Administrators</option>
@@ -295,6 +297,21 @@ function fc_wall(dt, allDay){
   return allDay ? date : date + 'T' + str_tm_input(dt);
 }
 function esc(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Client-side approximation only (compares against the BROWSER's local clock, not APP_TIMEZONE) — a quick, friendly
+// "that's already passed" before ever hitting the network. The server (isNewEventInThePast in cirl.js, Asia/Manila /
+// APP_TIMEZONE) is the authoritative check and cannot be bypassed by skipping this one. An all-day event compares by
+// CALENDAR DATE only, so "today" is never rejected just because today's midnight has already gone by.
+function isPastNewEvent(dateStr, startStr){
+  if(!dateStr) return false;
+  var now = new Date();
+  if(!startStr){
+    var todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    return dateStr < todayStr;
+  }
+  var d = dateStr.split('-'), t = startStr.split(':');
+  var candidate = new Date(+d[0], +d[1]-1, +d[2], +t[0], +t[1]);
+  return candidate < now;
+}
 // Show a just-saved event. It is attached to the calendar's own event source (the /api/calendarevents
 // feed): FullCalendar wipes and reloads a source's events on every fetch — which happens whenever
 // you page to another month — so the saved event is then replaced by the feed's copy of itself. A
@@ -661,6 +678,8 @@ document.addEventListener('DOMContentLoaded', function(){
     var start = st ? date + 'T' + st : date;
     var end   = et ? date + 'T' + et : null;
     if(st && et && et < st){ showToast('The end time cannot be before the start time.', '#f06548'); return; }
+    // Only a brand-new event is checked — editing/dragging an existing (possibly now-historical) event is unaffected.
+    if(isAdding && isPastNewEvent(date, st)){ showToast('This date/time has already passed. Please choose a future date and time.', '#f06548'); return; }
     var cls   = document.getElementById('f-type').value;
     var loc   = document.getElementById('f-location').value.trim();
     var desc  = document.getElementById('f-desc').value.trim();

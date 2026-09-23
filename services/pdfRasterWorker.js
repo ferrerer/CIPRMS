@@ -9,7 +9,9 @@ async function main() {
   const [, , pdfPath, outDir] = process.argv;
   try {
     const pages = await pdfToPng(pdfPath, {
-      viewportScale: 2,
+      // 2 (~144 DPI) was noticeably soft for small/dense print common on scanned MOA/MOU agreements — 3 (~216 DPI)
+      // gives Tesseract materially more pixels per character at a still-modest per-page PNG size/render cost.
+      viewportScale: 3,
       outputFolder: outDir,
       returnPageContent: false
     });

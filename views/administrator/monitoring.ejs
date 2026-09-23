@@ -70,11 +70,29 @@
       .unit-combo-option:hover, .unit-combo-option.active { background: #f0f2fb; color: #405189; }
       .unit-combo-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
 
+      /* Country — same searchable-combo pattern as Unit/Nature above, but single-select and made to look like
+         an ordinary <select> (a dropdown caret) since it fronts one (see registry-gridjs.init.js's
+         createCountryCombo / the hidden #f-country / #e-country <select> underneath). */
+      .country-combo-input { padding-right: 2.1rem; }
+      .country-combo-caret {
+        position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+        color: #878a99; pointer-events: none; font-size: 1.1rem;
+      }
+
       [data-bs-theme="dark"] .unit-chip { background: rgba(96,126,224,.18); color: #a9bcf5; border-color: rgba(96,126,224,.35); }
       [data-bs-theme="dark"] .unit-chip button { background: rgba(169,188,245,.18); color: #a9bcf5; }
       [data-bs-theme="dark"] .unit-combo-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
       [data-bs-theme="dark"] .unit-combo-option { color: #d3d5db; }
       [data-bs-theme="dark"] .unit-combo-option:hover, [data-bs-theme="dark"] .unit-combo-option.active { background: #363c4c; color: #a9bcf5; }
+
+      /* Institution Name's worldwide-search results (#ac-dropdown / #e-ac-dropdown, populated by
+         renderInstDropdown() in registry-gridjs.init.js) previously had no height cap at all — up to 15
+         two-line results could grow past 700px, overflowing the modal on small/mobile screens. Bounded and
+         given the same rounded-corner/shadow treatment as the Country combobox's dropdown just above, for a
+         visually consistent search experience, without touching the existing Bootstrap list-group item markup
+         or any of its click/keyboard-nav behavior. */
+      #ac-dropdown, #e-ac-dropdown { max-height: 260px; overflow-y: auto; border-radius: 8px; box-shadow: 0 10px 28px rgba(20,25,45,.14); }
+      [data-bs-theme="dark"] #ac-dropdown, [data-bs-theme="dark"] #e-ac-dropdown { box-shadow: 0 10px 28px rgba(0,0,0,.4); }
     </style>
 
 </head>
@@ -284,6 +302,15 @@
         <button class="btn btn-soft-danger btn-sm" onclick="clearFilters()"><i class="ri-refresh-line me-1"></i>Clear</button>
       </div>
       <div class="card-body py-3">
+        <div class="row g-2 align-items-end mb-2">
+          <div class="col-md-5">
+            <label class="form-label fs-12 mb-1">Search</label>
+            <div class="search-box">
+              <input type="text" class="form-control" id="reg-search" placeholder="Search by institution or country…" oninput="applyFilter()">
+              <i class="ri-search-line search-icon"></i>
+            </div>
+          </div>
+        </div>
         <div class="row g-2 align-items-end">
           <div class="col-md-2">
             <label class="form-label fs-12 mb-1">Type</label>
@@ -503,8 +530,20 @@
                   <div class="form-text"><i class="ri-information-line me-1"></i>Country &amp; region auto-fill on select.</div>
                 </div>
                 <div class="col-lg-6 mb-3">
-                  <label class="form-label" for="f-country">Country <span class="text-danger">*</span></label>
-                  <input type="text" class="form-control" id="f-country" placeholder="e.g. Japan">
+                  <label class="form-label" for="f-country-input">Country <span class="text-danger">*</span></label>
+                  <div class="unit-combo" id="f-country-combo">
+                    <div class="unit-combo-input-wrap">
+                      <input type="text" class="form-control country-combo-input" id="f-country-input" placeholder="Type to search countries…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                      <i class="ri-arrow-down-s-line country-combo-caret"></i>
+                      <div class="unit-combo-dropdown" id="f-country-dropdown" role="listbox" style="display:none"></div>
+                    </div>
+                  </div>
+                  <!-- The real value of record — every save/OCR/auto-fill path still reads/writes this exact
+                       element untouched; the combobox above is only a searchable front-end over it. -->
+                  <select class="d-none" id="f-country" aria-hidden="true">
+                    <option value="">Select country…</option>
+                  </select>
+                  <div class="form-text text-warning d-none" id="f-country-hint"><i class="ri-error-warning-line me-1"></i></div>
                 </div>
                 <div class="col-lg-6 mb-3">
                   <label class="form-label" for="f-region">Region <span class="text-danger">*</span></label>
@@ -680,8 +719,18 @@
             <div id="e-ac-dropdown" class="list-group mt-1" style="position:absolute;z-index:9999;width:calc(100% - 2rem)"></div>
           </div>
           <div class="col-lg-6 mb-3">
-            <label class="form-label" for="e-country">Country <span class="text-danger">*</span></label>
-            <input type="text" class="form-control" id="e-country">
+            <label class="form-label" for="e-country-input">Country <span class="text-danger">*</span></label>
+            <div class="unit-combo" id="e-country-combo">
+              <div class="unit-combo-input-wrap">
+                <input type="text" class="form-control country-combo-input" id="e-country-input" placeholder="Type to search countries…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <i class="ri-arrow-down-s-line country-combo-caret"></i>
+                <div class="unit-combo-dropdown" id="e-country-dropdown" role="listbox" style="display:none"></div>
+              </div>
+            </div>
+            <select class="d-none" id="e-country" aria-hidden="true">
+              <option value="">Select country…</option>
+            </select>
+            <div class="form-text text-warning d-none" id="e-country-hint"><i class="ri-error-warning-line me-1"></i></div>
           </div>
           <div class="col-lg-6 mb-3">
             <label class="form-label" for="e-region">Region</label>
@@ -875,6 +924,9 @@
      server-side; this flag (read by registry-gridjs.init.js) hides those row
      actions for every other role too. -->
 <script>var CAN_MANAGE_REGISTRY = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;</script>
+<!-- Shared Country option list (also used by Reports & Analytics' Custom Report Builder) — loaded before
+     registry-gridjs.init.js, which reads its COUNTRY_OPTIONS global. -->
+<script src="/velzon/assets/js/shared/country-options.js"></script>
 <!-- gridjs init — same script the standalone Registry page used; Monitoring
      is now this page's only home, see docs/SYSTEM_AUDIT_2026-07-16.md -->
 <script src="/velzon/assets/js/pages/registry-gridjs.init.js"></script>

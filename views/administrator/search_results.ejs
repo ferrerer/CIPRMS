@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg"
+    data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+
+<head>
+    <meta charset="utf-8" />
+    <%- include('../partials/ui-state-init') %>
+    <title>Search | CIPRMS-CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <script src="/velzon/assets/js/layout.js"></script>
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css" rel="stylesheet" />
+    <style>
+        #search-page-results mark { background: #fff3a3; padding: 0 1px; border-radius: 2px; }
+        #search-page-results .search-result-item { border-radius: 6px; }
+        #search-page-results .dropdown-header { padding-left: .25rem; }
+    </style>
+</head>
+
+<body>
+<div id="layout-wrapper">
+
+  <%- include('../partials/header') %>
+  <%- include('../partials/' + (typeof sidebarPartial !== 'undefined' ? sidebarPartial : 'sidebar')) %>
+
+  <div class="main-content">
+    <div class="page-content">
+      <div class="container-fluid">
+
+        <!-- Page Title -->
+        <div class="row">
+          <div class="col-12">
+            <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
+              <h4 class="mb-sm-0"><i class="ri-search-line me-2 text-primary"></i>Search Results</h4>
+              <div class="page-title-right">
+                <ol class="breadcrumb m-0">
+                  <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                  <li class="breadcrumb-item active">Search</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header">
+                <p class="text-muted mb-0 fs-13">
+                  <% if (q) { %>Results for <strong>"<%= q %>"</strong> — across the Partnership Registry, Partnership
+                  and Document Requests, and the Document Library (including OCR-extracted content).<% } else { %>
+                  Type in the search box above to search partnerships, requests, and documents.<% } %>
+                </p>
+              </div>
+              <div class="card-body" id="search-page-results">
+                <div class="text-center text-muted py-4 fs-13">
+                  <i class="ri-search-line d-block fs-2 mb-1"></i>Type in the search box above to get started.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- container-fluid -->
+    </div><!-- page-content -->
+
+    <footer class="footer">
+      <div class="container-fluid">
+        <div class="row">
+          <div class="col-sm-6"><script>document.write(new Date().getFullYear())</script> &copy; CIPRMS &mdash; CSPC-CIRL</div>
+          <div class="col-sm-6"><div class="text-sm-end d-none d-sm-block">Camarines Sur Polytechnic Colleges</div></div>
+        </div>
+      </div>
+    </footer>
+  </div><!-- end main content -->
+</div><!-- END layout-wrapper -->
+
+<script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
+<script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
+<script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
+<script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
+<script src="/velzon/assets/js/plugins.js"></script>
+<script src="/velzon/assets/js/app.js"></script>
+</body>
+</html>

@@ -515,6 +515,34 @@ a:focus-visible {
     color: #fff;
 }
 
+/* ── Grid.js search box (Audit Trail on Reports & Analytics, and every other
+   Grid.js-driven table) — the vendor theme hardcodes a bare 250px input with
+   no responsive sizing and no visual relationship to the app's own
+   `.form-control`, which reads as noticeably thinner than every other search
+   field on the same page. Widened and restyled to match Bootstrap's own
+   control sizing/border/focus-ring; applies in both themes (this block, not
+   the dark-mode-only one below, since the size fix itself is theme-neutral). */
+.gridjs-search {
+    float: none;
+    margin-bottom: .75rem;
+}
+.gridjs-search-input.gridjs-input {
+    width: 100%;
+    max-width: 360px;
+    height: calc(1.5em + 0.94rem + 2px); /* matches Bootstrap 5's default .form-control height */
+    padding: .47rem .9rem;
+    font-size: .875rem;
+    border-radius: .25rem;
+    border-color: #ced4da;
+}
+.gridjs-search-input.gridjs-input:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 .2rem rgba(64,81,137,.15);
+}
+@media (max-width: 575.98px) {
+    .gridjs-search-input.gridjs-input { max-width: 100%; }
+}
+
 /* ── Grid.js tables (vendor theme, assets/libs/gridjs/theme/mermaid.min.css) ──
    That vendor stylesheet hardcodes #fff/light-gray backgrounds and dark text
    with no dark-mode variant at all, so every Grid.js-driven table (Audit
@@ -604,4 +632,78 @@ a:focus-visible {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ── Global header search (Administrator / CIRL Staff — views/partials/header.ejs,
+   public/js/ciprms-search.js) ────────────────────────────────────────────────
+   Velzon's `.app-search` has no explicit width of its own (see app.min.css): as a
+   plain block-level flex item next to the logo box and the sidebar-toggle button,
+   its `.form-control` (width:100%) collapses to whatever narrow intrinsic width the
+   flex layout happens to leave it, which is why the box read as too short to
+   comfortably hold a real institution/document/MOA-MOU name. Given an explicit,
+   responsive width instead — wider at large desktop sizes, shrinking at the
+   in-between breakpoints, same as before at tablet width where the search bar is
+   already narrow next to the hamburger icon. `flex-shrink` stays at its default
+   (1), so on an in-between window size the bar can still shrink further on its own
+   rather than pushing the fullscreen/dark-mode/notification-bell/profile group
+   (a separate flex group, `justify-content:space-between` from this one) out of
+   the viewport. */
+.app-search {
+    width: 420px;
+    max-width: 34vw;
+}
+@media (max-width: 1399.98px) {
+    .app-search { width: 340px; max-width: 32vw; }
+}
+@media (max-width: 1199.98px) {
+    .app-search { width: 280px; max-width: 30vw; }
+}
+@media (max-width: 991.98px) {
+    .app-search { width: 220px; max-width: 28vw; }
+}
+
+/* A text <input> never grows to fit typed text — overflowing text simply scrolls
+   inside the box natively — so a long query alone cannot expand the header. The
+   actual overflow came from the RESULTS beneath it (see next two rules). */
+
+/* #search-dropdown itself: previously relied on the shared `.dropdown-menu-lg`
+   utility (a flat 320px, no viewport cap), so on an in-between window width the
+   panel could sit wider than the space actually left beside the search input.
+   Scaled alongside `.app-search` above and capped to the viewport so it can never
+   force horizontal scrolling on its own. */
+#search-dropdown {
+    width: 420px;
+    max-width: calc(100vw - 2rem);
+}
+@media (max-width: 1399.98px) { #search-dropdown { width: 360px; } }
+@media (max-width: 1199.98px) { #search-dropdown { width: 320px; } }
+@media (max-width: 991.98px)  { #search-dropdown { width: 280px; } }
+
+/* #search-dropdown-body: the same SimpleBar gotcha already fixed above for
+   .notif-scroll — `data-simplebar` only finishes wrapping an element that has
+   real dimensions when its init script runs, and this panel is `display:none`
+   (closed) at load time, so it never gets them. The inline `max-height:360px`
+   caps the BOX, but with no `overflow` rule the browser's default
+   `overflow:visible` still lets content taller than that paint straight past the
+   box's bottom edge and past the "View All Results" footer below it — the actual
+   "dropdown extends beyond the intended area" symptom. A plain CSS scrollbar is
+   deterministic regardless of the panel's visibility when the page loads. */
+#search-dropdown-body {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Long institution / document / OCR-snippet names: Bootstrap's `.dropdown-item`
+   (which every rendered result row is) sets `white-space:nowrap` by default. With
+   no override, a long name rendered a single unbroken line that ran past the
+   panel's edge instead of wrapping — the other half of the "breaks the layout"
+   symptom, and the reason a long name needed the panel to be capped (above) just
+   to keep the damage on-screen instead of also fixing it. Wrapping is preferred
+   over truncation here: it needs no JS and stays correct however long the name
+   is; `title` on the row (added in ciprms-search.js) still gives a native
+   full-text tooltip on hover for anyone who wants the untruncated single line. */
+.search-result-item {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }

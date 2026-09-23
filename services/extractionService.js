@@ -230,6 +230,31 @@ function flattenWrappedLines(rawText) {
   return rawText.replace(/([^\n])\n(?!\n)/g, '$1 ');
 }
 
+// Runs BEFORE every field-matching pattern in this file. Tesseract (and some
+// PDF text layers) routinely emit characters and spacing that are visually
+// identical to what a human reads but defeat a literal regex: a non-breaking
+// space where "between X and Y" expects a normal one, curly quotes/dashes
+// instead of the straight ASCII a pattern like "-" or "\/" is written
+// against, CRLF line endings that break \n-anchored patterns, and runs of
+// spaces/tabs from a multi-column layout that widen the gap a pattern like
+// [^.\n]{0,40} was sized for. None of this changes what the text SAYS —
+// only how it's spelled at the byte level — so normalizing it first can only
+// make an already-correct pattern match more often, never introduce a value
+// that wasn't actually in the document.
+function normalizeOcrText(rawText) {
+  return String(rawText || '')
+    .replace(/\r\n?/g, '\n')                 // CRLF / lone CR -> LF
+    .replace(/[   ]/g, ' ')    // non-breaking / figure / narrow-no-break spaces -> normal space
+    .replace(/[‘’ʼ]/g, "'")    // curly single quotes -> straight
+    .replace(/[“”]/g, '"')          // curly double quotes -> straight
+    .replace(/[–—]/g, '-')          // en/em dash -> hyphen
+    .replace(/[…]/g, '...')              // ellipsis glyph -> three dots
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '') // stray control bytes, keep \t and \n
+    .replace(/[ \t]+/g, ' ')                  // collapse horizontal whitespace runs (never touches \n, which flattenWrappedLines/paragraph logic depends on)
+    .split('\n').map(line => line.replace(/[ \t]+$/, '')).join('\n'); // trailing space per line
+}
+
 // ── Institution / partner names ──────────────────────────────────────────────
 function extractInstitutions(rawText) {
   const btwRe = /between\s+([A-Z][A-Za-z.,&()'\- ]{3,90}?)\s+(?:,?\s*represented by[^,]*,\s*)?and\s+([A-Z][A-Za-z.,&()'\- ]{3,90}?)[,.\n]/i;
@@ -374,7 +399,7 @@ function extractStatus(rawText) {
 }
 
 function extractFields(rawText) {
-  const text = rawText || '';
+  const text = normalizeOcrText(rawText);
   const flat = flattenWrappedLines(text); // used for patterns that expect a single logical line
 
   const { institution, partner } = extractInstitutions(flat);
@@ -435,7 +460,7 @@ function extractFields(rawText) {
 
 module.exports = {
   OUR_INSTITUTION_RE, // shared with geocodingService so CSPC's own name is never geolocated as a partner
-  extractFields, classifyDocumentType,
+  extractFields, classifyDocumentType, normalizeOcrText,
   extractCountry, inferCategory, inferRegion, inferNature, inferUnit,
   buildSummary, buildSearchKeywords
 };

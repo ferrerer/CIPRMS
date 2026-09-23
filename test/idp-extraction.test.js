@@ -10,7 +10,7 @@
 // Research Agreement) — see docs/SYSTEM_AUDIT_2026-07-16.md for the caveat
 // this implies for true end-to-end (real scan -> Tesseract -> extraction)
 // verification.
-const { extractFields } = require('../services/extractionService');
+const { extractFields, normalizeOcrText } = require('../services/extractionService');
 
 function futureDate(daysFromNow) {
   const d = new Date();
@@ -180,5 +180,69 @@ describe('IDP extraction — responsible CSPC unit (conservative acronym-only ma
     expect(f.unit).toBe('CCS');
     expect(f.unitConfidence).toBeGreaterThan(0);
     expect(f.unitConfidence).toBeLessThan(80); // deliberately a weak signal
+  });
+});
+
+// 2026-09-22 OCR fix: extractFields() now normalizes text before any pattern runs (normalizeOcrText, run first thing
+// inside extractFields). These artifacts are exactly what real Tesseract/PDF-text-layer output contains that hand-
+// typed test fixtures elsewhere in this file never do — a regression here would silently make every OTHER test in
+// this file pass while the real OCR pipeline kept failing on real documents.
+describe('IDP extraction — text normalization before field matching', () => {
+  test('normalizeOcrText: NBSP/figure/narrow-no-break spaces become normal spaces', () => {
+    //   = NBSP,   = figure space,   = narrow no-break space
+    expect(normalizeOcrText('between Camarines Sur Polytechnic Colleges and XYZ University,')).toBe(
+      'between Camarines Sur Polytechnic Colleges and XYZ University,');
+  });
+
+  test('normalizeOcrText: curly quotes, dashes and ellipsis become their ASCII equivalents', () => {
+    expect(normalizeOcrText('“Partner’s” obligations – see Section 3—below…')).toBe(
+      '"Partner\'s" obligations - see Section 3-below...');
+  });
+
+  test('normalizeOcrText: CRLF collapses to LF, horizontal whitespace runs collapse, trailing spaces are trimmed', () => {
+    expect(normalizeOcrText('Line one   \r\nLine  two\t\tindented\r\n\r\nLine three   ')).toBe(
+      'Line one\nLine two indented\n\nLine three');
+  });
+
+  test('normalizeOcrText: stray control bytes are dropped; a newline survives as a real line break and a tab survives as a normal space (never corrupted or silently deleted)', () => {
+    expect(normalizeOcrText('A\u0000B\u0007C\tD\nE')).toBe('ABC D\nE');
+  });
+
+  test('a non-breaking space between "between" and the institution name no longer breaks institution/partner detection', () => {
+    // A real, common OCR artifact: the space after "between" comes back as a non-breaking space (U+00A0) instead of a
+    // normal one. Before normalization this silently failed extractInstitutions' `between\s+` pattern.
+    const text = 'This Memorandum of Agreement is entered into by and between Camarines Sur Polytechnic Colleges and XYZ University of Testland, hereinafter the Parties.';
+    const f = extractFields(text);
+    expect(f.institution).toMatch(/Camarines Sur Polytechnic Colleges/);
+    expect(f.partner).toMatch(/XYZ University of Testland/);
+  });
+
+  test('curly quotes around a labeled date do not defeat date-context matching', () => {
+    const text = `Effective Date’s value is January 5, 2026 and this MOU shall expire until December 31, 2030.`;
+    const f = extractFields(text);
+    expect(f.startDate).toMatch(/January 5, 2026/);
+    expect(f.endDate).toMatch(/December 31, 2030/);
+  });
+
+  test('CRLF line endings do not break the labeled-section extractor (PURPOSE/OBJECTIVES/SCOPE)', () => {
+    const text = 'MEMORANDUM OF AGREEMENT\r\n\r\nPURPOSE\r\nTo formalize a joint research partnership between the parties.\r\n\r\nOBJECTIVES\r\nTo exchange faculty and students.\r\n';
+    const f = extractFields(text);
+    expect(f.purpose).toMatch(/joint research partnership/);
+    expect(f.objectives).toMatch(/exchange faculty/);
+  });
+
+  test('normalization never invents a value: unrelated text still yields nulls, not guesses', () => {
+    const f = extractFields('A short unrelated’memo—with no recognizable agreement content.');
+    expect(f.country).toBeNull();
+    expect(f.nature).toBeNull();
+    expect(f.unit).toBeNull();
+  });
+
+  test('MOA/MOU classification and unit inference are unaffected by normalization artifacts', () => {
+    const moa = extractFields('This MEMORANDUM OF AGREEMENT was coordinated through CCS.');
+    expect(moa.documentType).toBe('Memorandum of Agreement (MOA)');
+    expect(moa.unit).toBe('CCS');
+    const mou = extractFields('This’MEMORANDUM OF UNDERSTANDING’ governs the partnership.');
+    expect(mou.documentType).toBe('Memorandum of Understanding (MOU)');
   });
 });

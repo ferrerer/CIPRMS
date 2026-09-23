@@ -30,6 +30,211 @@ var COUNTRY_REGION = {
   'South Africa': 'Africa', 'Nigeria': 'Africa', 'Kenya': 'Africa', 'Egypt': 'Africa', 'Ghana': 'Africa', 'Morocco': 'Africa'
 };
 
+// COUNTRY_OPTIONS (2026-09-22, moved to its own shared file 2026-09-23 so the Reports & Analytics Custom
+// Report Builder's Country filter can use the exact same list) now lives in assets/js/shared/country-options.js
+// — loaded as a separate <script> tag before this file in monitoring.ejs. Kept in sync with cirl.js's
+// VALID_PARTNERSHIP_COUNTRIES (server-side validation uses the exact same names).
+
+// Common alternate spellings/abbreviations an external source (the worldwide-university API in selectInstitution(),
+// or OCR'd/request text) might produce, mapped to this dropdown's exact option text. Matching is otherwise exact
+// (case-insensitive) by design — an unrecognized name is never guessed at, only these well-known equivalents.
+var COUNTRY_ALIASES = {
+  'usa': 'United States', 'us': 'United States', 'u.s.a.': 'United States', 'u.s.': 'United States',
+  'united states of america': 'United States', 'america': 'United States',
+  'uk': 'United Kingdom', 'u.k.': 'United Kingdom', 'great britain': 'United Kingdom', 'britain': 'United Kingdom',
+  'korea, south': 'South Korea', 'republic of korea': 'South Korea', 's. korea': 'South Korea',
+  'korea, north': 'North Korea', 'dprk': 'North Korea',
+  'viet nam': 'Vietnam', 'russian federation': 'Russia', 'uae': 'United Arab Emirates',
+  'u.a.e.': 'United Arab Emirates', 'macao': 'Macau', 'czechia': 'Czech Republic',
+  'cote d\'ivoire': 'Ivory Coast', 'côte d\'ivoire': 'Ivory Coast', 'east timor': 'Timor-Leste',
+  'swaziland': 'Eswatini', 'burma': 'Myanmar', 'cape verde': 'Cabo Verde',
+  'republic of the congo': 'Congo (Republic of the)', 'congo-brazzaville': 'Congo (Republic of the)',
+  'dr congo': 'Democratic Republic of the Congo', 'congo-kinshasa': 'Democratic Republic of the Congo'
+};
+
+// Finds the exact COUNTRY_OPTIONS entry a raw string (from OCR, an approved request, or the worldwide
+// institution API) refers to — an exact case-insensitive match first, then a small known-alias table for
+// minor formatting differences ("USA", "U.K.", trailing periods). Returns null (never a guess) when the raw
+// value isn't recognized, so a caller can leave the field for manual selection instead of picking wrong.
+function resolveCountryOption(raw) {
+  var q = String(raw == null ? '' : raw).trim();
+  if (!q) return null;
+  var exact = COUNTRY_OPTIONS.find(function (o) { return o.toLowerCase() === q.toLowerCase(); });
+  if (exact) return exact;
+  var key = q.toLowerCase().replace(/\.$/, '').replace(/\.(?=\s|$)/g, '');
+  var alias = COUNTRY_ALIASES[q.toLowerCase()] || COUNTRY_ALIASES[key];
+  return (alias && COUNTRY_OPTIONS.indexOf(alias) !== -1) ? alias : null;
+}
+
+// Fills a Country <select> with every COUNTRY_OPTIONS entry (alphabetical, exactly as authored above) below
+// its existing placeholder option — called once per select at load, not rebuilt afterward.
+function populateCountrySelect(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var frag = document.createDocumentFragment();
+  COUNTRY_OPTIONS.forEach(function (name) {
+    var opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    frag.appendChild(opt);
+  });
+  el.appendChild(frag);
+}
+
+// Keeps the visible, searchable Country combobox input (see createCountryCombo below) showing exactly what the
+// real, hidden <select> currently holds — called after anything OTHER than the combobox's own click/Enter
+// selection sets the select's value directly (OCR, edit-modal load, the worldwide-institution auto-fill, the
+// map preview's "Did you mean" suggestion), so the two never visibly disagree.
+function syncCountryDisplay(prefix) {
+  var select = document.getElementById(prefix + '-country');
+  var display = document.getElementById(prefix + '-country-input');
+  if (select && display) display.value = select.value || '';
+}
+
+// Applies an externally-sourced country value (OCR, an approved request, the worldwide institution API) to a
+// Country <select> — auto-selects it when it (or a known alias of it) matches an option; otherwise the select
+// is left exactly as it was and a small hint below it names the unrecognized value so the person knows manual
+// selection may be needed, rather than silently choosing something that might be wrong. Returns true when a
+// value was actually selected (callers use this to decide whether to flag the field as "OCR-filled").
+function setCountryField(prefix, raw) {
+  var select = document.getElementById(prefix + '-country');
+  var hint = document.getElementById(prefix + '-country-hint');
+  if (!select) return null;
+  var matched = resolveCountryOption(raw);
+  if (matched) {
+    select.value = matched;
+    if (hint) { hint.classList.add('d-none'); hint.textContent = ''; }
+    syncCountryDisplay(prefix);
+    return matched;
+  }
+  if (raw && hint) {
+    hint.innerHTML = '<i class="ri-error-warning-line me-1"></i>Detected "' + escapeHtml(raw) + '" — not in the list above; please select the country manually.';
+    hint.classList.remove('d-none');
+  }
+  syncCountryDisplay(prefix);
+  return null;
+}
+
+// Edit modal only: an existing partnership's stored country might legitimately be something this form's own
+// closed list doesn't (yet) contain — a legacy free-text value from before this field became a dropdown, or a
+// spelling this list doesn't carry. Rather than silently leaving the select blank (which would erase that
+// value the moment the form is saved), an extra option holding the exact stored text is added and selected, so
+// the true value is visibly preserved and an untouched save keeps it byte-for-byte unchanged. The combobox's
+// dropdown (createCountryCombo) also offers this exact preserved value as its own top search result, so it
+// stays selectable/searchable like any other option, just not one of COUNTRY_OPTIONS.
+function setEditCountryValue(value) {
+  var select = document.getElementById('e-country');
+  if (!select) return;
+  select.querySelectorAll('option[data-legacy-country]').forEach(function (o) { o.remove(); });
+  var matched = resolveCountryOption(value);
+  if (matched) { select.value = matched; syncCountryDisplay('e'); return; }
+  var trimmed = String(value == null ? '' : value).trim();
+  if (!trimmed) { select.value = ''; syncCountryDisplay('e'); return; }
+  var opt = document.createElement('option');
+  opt.value = trimmed; opt.textContent = trimmed + ' (not in list)';
+  opt.setAttribute('data-legacy-country', '1');
+  select.insertBefore(opt, select.firstChild.nextSibling);
+  select.value = trimmed;
+  syncCountryDisplay('e');
+}
+
+// Country — single-select searchable combobox (2026-09-22): the person can type to filter (substring match,
+// anywhere in the name — "land" finds Finland/Iceland/Ireland/..., "republic" finds every option containing
+// it) but the value that ends up in the real, hidden <select id="{prefix}-country"> (still exactly what
+// submitPartnership()/saveEdit()/setCountryField()/setEditCountryValue()/the institution-autocomplete auto-fill
+// already read and write) can only ever be one of COUNTRY_OPTIONS, or — Edit only — the one legacy value
+// setEditCountryValue() preserved. This deliberately reuses the exact same searchable-list interaction and CSS
+// (.unit-combo*) as the Unit/Nature comboboxes above rather than a single-select mode bolted onto
+// createChipCombo (that factory is chip/multi-value shaped throughout); it is its own small function because a
+// single committed value, not a growing chip list, is a different enough shape to not force through the same
+// code paths. A native <select> was tried first (see the 2026-09-22 "Country dropdown" change this replaces)
+// but cannot filter by substring — only this already-established in-house pattern does, and the project has no
+// working third-party searchable-select library (choices.min.js is referenced in older pages but the vendor
+// file itself is absent — confirmed 404 in live testing — so it was never a real option to build on).
+function createCountryCombo(prefix) {
+  var select = document.getElementById(prefix + '-country');
+  var input = document.getElementById(prefix + '-country-input');
+  var dropdown = document.getElementById(prefix + '-country-dropdown');
+  if (!select || !input || !dropdown) return null;
+  var blurTimer = null;
+
+  function legacyOptionValue() {
+    var opt = select.querySelector('option[data-legacy-country]');
+    return opt ? opt.value : null;
+  }
+  function searchPool() {
+    var legacy = legacyOptionValue();
+    return legacy ? [legacy].concat(COUNTRY_OPTIONS) : COUNTRY_OPTIONS;
+  }
+  function closeDropdown() {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+    input.setAttribute('aria-expanded', 'false');
+  }
+  function selectValue(val) {
+    select.value = val;
+    input.value = val;
+    // A real <select>'s own dropdown fires a native 'change' event on pick — this combobox fronts that select
+    // instead of the person interacting with it directly, so the same event has to be dispatched by hand to
+    // keep existing 'change'-driven behavior (the map-location preview refresh) working exactly as before.
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    var hint = document.getElementById(prefix + '-country-hint');
+    if (hint) { hint.classList.add('d-none'); hint.textContent = ''; }
+    closeDropdown();
+  }
+  function openDropdown() {
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+    var q = input.value.trim().toLowerCase();
+    if (dropdown.style.display === 'block' && dropdown.dataset.q === q) return;
+    dropdown.dataset.q = q;
+    var matches = q ? searchPool().filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : searchPool();
+    dropdown.innerHTML = matches.length
+      ? matches.map(function (c) { return '<div class="unit-combo-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
+      : '<div class="unit-combo-empty">No matching country.</div>';
+    dropdown.style.display = 'block';
+    input.setAttribute('aria-expanded', 'true');
+    dropdown.querySelectorAll('.unit-combo-option').forEach(function (opt) {
+      opt.addEventListener('mousedown', function (e) { e.preventDefault(); selectValue(opt.getAttribute('data-val')); });
+    });
+  }
+
+  input.addEventListener('focus', openDropdown);
+  input.addEventListener('click', openDropdown); // re-opens after a pick closed it (focus is a no-op if already focused)
+  input.addEventListener('input', openDropdown);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var q = input.value.trim().toUpperCase();
+      var pool = searchPool();
+      var match = pool.find(function (c) { return c.toUpperCase() === q; }) || pool.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
+      if (match) selectValue(match);
+    } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
+      // Only intercept Escape while OUR dropdown is actually open, and stop it there — Bootstrap's modal also
+      // listens for Escape (its default "close on Escape" behavior) on the same bubbling keydown, so without
+      // this the same keypress that was meant to just dismiss the country results would also close the whole
+      // Add/Edit Partnership form and discard everything already filled in. With nothing open, Escape is left
+      // alone to reach the modal as normal.
+      e.stopPropagation();
+      closeDropdown();
+      input.value = select.value || ''; // discard an unmatched in-progress query
+    }
+  });
+  input.addEventListener('blur', function () {
+    blurTimer = setTimeout(function () {
+      closeDropdown();
+      // A typed query that was never actually picked (left partial/unmatched on blur) must not masquerade as
+      // a real selection — revert the visible text to whatever is genuinely selected in the hidden <select>.
+      input.value = select.value || '';
+    }, 120);
+  });
+
+  input.value = select.value || '';
+}
+
+populateCountrySelect('f-country');
+populateCountrySelect('e-country');
+createCountryCombo('f');
+createCountryCombo('e');
+
 var instSearchTimer = null;
 var instResults = [];
 var instActiveIndex = -1;
@@ -203,7 +408,7 @@ function createNatureCombo(prefix) { return createChipCombo(prefix, 'nature', NA
 
 document.addEventListener('click', function (e) {
   ['f', 'e'].forEach(function (prefix) {
-    ['unit', 'nature'].forEach(function (field) {
+    ['unit', 'nature', 'country'].forEach(function (field) {
       var dropdown = document.getElementById(prefix + '-' + field + '-dropdown');
       var input = document.getElementById(prefix + '-' + field + '-input');
       if (dropdown && input && e.target !== input && !dropdown.contains(e.target)) {
@@ -261,7 +466,9 @@ function renderInstDropdown() {
   var dropdown = document.getElementById(ids.dropdown);
   if (!dropdown) return;
   if (!instResults.length) {
-    dropdown.innerHTML = '<div class="list-group-item text-muted fs-13">No matching institutions found.</div>';
+    // Institution Name has always been free text — no worldwide match is never a dead end, just confirmation
+    // that whatever is already typed will be kept as a manual entry once the field is left/the form is saved.
+    dropdown.innerHTML = '<div class="list-group-item text-muted fs-13">No matching institutions found — you can keep typing to use this name manually.</div>';
     dropdown.style.display = 'block';
     return;
   }
@@ -280,11 +487,10 @@ function selectInstitution(i) {
   if (!u) return;
   var ids = instIds(instPrefix);
   var instEl = document.getElementById(ids.inst);
-  var countryEl = document.getElementById(ids.country);
   var regionEl = document.getElementById(ids.region);
   if (instEl) instEl.value = u.name;
-  if (countryEl) countryEl.value = u.country || '';
-  var region = COUNTRY_REGION[u.country];
+  var resolvedCountry = u.country ? setCountryField(instPrefix, u.country) : false;
+  var region = COUNTRY_REGION[resolvedCountry || u.country];
   if (regionEl && region) regionEl.value = region;
 
   var dropdown = document.getElementById(ids.dropdown);
@@ -393,7 +599,7 @@ document.addEventListener('click', function (e) {
   var status = btn.closest('[id$="-location-status"]');
   var prefix = status ? status.id.charAt(0) : 'f';
   var countryEl = document.getElementById(prefix + '-country');
-  if (countryEl) { countryEl.value = btn.getAttribute('data-country') || ''; scheduleLocationPreview(prefix); }
+  if (countryEl) { countryEl.value = btn.getAttribute('data-country') || ''; syncCountryDisplay(prefix); scheduleLocationPreview(prefix); }
 });
 
 function instKeyNav(event, prefix) {
@@ -477,7 +683,18 @@ function loadPartnerships(live) {
     if (live) { applyFilter(); } else { filtered = partnerships.slice(); buildGrid(); }
   });
 }
-loadPartnerships(false);
+// Deep link from the global header search (a Partnerships result links here as `?q=<institution name>`) — reuses the
+// page's own existing search box/filter rather than trying to scroll to and highlight a row inside the Grid.js table
+// (which repaginates client-side, so a stable "row N" DOM handle doesn't exist across renders). This runs once the
+// initial load has populated `partnerships`, so the filter has real data to narrow down immediately.
+function applyQueryPrefill() {
+  var q = new URLSearchParams(window.location.search).get('q');
+  var box = document.getElementById('reg-search');
+  if (!q || !box) return;
+  box.value = q;
+  applyFilter();
+}
+loadPartnerships(false).then(applyQueryPrefill);
 if (window.CIPRMS && CIPRMS.live) {
   CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function() { return loadPartnerships(true); }, { debounce: 250 });
 }
@@ -719,12 +936,16 @@ var eUnitCombo = createUnitCombo('e');
 var eNatureCombo = createNatureCombo('e');
 function openEditModal(id){
   var p=partnerships.find(function(x){return x.id===id;}); if(!p) return; editingId=id;
-  var toISO=function(s){var d=new Date(s);return isNaN(d)?'':d.toISOString().slice(0,10);};
-  document.getElementById('e-inst').value=p.inst; document.getElementById('e-country').value=p.country;
+  // ocrIsoDate (defined above) reads local Y/M/D directly instead of going through toISOString(), which
+  // would silently shift the shown date back a day in any timezone ahead of UTC (e.g. Asia/Manila) — the
+  // same bug this shared helper already fixes for OCR-extracted dates applies equally to pre-filling a
+  // stored partnership's Start/End date here.
+  document.getElementById('e-inst').value=p.inst; setEditCountryValue(p.country);
+  var eCountryHint = document.getElementById('e-country-hint'); if (eCountryHint) { eCountryHint.classList.add('d-none'); eCountryHint.textContent = ''; }
   document.getElementById('e-region').value=p.region; document.getElementById('e-partner-email').value=p.partnerEmail||'';
   document.getElementById('e-type').value=p.type; eNatureCombo.setValues(p.nature);
-  document.getElementById('e-cat').value=p.cat; document.getElementById('e-start').value=toISO(p.start);
-  document.getElementById('e-end').value=toISO(p.end); document.getElementById('e-status').value=p.status;
+  document.getElementById('e-cat').value=p.cat; document.getElementById('e-start').value=ocrIsoDate(p.start);
+  document.getElementById('e-end').value=ocrIsoDate(p.end); document.getElementById('e-status').value=p.status;
   eUnitCombo.setValues(p.unit); document.getElementById('e-coordinator').value=p.coordinator||'';
   document.getElementById('e-doclink').value=p.docLink||''; document.getElementById('e-remarks').value=p.remarks||'';
   locPreviewSeq.e++; clearTimeout(locPreviewTimer.e);
@@ -925,7 +1146,12 @@ function ocrIsoDate(str) {
   if (!str) return '';
   var d = new Date(str);
   if (isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
+  // toISOString() converts to UTC first, which silently shifts the calendar day backward whenever the
+  // browser's local timezone is ahead of UTC (e.g. Asia/Manila, UTC+8) — "February 10, 2026" parsed as
+  // local midnight became "2026-02-09" once rendered in UTC. Reading the local Y/M/D components straight
+  // off the Date object (same as the <input type="date"> the value feeds) keeps the extracted date intact.
+  var y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 
 function ocrSetIfPresent(id, value) {
@@ -958,7 +1184,9 @@ function applyOcrToForm() {
   var useCounterparty = !!(r.partner && r.institution && OUR_INSTITUTION_RE_CLIENT.test(r.institution));
   set('f-inst', useCounterparty ? r.partner : r.institution);
   set('f-partner-email', r.email);
-  set('f-country', r.country);
+  // Country is a closed <select> — only ever auto-select an exact (or known-alias) match; an unrecognized
+  // extracted value is left for manual selection instead of guessed at (see setCountryField above).
+  if (r.country && setCountryField('f', r.country)) filled.push('f-country');
   set('f-region', r.region);
   set('f-cat', r.category);
 
@@ -974,6 +1202,13 @@ function applyOcrToForm() {
   if (r.nature) {
     var natureOpt = NATURE_OPTIONS.find(function (o) { return o.toLowerCase() === r.nature.toLowerCase(); });
     if (natureOpt) { fNatureCombo.setValues([natureOpt]); filled.push('f-nature-input'); }
+  }
+  // Responsible CSPC Unit — extracted server-side (inferUnit(), extractionService.js) whenever the document
+  // literally names one of the unit acronyms, but this required field was never actually applied to the form
+  // (unlike applyRequestToForm()'s equivalent request-conversion path just below, which already does this).
+  if (r.unit) {
+    var unitOpt = UNIT_OPTIONS.find(function (o) { return o.toLowerCase() === r.unit.toLowerCase(); });
+    if (unitOpt) { fUnitCombo.setValues([unitOpt]); filled.push('f-unit-input'); }
   }
 
   var startIso = ocrIsoDate(r.startDate);
@@ -1051,7 +1286,7 @@ function applyRequestToForm(r) {
   }
 
   set('f-inst', r.institution);
-  set('f-country', r.country);
+  setCountryField('f', r.country);
   set('f-region', r.region);
   set('f-cat', r.category);
 

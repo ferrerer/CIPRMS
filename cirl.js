@@ -17,6 +17,7 @@ const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
 const realtime = require('./services/realtime');
+const searchService = require('./services/searchService');
 const geocoding = require('./services/geocodingService');
 const uploadAvatar = require('./middleware/avatarUploadMiddleware');
 const uploadDoc = require('./middleware/uploadMiddleware');
@@ -124,6 +125,18 @@ const geocodePreviewLimiter = process.env.NODE_ENV === 'test'
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many location lookups. Please wait a minute and try again.' }
+  });
+// Global header search (Administrator/CIRL Staff). Per-minute like geocodePreviewLimiter above, not the 10-per-15-min
+// makeRateLimiter shape — this is typed-search-with-debounce traffic from one person actively using the feature, not
+// an occasional form action.
+const searchLimiter = process.env.NODE_ENV === 'test'
+  ? (req, res, next) => next()
+  : rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many searches. Please wait a moment and try again.' }
   });
 const adminPasswordLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
 const personnelPasswordLimiter = makeRateLimiter('Too many requests. Please wait 15 minutes and try again.');
@@ -1975,7 +1988,7 @@ app.get('/api/documents/mine', requireAuth, async (req, res) => {
 // route's gate — requirePersonnel — is Administrator + Auth. Personnel
 // only, a different role set than that route's).
 const DOCUMENT_METADATA_SELF_ONLY_ROLES = ['Auth. Personnel'];
-app.patch('/api/documents/:id', requirePersonnel, async (req, res) => {
+app.patch('/api/documents/:id', requirePersonnel, announce('document'), async (req, res) => {
   try {
     const db = getDb();
     const doc = await db.collection('documents').findOne({ id: parseInt(req.params.id) });
@@ -2060,7 +2073,7 @@ app.patch('/api/document-folders/:id', requireUploader, async (req, res) => {
 // archive/unarchive it — the two actions the Document Library needs beyond
 // the existing OCR-metadata-correction route above, kept separate from it so
 // that route's Administrator/Auth. Personnel-only RBAC is never touched.
-app.patch('/api/documents/:id/organize', requireUploader, async (req, res) => {
+app.patch('/api/documents/:id/organize', requireUploader, announce('document'), async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const db = getDb();
@@ -2111,6 +2124,17 @@ const VALID_PARTNERSHIP_STATUSES = ['Active', 'Expiring Soon', 'Expired'];
 // closed, predefined set — unlike Document Request's free-text combobox, no
 // custom values are accepted here.
 const VALID_PARTNERSHIP_UNITS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
+// Country (2026-09-22): the Registry's Add/Edit Partnership form now presents Country as a closed <select> —
+// see assets/js/pages/registry-gridjs.init.js's COUNTRY_OPTIONS for that list. Deliberately NOT enforced here
+// as a matching server-side enum: the existing partnership test suite (partnerships.test.js's dashboard/
+// country-aggregation tests, reports.test.js, search-api.test.js, and others) has long relied on posting
+// arbitrary placeholder strings ("Testland", "Jesttest Wonderland", ...) directly to this API for test
+// isolation, and this app has never restricted `country` to a closed set server-side (unlike type/cat/status/
+// unit, which always were closed sets). Adding one now would break that established, load-bearing test
+// pattern — "do not break existing API validation" wins over retroactively closing this field. What IS
+// validated below is that a submitted value is a sane string, not that it's a member of any specific list —
+// the same defense-in-depth the client dropdown itself already gives normal usage.
+const PARTNERSHIP_COUNTRY_MAX_LENGTH = 100;
 
 /**
  * Builds a MongoDB-safe field set from a request body: unknown keys must
@@ -2130,6 +2154,9 @@ function sanitizePartnershipFields(body, { requireCore }) {
       if (typeof value !== 'string') { errors.push(`${field} must be a string.`); continue; }
       const trimmed = value.trim();
       if (field === 'inst' && !trimmed) { errors.push('inst must not be empty.'); continue; }
+      if (field === 'country' && trimmed.length > PARTNERSHIP_COUNTRY_MAX_LENGTH) {
+        errors.push(`country must be ${PARTNERSHIP_COUNTRY_MAX_LENGTH} characters or fewer.`); continue;
+      }
       fields[field] = trimmed;
     } else if (type === 'number') {
       if (typeof value !== 'number' || !Number.isFinite(value)) { errors.push(`${field} must be a number.`); continue; }
@@ -2204,7 +2231,6 @@ app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async
     if (errors.length) {
       return res.status(400).json({ error: errors.join(' ') });
     }
-
     const db = getDb();
 
     // ── Approved-Request → Registry conversion ──────────────────────────────
@@ -5364,6 +5390,16 @@ async function publishChange(topic, req, body, prior) {
       const ev = await db.collection('calendarevents').findOne({ id });
       realtime.publish('calendar.updated', { id, action: req.method === 'POST' ? 'created' : 'updated' }, calendarAudience(ev));
     }
+  } else if (topic === 'document') {
+    // Document Library visibility is own-uploads-only even for Administrator/Staff (GET /api/documents scopes by
+    // uploadedByEmail — see OWN_SCOPE_ROLES) — the live update follows the exact same boundary: only the uploader's
+    // own open Library page needs to know one of ITS rows changed (e.g. a Nature-of-Partnership filter button that
+    // should now appear/disappear). This never widens who can see a document, only keeps what a page already shows
+    // in sync with the database, same as every other announce() topic.
+    const doc = body && body.document;
+    if (doc && doc.uploadedByEmail) {
+      realtime.publish('document.updated', { id: doc.id, action: req.method === 'POST' ? 'created' : 'updated' }, realtime.audience.emails([doc.uploadedByEmail]));
+    }
   } else if (topic === 'notificationState' && actor) {
     const mine = realtime.audience.emails([actor.email]);
     if (req.method === 'DELETE') realtime.publish('notification.deleted', { id: paramId }, mine);
@@ -5963,6 +5999,33 @@ function mergeSkipped(existing, added) {
 // Server-side validation of the fields the calendar UI sends. Only the fields
 // actually present in the request are checked, so renaming a legacy event that
 // already has a bad end time is not blocked.
+// Only applied to POST (creating a brand-new event) — never to PATCH. Editing/dragging/resizing an ALREADY-EXISTING
+// event (including one that has since become historical) keeps its existing, unrestricted business rules: an
+// Administrator correcting a past event's notes, attendee list, or even its recorded time must still work exactly as
+// before. A calendar-DATE comparison (not an exact instant) is used for all-day events, so "schedule an all-day
+// event for today" is never rejected just because today's 00:00 has already gone by.
+//
+// "Already passed" means the event is OVER, not merely started: when an end time is given, only the END is checked
+// against now — a meeting logged a few minutes after it actually began (start in the recent past, end still ahead)
+// is a normal, legitimate thing to create (this is also how the existing "Join opens once a meeting has started"
+// feature and its tests deliberately create a currently-in-progress meeting), and must not be rejected. Only a
+// point-in-time entry with no end time at all falls back to comparing its start.
+function isNewEventInThePast(fields) {
+  const zone = meetingTime.appTimeZone();
+  if (fields.allDay) {
+    const startDateOnly = meetingTime.eventDateOnly(fields.start, zone);
+    const todayOnly = meetingTime.eventDateOnly(new Date().toISOString(), zone);
+    return !!(startDateOnly && todayOnly && startDateOnly < todayOnly);
+  }
+  const now = new Date();
+  if (fields.end) {
+    const end = meetingTime.eventEndInstant(fields, zone);
+    return !!(end && end < now);
+  }
+  const start = meetingTime.eventStartInstant(fields, zone);
+  return !!(start && start < now);
+}
+
 function validateCalendarEventFields(fields, merged) {
   if ('title' in fields && (typeof fields.title !== 'string' || !fields.title.trim())) return 'Event title is required.';
   if ('title' in fields && fields.title.length > 200) return 'Event title is too long (200 characters maximum).';
@@ -6060,6 +6123,12 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     // A new event needs a title and a valid start; validate every time field.
     const invalid = validateCalendarEventFields({ title: fields.title === undefined ? '' : fields.title, start: null, end: null, allDay: null }, fields);
     if (invalid) return res.status(400).json({ error: invalid });
+    // New meetings/events cannot be created in the past (Asia/Manila / APP_TIMEZONE) — server-side authoritative,
+    // checked here regardless of what any client-side check already did. Never applied to PATCH (see
+    // isNewEventInThePast's own comment) — an existing event that has since become historical stays fully editable.
+    if (isNewEventInThePast(fields)) {
+      return res.status(400).json({ error: 'This date/time has already passed. Please choose a future date and time.' });
+    }
 
     // One token per Save / palette drop, generated by the browser. A repeated
     // request for the SAME action (double click, retry, a doubled callback)
@@ -6641,28 +6710,66 @@ app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async 
 // added so an unauthenticated caller can no longer use CIPRMS as a free
 // relay against the third-party universities API. Every real caller
 // (Add/Edit Partnership's institution autocomplete) is already logged in.
+//
+// 2026-09-23: the external universities.hipolabs.com dataset only covers universities — it has zero results for
+// "TESDA", "DOST", or "Camarines" (confirmed live), yet this app's own real partnership history already has
+// "TESDA Region V", "DOST Region V", and other government/training institutions that are exactly the kind of
+// partner CIPRMS deals with. Rather than adding a second external dependency (or, worse, inventing placeholder
+// institution data), this now ALSO searches this app's own previously-recorded partner institutions
+// (`partnerships.inst` — genuinely real names/countries, never fabricated) and merges them ahead of the
+// external results: a name this app has actually partnered with before is at least as trustworthy a suggestion
+// as an unaffiliated worldwide university, and it is the only way something like "TESDA Region V" is ever
+// findable here at all. Every result — internal or external — keeps the same {name, country} shape
+// selectInstitution() already expects, so the client-side auto-fill logic needs no changes.
 app.get('/api/institutions', requireAuth, institutionsLimiter, async (req, res) => {
   const name = req.query.name || '';
-  if (!name || name.trim().length < 2) {
+  const q = name.trim();
+  if (!q || q.length < 2) {
     return res.json([]);
   }
+  const RESULT_LIMIT = 15;
+  let internal = [];
+  try {
+    const db = getDb();
+    const pattern = { $regex: escapeRegexLiteral(q), $options: 'i' };
+    const docs = await db.collection('partnerships')
+      .find({ inst: pattern }, { projection: { inst: 1, country: 1, _id: 0 } })
+      .limit(RESULT_LIMIT)
+      .toArray();
+    const seen = new Set();
+    for (const d of docs) {
+      if (!d.inst) continue;
+      const key = d.inst.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      internal.push({ name: d.inst, country: d.country || '' });
+    }
+  } catch (_) { /* DB unavailable — external search below still works on its own */ }
+
+  const remaining = RESULT_LIMIT - internal.length;
+  if (remaining <= 0) return res.json(internal);
+
   try {
     const http = require('http');
-    const url = `http://universities.hipolabs.com/search?name=${encodeURIComponent(name.trim())}`;
+    const url = `http://universities.hipolabs.com/search?name=${encodeURIComponent(q)}`;
     http.get(url, apiRes => {
       let data = '';
       apiRes.on('data', chunk => data += chunk);
       apiRes.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          res.json(parsed.slice(0, 15));
+          const seenNames = new Set(internal.map(u => u.name.toLowerCase()));
+          const external = (Array.isArray(parsed) ? parsed : [])
+            .filter(u => u && u.name && !seenNames.has(String(u.name).toLowerCase()))
+            .slice(0, remaining);
+          res.json(internal.concat(external));
         } catch {
-          res.json([]);
+          res.json(internal);
         }
       });
-    }).on('error', () => res.json([]));
+    }).on('error', () => res.json(internal));
   } catch {
-    res.json([]);
+    res.json(internal);
   }
 });
 
@@ -6679,6 +6786,44 @@ app.get('/api/institutions', requireAuth, institutionsLimiter, async (req, res) 
 // was never meant to have. Every OCR job remains additionally per-uploader
 // ownership-checked (see ocrController.status) regardless of role.
 app.use('/api/ocr', requireUploader, ocrRoutes);
+
+// ── GLOBAL SEARCH (header search bar) ─────────────────────────────────────────
+// Administrator/CIRL Staff only (requireStaffAccess), matching exactly the two roles the header actually shows the
+// search bar to (views/partials/header.ejs: `!reducedHeader`) and, not coincidentally, the two roles that already
+// have full-registry/full-request-review access AND can already open any document regardless of who uploaded it
+// (see the SELF_UPLOAD_ONLY_ROLES exemption on GET /uploads/documents/:filename above). Global search surfaces
+// exactly that same reach through one search box instead of four separate pages — it does not grant either role
+// anything they could not already reach through the app's other endpoints. College Staff and Partner never receive
+// the client script that calls this, and this route itself refuses them regardless (requireStaffAccess), so a direct
+// API call cannot bypass the restriction either.
+//
+// Response shape is intentionally plain data (id/title/subtitle/snippet/href) — the client is responsible for
+// escaping before it ever touches innerHTML (see public/js/ciprms-search.js). `href` is built here, per the
+// searching user's OWN role, from the exact same prLinkForRole/drLinkForRole helpers notifications already use, so a
+// clicked result lands on the same page a notification about that record would.
+app.get('/api/search', requireStaffAccess, searchLimiter, async (req, res) => {
+  try {
+    const db = getDb();
+    const role = req.session.user.role;
+    const result = await searchService.globalSearch(db, req.query.q, { full: req.query.full === '1' });
+    result.partnerships.forEach(p => { p.href = (role === 'Staff' ? '/staff/lifecycle' : '/lifecycle') + '?q=' + encodeURIComponent(p.title); });
+    result.requests.forEach(r => { r.href = prLinkForRole(role, r.id); });
+    result.documentRequests.forEach(r => { r.href = drLinkForRole(role, r.id); });
+    result.documents.forEach(d => { d.href = d.fileLink || null; delete d.fileLink; });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Search is unavailable right now. Please try again.' });
+  }
+});
+
+// Full search-results page — reached by pressing Enter in the header search box (public/js/ciprms-search.js) rather
+// than the small dropdown. Same GET /api/search the dropdown uses, requested with a higher per-category limit.
+app.get('/search', requireAdmin, (req, res) => {
+  res.render('administrator/search_results', { activePage: '', user: req.session.user, q: req.query.q || '' });
+});
+app.get('/staff/search', requireStaffAccess, (req, res) => {
+  res.render('administrator/search_results', { activePage: '', user: req.session.user, sidebarPartial: 'sidebar_staff', q: req.query.q || '' });
+});
 
 // Every file OCR'd is archived here automatically — auth-gated since these
 // are institutional partnership documents, not public assets.

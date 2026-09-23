@@ -11,6 +11,7 @@ const { UPLOAD_DIR } = require('../middleware/uploadMiddleware');
 const { archiveToDocumentLibrary, findPossibleDuplicates } = require('./documentLibraryService');
 const { analyzeImageQuality } = require('./imageQualityService');
 const { getDb } = require('../db');
+const realtime = require('./realtime');
 
 const OCR_TIMEOUT_MS = 90 * 1000;
 const LOW_CONFIDENCE_THRESHOLD = 45;
@@ -206,6 +207,11 @@ async function archiveUpload(jobId, filePath, meta, extraction) {
   try {
     const archived = await archiveToDocumentLibrary(filePath, meta.originalName, extraction, meta);
     updateJob(jobId, { documentId: archived.documentId, fileLink: archived.fileLink });
+    // Own-uploads-only, same as GET /api/documents — lets the uploader's own already-open Document Library page
+    // (e.g. its Nature-of-Partnership filter buttons) pick up the new record without a manual refresh.
+    if (meta.uploadedByEmail) {
+      realtime.publish('document.updated', { id: archived.documentId, action: 'created' }, realtime.audience.emails([meta.uploadedByEmail]));
+    }
     return archived;
   } catch (archiveErr) {
     console.error('Document library archiving failed:', archiveErr.message);

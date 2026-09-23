@@ -667,10 +667,10 @@
                 const pct = Math.round((count / max) * 100);
                 return `<div class="d-flex align-items-center mb-3">
         <div class="flex-shrink-0 me-3">${flag}</div>
-        <div class="flex-grow-1">
-            <div class="d-flex justify-content-between mb-1">
-                <span class="fs-13 fw-medium">${esc(country)}</span>
-                <span class="fs-12 text-muted">${count}</span>
+        <div class="flex-grow-1" style="min-width:0;">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
+                <span class="fs-13 fw-medium text-truncate" title="${esc(country)}" style="min-width:0;">${esc(country)}</span>
+                <span class="fs-12 text-muted flex-shrink-0">${count}</span>
             </div>
             <div class="progress" style="height:4px;">
                 <div class="progress-bar bg-primary" style="width:${pct}%"></div>
@@ -860,23 +860,43 @@
         // Only the charts, map, and top-countries list require client-side JS.
 
         // 1. Stats API → charts only (counters already rendered by EJS)
-        fetch('/api/partnerships/stats')
-            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(stats => { renderCharts(stats); })
-            .catch(err => {
-                console.error('Stats API failed:', err);
-                renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
-            });
+        function loadStats() {
+            return fetch('/api/partnerships/stats')
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(stats => { renderCharts(stats); return true; })
+                .catch(err => {
+                    console.error('Stats API failed:', err);
+                    renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
+                    return false;
+                });
+        }
 
-        // 2. Partnerships list → map + top countries only
-        fetch('/api/partnerships')
-            .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-            .then(partnerships => {
-                const list = Array.isArray(partnerships) ? partnerships : [];
-                renderMap(list);
-                renderTopCountries(list);
-            })
-            .catch(err => { console.error('Map data failed:', err); });
+        // 2. Partnerships list → map + top countries (this is the real, live source behind "Top Partner Countries" —
+        // recomputed from the actual registry every time this runs, never a fixed/static list).
+        function loadPartnershipsForDashboard() {
+            return fetch('/api/partnerships')
+                .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(partnerships => {
+                    const list = Array.isArray(partnerships) ? partnerships : [];
+                    renderMap(list);
+                    renderTopCountries(list);
+                    return true;
+                })
+                .catch(err => { console.error('Map data failed:', err); return false; });
+        }
+
+        loadStats();
+        loadPartnershipsForDashboard();
+
+        // Live updates: a partnership was added/edited/renewed/deleted elsewhere (Registry, or an approved request
+        // converted into one) — re-read the real data so the charts, map and Top Partner Countries reflect it without
+        // a full page reload. Reuses the existing CIPRMS SSE/AJAX infrastructure already used across the app; no
+        // second realtime mechanism is introduced here.
+        if (window.CIPRMS && CIPRMS.live) {
+            CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function () {
+                return Promise.all([loadStats(), loadPartnershipsForDashboard()]).then(r => r.every(Boolean));
+            }, { debounce: 400 });
+        }
 
     </script>
 

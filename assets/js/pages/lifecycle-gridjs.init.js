@@ -249,7 +249,10 @@ function openEditModal(id) {
     var p = partnerships.find(function(x) { return x.id === id; });
     if (!p) return;
     editingId = id;
-    var toISO = function(s) { var d = new Date(s); return isNaN(d) ? '' : d.toISOString().slice(0,10); };
+    // toISOString() converts to UTC first, which silently shifts the shown calendar day back by one
+    // whenever the browser's local timezone is ahead of UTC (e.g. Asia/Manila, UTC+8) — reading the
+    // local Y/M/D components directly keeps the stored date intact for the <input type="date"> field.
+    var toISO = function(s) { var d = new Date(s); if (isNaN(d)) return ''; return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
     document.getElementById('e-inst').value = p.inst;
     document.getElementById('e-type').value = p.type;
     document.getElementById('e-cat').value = p.cat;
