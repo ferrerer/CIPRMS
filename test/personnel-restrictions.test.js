@@ -68,7 +68,7 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
       expect(html).toContain('id="notif-badge"');
       expect(html).toContain('/api/notifications/unread-count');
       expect(html).toContain('/api/notifications/mine');
-      // user menu (Profile / Settings / Logout) — and fullscreen + dark mode
+      // user menu (Settings / Logout) — and fullscreen + dark mode
       expect(html).toContain('page-header-user-dropdown');
       expect(html).toContain('data-toggle="fullscreen"');
       expect(html).toContain('light-dark-mode');

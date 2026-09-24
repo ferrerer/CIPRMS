@@ -1,4 +1,5 @@
-<%# Join control for a calendar meeting the signed-in user is invited to. Shared by
+<%# Join control for a calendar meeting the signed-in user is invited to (or, for Administrator and CIRL Staff,
+    any meeting: they facilitate the meetings, so they can join without an invitation). Shared by
     the Administrator/CIRL Staff/College Dean calendar (administrator/calendar.ejs)
     and the Partner calendar (potential_partner/partner_calendar.ejs) so there is one
     implementation. A page shows it by calling MeetingJoin.render(eventId, event.myInvite).
@@ -54,10 +55,13 @@ window.MeetingJoin = (function () {
             label.textContent = 'Open Google Meet';
             if (!state.message) hint.textContent = 'You joined at ' + state.joinedAtDisplay + ' (' + state.timeZone + ').';
         } else {
+            // Administrator / CIRL Staff can join any meeting as its facilitator, invited or not.
             badge.className = 'badge bg-info-subtle text-info';
-            badge.textContent = "You're invited";
+            badge.textContent = state.facilitator ? 'Facilitator' : "You're invited";
             label.textContent = 'Join';
-            if (!state.message) hint.textContent = 'The meeting is on. Join to open Google Meet and record your attendance.';
+            if (!state.message) hint.textContent = state.facilitator
+                ? 'The meeting is on. As a facilitator you can join even though you were not invited.'
+                : 'The meeting is on. Join to open Google Meet and record your attendance.';
         }
     }
 
@@ -68,6 +72,7 @@ window.MeetingJoin = (function () {
     function load(invite) {
         state = {
             joined: !!invite.joined,
+            facilitator: !!invite.facilitator,
             joinedAtDisplay: invite.joinedAtDisplay,
             timeZone: invite.timeZone || '',
             startsMs: invite.startsAt ? Date.parse(invite.startsAt) : null,

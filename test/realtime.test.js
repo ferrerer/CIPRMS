@@ -190,10 +190,8 @@ describe('Partnership Request status changes reach only the people allowed to se
     for (const k of Object.keys(streams)) expect(since(m, k, 'request.statusChanged', 'request.updated')).toEqual([]);
   });
 
-  test('withdrawing / draft delete: owner action is announced to reviewers and the owner', async () => {
-    m = mark();
-    expect((await agents.partnerA.post(`/api/requests/${reqId}/withdraw`)).status).toBe(200);
-    for (const k of ['admin', 'staff', 'partnerA']) expect(await waitFor(after(k, m), e => e.type === 'request.statusChanged' && e.data.status === 'Withdrawn')).toBeTruthy();
+  test('draft delete: owner action is announced to reviewers and the owner (withdrawing is disabled)', async () => {
+    expect((await agents.partnerA.post(`/api/requests/${reqId}/withdraw`)).status).toBe(403);
     const draft = await agents.partnerA.post('/api/requests').send({ isDraft: true, institution: 'jesttest Draft Org ' + Date.now(), type: 'MOU', notes: 'jesttest' });
     requestIds.push(draft.body.request.id); m = mark();
     expect((await agents.partnerA.delete('/api/requests/' + draft.body.request.id)).status).toBe(200);

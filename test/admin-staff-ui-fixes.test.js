@@ -100,7 +100,7 @@ describe('Calendar: one compact layout for every role, and a saved event is neve
       const html = (await agent.get(url)).text;
       expect(html).toContain('return cal.addEvent(docToFcEvent(doc), cal.getEventSources()[0]);');
       expect(html.split('cal.addEvent(docToFcEvent(').length - 1).toBe(1);                  // the single, source-attached call inside addSavedEvent
-      expect(html.split('addSavedEvent(data.event)').length - 1).toBe(2);      // Save and palette drop both use it
+      expect(html.split('addSavedEvent(data.event)').length - 1).toBe(1);      // Save uses it; a palette drop now opens the Add Event form instead of saving
       expect(html).toContain("cal.getEvents().filter(function(e){ return String(e.id) === gone; }).forEach(function(e){ e.remove(); })");
     }
   });

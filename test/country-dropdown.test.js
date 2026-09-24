@@ -22,8 +22,8 @@ describe('Country dropdown — markup and client-side matching logic', () => {
   const sharedCountryList = read('assets', 'js', 'shared', 'country-options.js');
 
   test('the Add Partnership form\'s Country field is a searchable text combobox, not a plain select or free-text input', () => {
-    expect(view).toMatch(/id="f-country-input"[^>]*placeholder="Type to search countries…"/);
-    expect(view).not.toMatch(/id="f-country"[^>]*placeholder="e\.g\. Japan"/);
+    expect(view).toContain('id="f-country-input"');
+    expect(view).not.toMatch(/id="f-country(-input)?"[^>]*placeholder=/); // placeholders were removed system-wide
     expect(view).not.toMatch(/<select class="form-select" id="f-country">/); // the old plain-<select> UI
   });
 
@@ -33,7 +33,8 @@ describe('Country dropdown — markup and client-side matching logic', () => {
   });
 
   test('the Edit Partnership modal\'s Country field is also the searchable combobox', () => {
-    expect(view).toMatch(/id="e-country-input"[^>]*placeholder="Type to search countries…"/);
+    expect(view).toContain('id="e-country-input"');
+    expect(view).not.toMatch(/id="e-country-input"[^>]*placeholder=/);
   });
 
   test('the combobox looks like a normal form control — same input styling, a dropdown caret, and a bounded (non-excessively-tall) results list', () => {

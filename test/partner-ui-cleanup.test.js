@@ -111,7 +111,7 @@ describe('Partner: sidebar and header on every remaining page', () => {
     }
   });
 
-  test('the bell has no "See All" (its page is gone) and the profile menu has no Notifications item — but keeps Profile, Settings, Logout', async () => {
+  test('the bell has no "See All" (its page is gone) and the profile menu is only Settings and Logout', async () => {
     for (const path of PARTNER_PAGES) {
       const html = (await agent.get(path)).text;
       expect(html).not.toMatch(/class="[^"]*view-all[^"]*"/);
@@ -120,7 +120,7 @@ describe('Partner: sidebar and header on every remaining page', () => {
       expect(html).not.toContain('/partner/notifications');
       const menu = html.slice(html.indexOf('page-header-user-dropdown'), html.indexOf('</header>'));
       expect(menu).not.toMatch(/class="align-middle">Notifications</);
-      expect(menu).toMatch(/href="\/partner\/settings"[^>]*>[\s\S]*?Profile/);
+      expect(menu).not.toMatch(/class="align-middle">Profile</);
       expect(menu).toMatch(/href="\/partner\/settings"[^>]*>[\s\S]*?Settings/);
       expect(menu).toContain('Logout');
     }
@@ -190,7 +190,7 @@ describe('Partner header notifications are user-specific and correctly counted',
 });
 
 describe('Nothing leaks into Administrator, Staff or College Dean', () => {
-  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps Search, "See All", the Notifications menu item and NOT the Partner stylesheet (%s)', async (role, path) => {
+  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps Search and "See All", has a Settings/Logout-only profile menu, and NOT the Partner stylesheet (%s)', async (role, path) => {
     const { agent } = await agentFor(role);
     const html = (await agent.get(path)).text;
     expect(html).toContain('id="search-options"');
@@ -198,7 +198,9 @@ describe('Nothing leaks into Administrator, Staff or College Dean', () => {
     expect(html).toMatch(/class="[^"]*view-all[^"]*"/);
     expect(html).toContain('View All Notifications');
     const menu = html.slice(html.indexOf('page-header-user-dropdown'), html.indexOf('</header>'));
-    expect(menu).toMatch(/class="align-middle">Notifications</);
+    expect(menu).not.toMatch(/class="align-middle">(Profile|Notifications)</); // the profile menu is Settings + Logout for every role
+    expect(menu).toMatch(/class="align-middle">Settings</);
+    expect(menu).toContain('Logout');
     expect(html).not.toContain('header-notifications.css');
   });
 

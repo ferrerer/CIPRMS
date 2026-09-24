@@ -204,7 +204,7 @@
                                 <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
                             </div>
                             <div class="mb-2">
-                                <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
+                                <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2"></textarea>
                             </div>
                             <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
                                 <i class="ri-upload-2-line me-1"></i>Upload
@@ -264,7 +264,7 @@
                         </div>
                         <div class="mb-1">
                             <label class="form-label">Notes</label>
-                            <textarea class="form-control" id="rr-notes" rows="3" placeholder="Optional context for the renewal…"></textarea>
+                            <textarea class="form-control" id="rr-notes" rows="3"></textarea>
                         </div>
                         <div class="alert alert-danger d-none mt-3 mb-0 py-2 fs-13" id="rr-error"></div>
                     </div>
@@ -569,18 +569,10 @@
             return;
         }
         body.innerHTML = prs.map(function (r) {
-            var actions = '';
-            if (r.status === 'Draft') {
-                actions = '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>';
-            } else if (r.status === 'Pending' || r.status === 'Under Review') {
-                actions = '<button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ', this)" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
-            } else {
-                actions = '';
-            }
-            if (r.status !== 'Draft') {
-                actions += ' <button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line me-1"></i>Draft</button>';
-            }
-            if (!actions) actions = '<span class="text-muted fs-12">—</span>';
+            // Withdraw was removed from Monitoring: a submitted request can only be viewed here.
+            var actions = r.status === 'Draft'
+                ? '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>'
+                : '<button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View Draft"><i class="ri-file-list-3-line me-1"></i>Draft</button>';
             return '<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
                 '<td>' + (escapeHtml(r.institution) || '<span class="text-muted">(untitled draft)</span>') + '</td>' +
                 '<td>' + (r.isRenewal ? 'Renewal' : 'Partnership') + '</td>' +
@@ -627,9 +619,6 @@
         var rows = current.map(function (r) {
             var files = (r.attachmentLink ? 1 : 0) + (r.supportingDocuments || []).length;
             var actions = '<button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View files"><i class="ri-file-list-3-line me-1"></i>View</button>';
-            if (r.status === 'Pending' || r.status === 'Under Review') {
-                actions += ' <button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ', this)" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
-            }
             return '<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
                 '<td>' + escapeHtml(r.institution || '—') + '</td>' +
                 '<td style="max-width:260px;">' + moaNotesCell(r.notes) + '</td>' +
@@ -653,17 +642,6 @@
                 '<td class="text-end"><span class="text-muted fs-12">Earlier submission</span></td></tr>');
         });
         body.innerHTML = rows.join('');
-    }
-
-    function withdrawRequest(id, btn) {
-        if (!confirm('Withdraw this request?')) return;
-        return CIPRMS.busy(btn, function () {
-            return CIPRMS.api('/api/requests/' + id + '/withdraw', { method: 'POST', quiet: true }).then(function (res) {
-                showToast(res.ok ? 'Request withdrawn.' : res.error, res.ok ? '#15803d' : '#f06548');
-                // re-read either way: after a refusal (already decided, gone) the row on screen may be stale
-                return loadPRRequests({ live: !res.ok });
-            });
-        }, 'Withdrawing…');
     }
 
     // Pending -> "Pending", Under Review -> "In Progress", Approved -> "Approved"; Rejected and Withdrawn are both

@@ -11,7 +11,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet"/>
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260924" rel="stylesheet"/>
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet"/>
     <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
     <%- include('../partials/calendar_layout') %>
     <style>
@@ -72,7 +72,7 @@
                     <div class="col-12">
                         <div class="row">
 
-                            <!-- col-xl-3 sidebar â€” exact from apps-calendar.html -->
+                            <!-- col-xl-3 sidebar — exact from apps-calendar.html -->
                             <% var canManageCalendar = typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff'); %>
                             <div class="col-xl-3 cal-side">
                                 <% if (canManageCalendar) { %>
@@ -121,7 +121,7 @@
                                 </div>
                             </div><!-- end col-xl-3 -->
 
-                            <!-- col-xl-9 main calendar â€” exact from apps-calendar.html -->
+                            <!-- col-xl-9 main calendar — exact from apps-calendar.html -->
                             <div class="col-xl-9">
                                 <div id="cal-notice"></div>
                                 <div class="card cal-card">
@@ -134,7 +134,7 @@
 
                         <div style="clear:both"></div>
 
-                        <!-- Event Modal â€” same structure as apps-calendar.html -->
+                        <!-- Event Modal — same structure as apps-calendar.html -->
                         <div class="modal fade" id="event-modal" tabindex="-1">
                             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
                                 <div class="modal-content border-0">
@@ -181,45 +181,52 @@
                                         </div>
                                         <!-- Edit/Add form -->
                                         <div id="edit-mode" class="d-none">
+                                            <!-- Shown when Save is clicked on a new event with required fields left empty -->
+                                            <div class="alert alert-danger py-2 px-3 fs-13 d-none" id="f-missing-alert" role="alert"></div>
                                             <div class="row g-3 mb-3">
                                                 <div class="col-md-7">
-                                                    <label class="form-label">Event Type</label>
+                                                    <label class="form-label">Event Type <span class="text-danger">*</span></label>
                                                     <select class="form-select" id="f-type">
+                                                        <option value="">Select event type</option>
                                                         <option value="bg-primary-subtle">Meeting</option>
                                                         <option value="bg-danger-subtle">Expiry / Deadline</option>
                                                         <option value="bg-success-subtle">Renewal</option>
                                                         <option value="bg-warning-subtle">Mobility / Exchange</option>
                                                         <option value="bg-info-subtle">Partnership Review</option>
                                                     </select>
+                                                    <div class="invalid-feedback">Please select the event type.</div>
                                                 </div>
                                                 <div class="col-md-5">
                                                     <label class="form-label">Date <span class="text-danger">*</span></label>
                                                     <input type="date" class="form-control" id="f-date">
-                                                    <div class="invalid-feedback" id="f-date-error">Past dates cannot be selected. Please choose today or a future date.</div>
+                                                    <div class="invalid-feedback" id="f-date-error">Please choose the date.</div>
                                                 </div>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Event Name <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="f-title" placeholder="e.g. MOA Renewal â€“ Osaka University">
+                                                <input type="text" class="form-control" id="f-title">
                                                 <div class="invalid-feedback">Please provide an event name.</div>
                                             </div>
                                             <div class="row g-3 mb-3">
                                                 <div class="col-sm-6">
-                                                    <label class="form-label">Start Time</label>
+                                                    <label class="form-label">Start Time <span class="text-danger">*</span></label>
                                                     <input type="time" class="form-control" id="f-start">
+                                                    <div class="invalid-feedback">Please set the start time.</div>
                                                 </div>
                                                 <div class="col-sm-6">
-                                                    <label class="form-label">End Time</label>
+                                                    <label class="form-label">End Time <span class="text-danger">*</span></label>
                                                     <input type="time" class="form-control" id="f-end">
+                                                    <div class="invalid-feedback" id="f-end-feedback">Please set the end time.</div>
                                                 </div>
                                             </div>
                                             <div class="mb-3">
-                                                <label class="form-label">Institution / Location</label>
-                                                <input type="text" class="form-control" id="f-location" placeholder="e.g. Osaka University">
+                                                <label class="form-label">Institution / Location <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" id="f-location">
+                                                <div class="invalid-feedback">Please enter the institution or location.</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Notes</label>
-                                                <textarea class="form-control" id="f-desc" rows="3" placeholder="Additional notes..."></textarea>
+                                                <textarea class="form-control" id="f-desc" rows="3"></textarea>
                                             </div>
                                             <div class="mb-2" id="f-recipients-wrap">
                                                 <label class="form-label" id="f-recipients-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
@@ -240,7 +247,7 @@
                                         <div id="step-recipients" class="d-none">
                                             <label class="form-label" for="rcp-search">Search recipients by email address <span class="text-muted fw-normal">(Optional)</span></label>
                                             <div class="position-relative mb-2">
-                                                <input type="text" class="form-control" id="rcp-search" autocomplete="off" placeholder="Start typing an email address…" aria-controls="rcp-results">
+                                                <input type="text" class="form-control" id="rcp-search" autocomplete="off" aria-controls="rcp-results">
                                             </div>
                                             <div id="rcp-results" role="listbox" aria-label="Matching users" aria-multiselectable="true"></div>
                                             <div class="form-text mb-3" id="rcp-hint">Click a person to add or remove them. Only the people selected here are notified and e-mailed a Google Calendar invitation.</div>
@@ -322,7 +329,7 @@
 // now gates the create/edit/delete API routes too — see cirl.js).
 var CAN_MANAGE = <%- JSON.stringify(canManageCalendar) %>;
 
-var cal, bsModal, attendanceModal, currentEv = null, isAdding = false, saving = false, dropBusy = false, pendingRequestId = null;
+var cal, bsModal, attendanceModal, currentEv = null, isAdding = false, saving = false, pendingRequestId = null;
 
 // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function str_dt(dt){
@@ -364,6 +371,7 @@ function setDateMin(limitToToday){
 function validateNewEventDate(){
   var el = document.getElementById('f-date');
   var bad = isAdding && !!el.value && el.value < todayDateStr();
+  if(bad) document.getElementById('f-date-error').textContent = 'Past dates cannot be selected. Please choose today or a future date.';
   el.classList.toggle('is-invalid', bad);
   return !bad;
 }
@@ -434,13 +442,25 @@ function readEventDetails(){
   var title  = document.getElementById('f-title').value.trim();
   var date   = document.getElementById('f-date').value;
   var tinput = document.getElementById('f-title');
-  if(!title || !date){ tinput.classList.add('is-invalid'); if(!title) tinput.focus(); else document.getElementById('f-date').focus(); return null; }
-  tinput.classList.remove('is-invalid');
+  // A new event needs every field except Notes and Recipients (highlighted + listed in the warning); editing an
+  // existing event keeps the lighter name + date check, since older events may lack some fields.
+  if(isAdding){
+    if(!checkRequiredNewEventFields()){ showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields to create the event.', '#f06548'); return null; }
+  } else {
+    if(!title || !date){ tinput.classList.add('is-invalid'); if(!title) tinput.focus(); else document.getElementById('f-date').focus(); return null; }
+    tinput.classList.remove('is-invalid');
+  }
   // A brand-new event's date must be today or later — flagged inline on the date field (a date typed by hand is
   // not stopped by the picker's `min`), and nothing is sent.
   if(isAdding && !validateNewEventDate()){ document.getElementById('f-date').focus(); showToast('Past dates cannot be selected. Please choose today or a future date.', '#f06548'); return null; }
   var st = document.getElementById('f-start').value, et = document.getElementById('f-end').value;
-  if(st && et && et < st){ showToast('The end time cannot be before the start time.', '#f06548'); return null; }
+  if(st && et && et <= st){
+    var endEl = document.getElementById('f-end');
+    document.getElementById('f-end-feedback').textContent = 'The end time must be after the start time.';
+    endEl.classList.add('is-invalid'); endEl.focus();
+    showToast('The end time must be after the start time.', '#f06548');
+    return null;
+  }
   // Only a brand-new event is checked — editing/dragging an existing (possibly now-historical) event is unaffected.
   if(isAdding && isPastNewEvent(date, st)){ showToast('This date/time has already passed. Please choose a future date and time.', '#f06548'); return null; }
   return {
@@ -645,9 +665,9 @@ function showView(ev){
   document.getElementById('view-mode').classList.remove('d-none');
   document.getElementById('edit-mode').classList.add('d-none');
   document.getElementById('v-date').textContent = str_dt(ev.start);
-  document.getElementById('v-time').textContent = ev.allDay ? 'All day' : (str_tm(ev.start)+(ev.end?' â€“ '+str_tm(ev.end):''));
-  document.getElementById('v-location').textContent = ev.extendedProps.location || 'â€”';
-  document.getElementById('v-desc').textContent     = ev.extendedProps.description || 'â€”';
+  document.getElementById('v-time').textContent = ev.allDay ? 'All day' : (str_tm(ev.start)+(ev.end?' – '+str_tm(ev.end):''));
+  document.getElementById('v-location').textContent = ev.extendedProps.location || '—';
+  document.getElementById('v-desc').textContent     = ev.extendedProps.description || '—';
   document.getElementById('v-gcal-badge').classList.toggle('d-none', !ev.extendedProps.googleEventId);
   MeetingJoin.render(ev.extendedProps.dbId || ev.id, ev.extendedProps.myInvite);
   renderInvitationPanel(ev);
@@ -658,21 +678,82 @@ function showView(ev){
   bsModal.show();
 }
 
-function showAdd(dateStr){
+// ── Required fields when CREATING an event ──────────────────────────────────
+// Every field except Notes and Notify Recipients must be filled in before a new event can be saved. Each empty one
+// is highlighted and listed in the warning at the top of the form; the highlight clears as soon as it is filled in.
+// (Editing an existing event keeps the older, lighter check — events created before this rule may lack some fields.)
+var REQUIRED_NEW_EVENT_FIELDS = [
+  ['f-type', 'Event Type'],
+  ['f-date', 'Date'],
+  ['f-title', 'Event Name'],
+  ['f-start', 'Start Time'],
+  ['f-end', 'End Time'],
+  ['f-location', 'Institution / Location']
+];
+
+function clearFormErrors(){
+  REQUIRED_NEW_EVENT_FIELDS.forEach(function(f){ document.getElementById(f[0]).classList.remove('is-invalid'); });
+  document.getElementById('f-end-feedback').textContent = 'Please set the end time.';
+  document.getElementById('f-missing-alert').classList.add('d-none');
+}
+
+function showMissingAlert(labels){
+  var box = document.getElementById('f-missing-alert');
+  if(!labels.length){ box.classList.add('d-none'); return; }
+  box.innerHTML = '<i class="ri-error-warning-line me-1"></i><strong>Please complete the following to create the event:</strong> ';
+  box.appendChild(document.createTextNode(labels.join(', ') + '.'));
+  box.classList.remove('d-none');
+}
+
+// Returns true when every required field is filled in; otherwise highlights the empty ones and shows the warning.
+function checkRequiredNewEventFields(){
+  var missing = [];
+  REQUIRED_NEW_EVENT_FIELDS.forEach(function(f){
+    var el = document.getElementById(f[0]);
+    var empty = !String(el.value || '').trim();
+    el.classList.toggle('is-invalid', empty);
+    if(empty && f[0] === 'f-date') document.getElementById('f-date-error').textContent = 'Please choose the date.';
+    if(empty) missing.push(f[1]);
+  });
+  showMissingAlert(missing);
+  if(missing.length){
+    var first = document.getElementById(REQUIRED_NEW_EVENT_FIELDS.filter(function(f){ return missing.indexOf(f[1]) !== -1; })[0][0]);
+    first.focus();
+  }
+  return !missing.length;
+}
+
+// Filling in a highlighted field clears its highlight and drops it from the warning straight away.
+REQUIRED_NEW_EVENT_FIELDS.forEach(function(f){
+  var el = document.getElementById(f[0]);
+  ['input', 'change'].forEach(function(evt){
+    el.addEventListener(evt, function(){
+      if(!el.classList.contains('is-invalid') || !String(el.value || '').trim()) return;
+      el.classList.remove('is-invalid');
+      if(f[0] === 'f-date') validateNewEventDate();
+      var stillMissing = REQUIRED_NEW_EVENT_FIELDS.filter(function(r){ return document.getElementById(r[0]).classList.contains('is-invalid'); }).map(function(r){ return r[1]; });
+      showMissingAlert(stillMissing);
+    });
+  });
+});
+
+function showAdd(dateStr, prefill){
+  prefill = prefill || {};
   currentEv = null; isAdding = true; pendingRequestId = newRequestId();
+  clearFormErrors();
   document.getElementById('f-recipients-label').innerHTML = 'Notify Recipients <span class="text-muted fw-normal">(Optional)</span>';
   document.getElementById('f-recipients-help').textContent = 'Ctrl/Cmd-click to select multiple. Only the users selected here will be notified and e-mailed a Google Calendar invitation. Leave blank to create the event without notifying anyone.';
   document.getElementById('modal-title').textContent = 'Add Event';
   document.getElementById('view-mode').classList.add('d-none');
   document.getElementById('edit-mode').classList.remove('d-none');
-  document.getElementById('f-title').value    = '';
+  document.getElementById('f-title').value    = prefill.title || '';
   document.getElementById('f-date').value     = dateStr || '';
   setDateMin(true);
   document.getElementById('f-start').value    = '';
   document.getElementById('f-end').value      = '';
   document.getElementById('f-location').value = '';
   document.getElementById('f-desc').value     = '';
-  document.getElementById('f-type').value     = 'bg-primary-subtle';
+  document.getElementById('f-type').value     = prefill.className || ''; // no default: the event type must be chosen
   document.getElementById('v-gcal-badge').classList.add('d-none');
   // Step 1 holds only the event details: recipients are chosen on step 2.
   document.getElementById('f-recipients-wrap').classList.add('d-none');
@@ -688,6 +769,7 @@ function showAdd(dateStr){
 
 function showEdit(){
   if(!currentEv) return;
+  clearFormErrors();
   leaveWizard();
   document.getElementById('modal-title').textContent = 'Edit Event';
   document.getElementById('view-mode').classList.add('d-none');
@@ -806,7 +888,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   cal = new FullCalendar.Calendar(calEl, {
     timeZone:    'local',
-    headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay,listMonth' },
+    headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,listMonth' },
     initialView: 'dayGridMonth',
     aspectRatio: calendarAspect(window.innerWidth),
     editable:    CAN_MANAGE,
@@ -848,23 +930,14 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // Drag an external event tile onto the calendar. The tile's Draggable is
     // configured with create:false (below), so FullCalendar does NOT add its own
-    // event on drop — this handler saves it once and adds the saved event once.
-    // (Before, FullCalendar added a phantom event AND this handler added the real
-    // one, so every palette drop showed two events, only one of them saved.)
+    // event on drop. The drop no longer saves straight away: it opens the Add
+    // Event form with the tile's type, name and the dropped-on date filled in,
+    // so the same required fields (times, location) must be completed first.
     drop: function(info){
-      if(dropBusy) return;
       if(info.dateStr.slice(0,10) < todayDateStr()){ showToast('Past dates are not available for new events.', '#f06548'); return; }
-      dropBusy = true;
-      var cls   = info.draggedEl.dataset.class || 'bg-primary-subtle';
+      var cls   = info.draggedEl.dataset.class || '';
       var title = info.draggedEl.innerText.trim();
-      var payload = { title: title, start: info.dateStr, allDay: true, className: cls, location: '', description: '', clientRequestId: newRequestId() };
-      apiPost(payload).then(function(data){
-        if(data.success){
-          addSavedEvent(data.event);
-          upcomingEvent();
-        } else { showToast(data.error || 'Could not create the event.', '#f06548'); }
-      }).catch(function(e){ console.error(e); showToast('Error saving event.', '#f06548'); })
-        .then(function(){ dropBusy = false; });
+      showAdd(String(info.dateStr).slice(0, 10), { title: title, className: cls });
     },
 
     // List view is much shorter than the sidebar next to it: let its card fill the row.

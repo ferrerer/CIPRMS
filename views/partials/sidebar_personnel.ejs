@@ -32,7 +32,7 @@
          Notifications page for this role (the header bell remains). -->
     <div class="sidebar-user m-1 rounded">
         <div class="d-flex align-items-center gap-2 px-3 py-2">
-            <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+            <img class="rounded header-profile-user js-user-avatar" src="<%= typeof userAvatarUrl !== 'undefined' ? userAvatarUrl : '/images/default-avatar.jpg' %>" alt="Profile picture" style="object-fit:cover;">
             <span class="text-start">
                 <span class="d-block fw-medium sidebar-user-name-text">
                     <%= typeof user !=='undefined' && user ? user.name || 'College Dean' : 'College Dean' %>

@@ -54,7 +54,7 @@
                 <!-- App Search -->
                 <form class="app-search d-none d-md-block">
                     <div class="position-relative">
-                        <input type="text" class="form-control" placeholder="Search partnerships, requests, documents…" autocomplete="off" id="search-options" value="<%= typeof q !== 'undefined' ? q : '' %>">
+                        <input type="text" class="form-control" autocomplete="off" id="search-options" value="<%= typeof q !== 'undefined' ? q : '' %>">
                         <span class="mdi mdi-magnify search-widget-icon"></span>
                         <span class="mdi mdi-close-circle search-widget-icon search-widget-icon-close d-none" id="search-close-options"></span>
                     </div>
@@ -107,7 +107,7 @@
                         <form class="p-3">
                             <div class="form-group m-0">
                                 <div class="input-group">
-                                    <input type="text" class="form-control" placeholder="Search pages, partnerships...">
+                                    <input type="text" class="form-control">
                                     <button class="btn btn-primary" type="submit"><i class="mdi mdi-magnify"></i></button>
                                 </div>
                             </div>
@@ -191,7 +191,7 @@
                 <div class="dropdown ms-sm-3 header-item topbar-user">
                     <button type="button" class="btn material-shadow-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                         <span class="d-flex align-items-center">
-                            <img class="rounded-circle header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+                            <img class="rounded-circle header-profile-user js-user-avatar" src="<%= typeof userAvatarUrl !== 'undefined' ? userAvatarUrl : '/images/default-avatar.jpg' %>" alt="Profile picture" style="object-fit:cover;">
                             <span class="text-start ms-xl-2">
                                 <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text"><%= typeof user !== 'undefined' && user ? user.name || 'User' : 'User' %></span>
                                 <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : user.role === 'Auth. Personnel' ? 'College Dean' : user.role === 'Staff' ? 'CIRL Staff' : (user.role || '')) : '' %></span>
@@ -201,14 +201,7 @@
                     <div class="dropdown-menu dropdown-menu-end">
                         <h6 class="dropdown-header">Welcome!</h6>
                 <% var settingsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/admin/settings' : user.role === 'Auth. Personnel' ? '/personnel/settings' : user.role === 'potential_partner' ? '/partner/settings' : user.role === 'Staff' ? '/staff/settings' : '/') : '/'; %>
-<% // College Dean (role "Auth. Personnel"): "Profile" and "Settings" both linked to the same page — keep only "Settings". %>
-<% if (!(typeof user !== 'undefined' && user && user.role === 'Auth. Personnel')) { %>
-                <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-account-circle text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Profile</span></a>
-<% } %>
-<% if (!reducedHeader) { %>
-                <a class="dropdown-item" href="<%= notificationsHref %>"><i class="mdi mdi-bell-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Notifications</span></a>
-<% } %>
-                <div class="dropdown-divider"></div>
+<% // Every role gets only Settings and Logout here (Profile duplicated Settings; Notifications has the bell icon). %>
                 <a class="dropdown-item" href="<%= settingsHref %>"><i class="mdi mdi-cog-outline text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Settings</span></a>
                 <a class="dropdown-item" href="#" onclick="event.preventDefault(); fetch('/logout', {method:'POST'}).then(function(){ location.href='/'; });"><i class="mdi mdi-logout text-muted fs-16 align-middle me-1"></i> <span class="align-middle">Logout</span></a>
                     </div>

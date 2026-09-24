@@ -249,11 +249,29 @@ app.use(async (req, res, next) => {
     req.session.user.role = dbUser.role;
     req.session.user.name = dbUser.name;
     req.session.user.unit = dbUser.unit || '';
+    req.session.user.activated = isActivated(dbUser);
+    req.session.user.avatarUrl = avatarUrlFor(dbUser);
     req.session.revalidatedAt = now;
     next();
   } catch (err) {
     next(err);
   }
+});
+
+// ── ACCOUNT ACTIVATION GATE ───────────────────────────────────────────────────
+// An account created through User Management starts with activated: false. Until its owner fills in the
+// activation form (Department/College, Institution, Designation, Contact Number) the session can reach only the
+// activation page and the few routes it needs — every other page redirects there and every other API call is
+// refused, so nothing in the system is visible yet. Accounts created before this gate existed have no
+// `activated` field at all and are treated as already activated.
+const ACTIVATION_OPEN_PATHS = new Set(['/activate', '/api/activate', '/logout', '/api/me']);
+app.use((req, res, next) => {
+  const user = req.session && req.session.user;
+  if (!user || user.activated !== false || ACTIVATION_OPEN_PATHS.has(req.path)) return next();
+  if (req.path.startsWith('/api/') || req.get('X-Requested-With') === 'ciprms') {
+    return res.status(403).json({ error: 'Please activate your account first.', code: 'ACTIVATION_REQUIRED' });
+  }
+  return res.redirect('/activate');
 });
 
 // Where the "CIPRMS" breadcrumb (and any other "home" link) of the signed-in user goes: Administrator → /dashboard,
@@ -262,6 +280,8 @@ app.use(async (req, res, next) => {
 // template can only be right for one of them — the page reads this instead.
 app.use((req, res, next) => {
   res.locals.homeHref = req.session && req.session.user ? homeForRole(req.session.user.role) : '/';
+  // The signed-in user's profile picture for the header / sidebar user box (the default picture until they upload one).
+  res.locals.userAvatarUrl = avatarUrlFor(req.session && req.session.user);
   next();
 });
 
@@ -436,6 +456,23 @@ function homeForRole(role) {
   return '/staff/dashboard';
 }
 
+// ── HELPER: account activation ────────────────────────────────────────────────
+// Only an explicit `activated: false` (set by POST /api/users) means "not yet activated" — older accounts
+// never had the field and keep full access.
+function isActivated(userDoc) {
+  return !!userDoc && userDoc.activated !== false;
+}
+// ── HELPER: profile picture ───────────────────────────────────────────────────
+// Every account starts with this picture until its owner uploads their own (Settings → click the photo).
+const DEFAULT_AVATAR_URL = '/images/default-avatar.jpg';
+function avatarUrlFor(userDoc) {
+  return (userDoc && userDoc.avatarUrl) || DEFAULT_AVATAR_URL;
+}
+// Where a freshly signed-in user lands: the activation form until the account is activated, their home after.
+function landingFor(userDoc) {
+  return isActivated(userDoc) ? homeForRole(userDoc.role) : '/activate';
+}
+
 // ── HELPER: role → user-visible label ──────────────────────────────────────────
 // The stored / RBAC role VALUES never change — sessions, the users collection, every
 // permission check, API payloads, <option value="…"> and role filters keep "Staff",
@@ -563,12 +600,14 @@ app.get('/auth/google/callback', (req, res, next) => {
           name: dbUser.name,
           email: dbUser.email,
           role: dbUser.role,
-          unit: dbUser.unit || ''
+          unit: dbUser.unit || '',
+          activated: isActivated(dbUser),
+          avatarUrl: avatarUrlFor(dbUser)
         };
         req.session.save((saveErr) => {
           if (saveErr) return next(saveErr);
           console.log(`✓ Google login: ${dbUser.name} (${dbUser.role})`);
-          return res.redirect(homeForRole(dbUser.role));
+          return res.redirect(landingFor(dbUser));
         });
       });
 
@@ -627,7 +666,9 @@ app.post('/login', loginLimiter, async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        unit: user.unit || ''
+        unit: user.unit || '',
+        activated: isActivated(user),
+        avatarUrl: avatarUrlFor(user)
       };
 
       req.session.save((saveErr) => {
@@ -641,7 +682,7 @@ app.post('/login', loginLimiter, async (req, res) => {
         getDb().collection('users').updateOne({ email: user.email }, { $set: { login: loginDate } }).catch(() => { });
 
         console.log(`✓ Login: ${user.name} (${user.role})`);
-        res.redirect(homeForRole(user.role));
+        res.redirect(landingFor(user));
       });
     });
 
@@ -691,6 +732,57 @@ app.post('/logout', (req, res) => {
 // ── SESSION USER API ──────────────────────────────────────────────────────────
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ user: req.session.user });
+});
+
+// ── ACCOUNT ACTIVATION ────────────────────────────────────────────────────────
+// First sign-in of an account made in User Management: its owner supplies their own Department/College,
+// Institution, Designation and Contact Number here (User Management no longer asks for them on Add User).
+// Until they do, the activation gate above keeps them on this page.
+app.get('/activate', requireAuth, async (req, res) => {
+  try {
+    const userDoc = await getDb().collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    if (isActivated(userDoc)) return res.redirect(homeForRole(userDoc.role));
+    res.render('activate', {
+      activePage: '',
+      account: { name: userDoc.name || '', email: userDoc.email || '', roleLabel: displayRoleName(userDoc.role) },
+      profile: registeredProfile(userDoc)
+    });
+  } catch (err) {
+    console.error('❌ Activation page error:', err);
+    res.status(500).send('Unable to load the activation form right now. Please try again.');
+  }
+});
+
+app.post('/api/activate', requireAuth, async (req, res) => {
+  try {
+    const text = (v) => (typeof v === 'string' ? v.trim() : '');
+    const unit = text(req.body.unit);
+    const institution = text(req.body.institution);
+    const position = text(req.body.position);
+    const contact = parseContactNumber(req.body.contactNumber);
+    if (!unit || !institution || !position) {
+      return res.status(400).json({ error: 'Please fill in your Department/College, Institution and Designation.' });
+    }
+    if (contact.error) return res.status(400).json({ error: contact.error });
+    if (!contact.value) return res.status(400).json({ error: 'Contact number is required.' });
+
+    const db = getDb();
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    if (!userDoc) return res.status(404).json({ error: 'Account not found.' });
+    if (isActivated(userDoc)) return res.json({ success: true, redirect: homeForRole(userDoc.role) });
+
+    await db.collection('users').updateOne(
+      { id: userDoc.id },
+      { $set: { unit, institution, position, contactNumber: contact.value, activated: true, activatedAt: new Date() } }
+    );
+    req.session.user.unit = unit;
+    req.session.user.activated = true;
+    await logActivity(db, req.session.user, 'EDIT', `Account activated: ${userDoc.name} — ${userDoc.email}`);
+    res.json({ success: true, redirect: homeForRole(userDoc.role) });
+  } catch (err) {
+    console.error('❌ Account activation error:', err);
+    res.status(500).json({ error: 'Unable to activate your account right now. Please try again.' });
+  }
 });
 
 // ── API ENDPOINTS FOR DYNAMIC DATA ───────────────────────────────────────────
@@ -1384,31 +1476,11 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
   });
 });
 
-// Withdraw own request — self-service, any authenticated user (not admin-gated like the route above).
-// Only the original submitter may withdraw, and only while it's still Pending/Under Review.
-app.post('/api/requests/:id/withdraw', requireRequester, denyCollegeStaffPartnershipRequests, announce('request'), async (req, res) => {
-  const id = parseInt(req.params.id);
-  try {
-    const db = getDb();
-    const target = await db.collection('requests').findOne({ id });
-    if (!target) return res.status(404).json({ error: 'Request not found.' });
-
-    const email = req.session.user ? req.session.user.email : '';
-    if (target.submittedByEmail !== email) {
-      return res.status(403).json({ error: 'You can only withdraw your own request.' });
-    }
-    if (!['Pending', 'Under Review'].includes(target.status)) {
-      return res.status(400).json({ error: 'Only pending or under-review requests can be withdrawn.' });
-    }
-
-    await db.collection('requests').updateOne({ id }, { $set: { status: 'Withdrawn', updatedAt: new Date().toISOString() } });
-    const updated = await db.collection('requests').findOne({ id });
-    await logActivity(db, req.session.user, 'EDIT',
-      `Partnership request withdrawn: ${updated.institution} (${updated.type})`);
-    res.json({ success: true, request: updated });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+// Withdrawing a submitted request is disabled: once submitted, a request stays with CIRL until it is decided.
+// The route is kept only so a direct call gets a clear refusal instead of a 404. Requests withdrawn before this
+// change keep their "Withdrawn" status and are still shown (and counted as closed) everywhere.
+app.post('/api/requests/:id/withdraw', requireRequester, denyCollegeStaffPartnershipRequests, (req, res) => {
+  res.status(403).json({ error: 'Withdrawing a submitted request is no longer allowed.' });
 });
 
 // ── Document Requests (Auth. Personnel + potential_partner) ─────────────
@@ -5150,13 +5222,14 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // caller could override the server-computed id and collide with (or hijack
     // the identity of) an existing user, which every edit/delete/password
     // route looks up by that same id.
-    const { id: _clientId, _id: _clientMongoId, ...safeBody } = req.body;
+    const { id: _clientId, _id: _clientMongoId, avatarUrl: _avatarUrl, ...safeBody } = req.body; // avatarUrl: only via POST /api/profile/avatar
     const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
-    // Unit/Department, Institution and Position are optional — normalize to an empty string rather than
-    // storing them as undefined/missing when the admin leaves them blank. They are fixed at registration: the
-    // account owner cannot change them from Settings (only User Management edits them).
-    const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(),
+    // Unit/Department, Institution, Position and Contact Number are no longer asked for on Add User — the account
+    // owner supplies them on first sign-in through the activation form (/activate), so a new account always starts
+    // with activated: false. They are still accepted here if sent, normalized to an empty string when blank; after
+    // activation only User Management's Edit User can change them (not the owner's Settings).
+    const entry = { id: nextId, ...safeBody, name, email, role, status, activated: false, unit: (req.body.unit || '').trim(),
       institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
       position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
     await db.collection('users').insertOne(entry);
@@ -5185,7 +5258,8 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     // Strip client-supplied id/_id — otherwise the request body could rename
     // this record's identity mid-edit, breaking every route that looks it up
     // by id (delete, password change, this same edit endpoint next time).
-    const { id: _clientId, _id: _clientMongoId, ...updateData } = req.body;
+    // activated/activatedAt are likewise dropped: only the owner's own activation form (POST /api/activate) sets them, and avatarUrl only the owner's upload.
+    const { id: _clientId, _id: _clientMongoId, activated: _activated, activatedAt: _activatedAt, avatarUrl: _avatarUrl, ...updateData } = req.body;
 
     // Privilege-escalation boundary: Staff can manage every other account,
     // but never an Administrator's (regardless of which fields are being
@@ -5301,6 +5375,7 @@ app.delete('/api/users/:id', requireStaffAccess, async (req, res) => {
       }
     }
     await db.collection('users').deleteOne({ id });
+    deleteUploadedAvatar(target && target.avatarUrl); // their uploaded profile picture goes with the account
     await logActivity(db, req.session.user, 'DELETE', `User deleted: ${target ? target.name + ' (' + target.email + ')' : 'ID #' + id}`);
     res.json({ success: true });
   } catch (err) {
@@ -5410,7 +5485,6 @@ const REQUEST_EVENT_ACTIONS = {           // [action, is it a status transition?
   'DELETE /api/requests/:id': ['draftDeleted', false],
   'PATCH /api/requests/:id': ['reviewed', true],
   'POST /api/requests/:id/documents': ['documentAdded', false],
-  'POST /api/requests/:id/withdraw': ['withdrawn', true],
   'POST /api/partnerships/:id/renew-request': ['renewalRequested', true]
 };
 const DOCUMENT_REQUEST_EVENT_ACTIONS = {
@@ -5958,13 +6032,23 @@ function attendanceRecordFor(ev, email) {
 // re-checks both bounds on the actual Join request, so a wrong device clock can
 // neither unlock nor block a join. The Meet link itself is never in here — it
 // is only handed out by the Join request, and only while the meeting is on.
+// Administrator and CIRL Staff facilitate the meetings, so they can join any Meeting event even when they were not
+// invited to it; everyone else must be an invited participant. `facilitator` marks a join allowed only by role.
+function meetingJoinAccess(ev, user) {
+  if (eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { allowed: true, facilitator: false };
+  if (canManageCalendarRole(user)) return { allowed: true, facilitator: true };
+  return { allowed: false, facilitator: false };
+}
+
 function buildMyInvite(ev, user, now) {
   if (!isMeetingEvent(ev)) return null;
-  if (!eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { invited: false };
+  const access = meetingJoinAccess(ev, user);
+  if (!access.allowed) return { invited: false };
   const win = meetingTime.eventJoinWindow(ev);
   const record = attendanceRecordFor(ev, user.email);
   return {
     invited: true,
+    facilitator: access.facilitator,
     joined: !!record,
     joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
     joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
@@ -5992,7 +6076,9 @@ function calendarEventView(ev, user, now) {
   delete view.googleMeetLink;
   if (canManageCalendarRole(user)) {
     view.participantCount = eventParticipantKeys(ev).size;
-    view.joinedCount = Array.isArray(ev.attendance) ? ev.attendance.length : 0;
+    // Invited people who joined — a facilitator who joined without an invitation is not counted against the invite list.
+    const invitedKeys = eventParticipantKeys(ev);
+    view.joinedCount = (Array.isArray(ev.attendance) ? ev.attendance : []).filter(a => invitedKeys.has(a.emailKey)).length;
     delete view.attendance;
     delete view.clientRequestId;
   } else {
@@ -6026,7 +6112,12 @@ function calendarFeedFilter(user) {
   // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
   // meeting they scope to other people, so without this their own event vanished from their calendar the
   // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
-  return { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+  // ...plus every Meeting event (isMeetingEvent: no type, or the Meeting type): CIRL Staff facilitate the meetings
+  // and can join any of them, invited or not, so they must be able to see them to click Join.
+  return { $or: [
+    { recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email },
+    { className: { $in: [null, ''] } }, { className: { $regex: 'bg-primary-subtle' } }
+  ] };
 }
 app.get('/api/calendarevents', requireAuth, async (req, res) => {
   try {
@@ -6436,7 +6527,7 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
     if (!ev || !isMeetingEvent(ev)) return res.status(404).json({ error: 'Meeting not found.' });
 
     const key = meetingTime.emailKey(user.email);
-    if (!eventParticipantKeys(ev).has(key)) {
+    if (!meetingJoinAccess(ev, user).allowed) {  // invited participants, plus Administrator / CIRL Staff as facilitators
       return res.status(403).json({ error: 'You are not an invited participant of this meeting.' });
     }
     const win = meetingTime.eventJoinWindow(ev);
@@ -6520,6 +6611,26 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       };
     }).sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
 
+    // Administrator / CIRL Staff who joined as facilitators without being invited: listed after the invitees, and
+    // not counted in the invited/joined summary.
+    const invitedKeys = new Set(invited.map(meetingTime.emailKey));
+    const facilitators = (Array.isArray(ev.attendance) ? ev.attendance : [])
+      .filter(a => !invitedKeys.has(a.emailKey))
+      .map(a => {
+        const joinedAt = new Date(a.joinedAt);
+        return {
+          name: a.name || a.email,
+          role: displayRoleName(a.role) || '—',
+          email: a.email,
+          invitation: 'Facilitator (not invited)',
+          status: 'Joined',
+          facilitator: true,
+          joinedAt: joinedAt.toISOString(),
+          joinedAtDisplay: meetingTime.formatTimeInTz(joinedAt),
+          joinedDateDisplay: meetingTime.formatDateTimeInTz(joinedAt)
+        };
+      });
+
     const start = meetingTime.eventStartInstant(ev);
     res.json({
       event: {
@@ -6532,7 +6643,7 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       summary: { invited: participants.length, joined: participants.filter(p => p.status === 'Joined').length },
       google: { status: ev.googleSyncStatus || (ev.googleEventId ? 'sent' : 'not_attempted'), error: ev.googleSyncError || null, organizerEmail: ev.googleOrganizerEmail || null },
       skipped: Array.isArray(ev.inviteSkipped) ? ev.inviteSkipped : [],
-      participants
+      participants: participants.concat(facilitators)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -7011,6 +7122,13 @@ app.get('/uploads/documents/:filename', requireUploader, async (req, res) => {
   }
 });
 app.use('/uploads/avatars', requireAuth, express.static(path.join(__dirname, 'uploads', 'avatars')));
+// A profile picture whose file is gone (e.g. the host's disk was reset by a redeploy — Render's free plan keeps no
+// files between deploys) falls back to the default picture instead of a broken image. no-store, so the real photo
+// shows again as soon as the user re-uploads (a re-upload gets a new file name anyway).
+app.use('/uploads/avatars', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', DEFAULT_AVATAR_URL));
+});
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
 // Shared by /dashboard (Administrator) and /staff/dashboard (Staff, 2026-08-27
@@ -7619,7 +7737,8 @@ app.get('/api/partner/profile', requirePartner, async (req, res) => {
   try {
     const db = getDb();
     const doc = await db.collection('profiles').findOne({ email: req.session.user.email });
-    res.json(doc ? doc.profile : {});
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { avatarUrl: 1 } });
+    res.json({ ...(doc ? doc.profile : {}), avatarUrl: avatarUrlFor(userDoc) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7678,7 +7797,12 @@ app.post('/api/partner/password', partnerPasswordLimiter, requirePartner, async 
   }
 });
 
-app.post('/api/partner/avatar', requirePartner, (req, res) => {
+// ── PROFILE PICTURE (every role) ──────────────────────────────────────────────
+// The photo lives on the user's own `users` record (avatarUrl) and is copied into the session, so the header and
+// sidebar of every page can show it. An account with no photo shows DEFAULT_AVATAR_URL. Uploading replaces the
+// previous file on disk. Before this, only Partners could upload (stored in `profiles`, and wiped by the next profile
+// save, which rewrites that whole document) and the other roles' Settings kept the photo in browser storage only.
+async function saveAvatarUpload(req, res) {
   uploadAvatar.single('avatar')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No image was uploaded.' });
@@ -7688,18 +7812,40 @@ app.post('/api/partner/avatar', requirePartner, (req, res) => {
     try {
       const db = getDb();
       const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-      await db.collection('profiles').updateOne(
-        { email: req.session.user.email },
-        { $set: { email: req.session.user.email, 'profile.avatarUrl': avatarUrl } },
-        { upsert: true }
-      );
+      const previous = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { avatarUrl: 1 } });
+      await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { avatarUrl } });
+      req.session.user.avatarUrl = avatarUrl;
+      deleteUploadedAvatar(previous && previous.avatarUrl);
       res.json({ success: true, avatarUrl });
     } catch (e) {
+      fs.unlink(req.file.path, () => {});
       console.error('❌ Avatar upload error:', e);
       res.status(500).json({ error: 'Unable to save the uploaded photo right now. Please try again.' });
     }
   });
-});
+}
+
+// Only files this app stored under /uploads/avatars/ are ever deleted — never the default image or any other path.
+function deleteUploadedAvatar(url) {
+  const match = typeof url === 'string' && url.match(/^\/uploads\/avatars\/([A-Za-z0-9._-]+)$/);
+  if (match) fs.unlink(path.join(__dirname, 'uploads', 'avatars', match[1]), () => {});
+}
+
+// Partner photos uploaded before avatarUrl moved onto the users record were kept in profiles.profile.avatarUrl.
+// Copied over once at startup (idempotent: only users that have no avatarUrl yet are touched).
+async function migrateLegacyPartnerAvatars() {
+  const db = getDb();
+  const legacy = await db.collection('profiles').find({ 'profile.avatarUrl': { $exists: true, $ne: '' } }, { projection: { email: 1, 'profile.avatarUrl': 1 } }).toArray();
+  for (const doc of legacy) {
+    await db.collection('users').updateOne(
+      { email: doc.email, $or: [{ avatarUrl: { $exists: false } }, { avatarUrl: '' }] },
+      { $set: { avatarUrl: doc.profile.avatarUrl } }
+    );
+  }
+}
+
+app.post('/api/profile/avatar', requireAuth, saveAvatarUpload);
+app.post('/api/partner/avatar', requirePartner, saveAvatarUpload); // older URL used by Partner Settings; same handler
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -7737,6 +7883,7 @@ if (require.main === module) {
     console.log(`CIPRMS server running → ${url}`);
     try {
       await connectDB();
+      await migrateLegacyPartnerAvatars().catch(err => console.error('⚠️  Partner avatar migration skipped:', err.message));
       await runLifecycleCheck(); // catch up immediately on startup, don't wait for the first interval tick
       setInterval(runLifecycleCheck, LIFECYCLE_CHECK_INTERVAL_MS);
     } catch (err) {

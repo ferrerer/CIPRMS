@@ -16,7 +16,7 @@
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <!-- Custom Css -->
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="/velzon/assets/css/ciprms-bridge.css?v=20260924">
+    <link rel="stylesheet" href="/velzon/assets/css/ciprms-bridge.css?v=20260925">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
@@ -255,7 +255,7 @@
                                                         <div class="dr-readonly"><%= user.unit %><small>Auto-filled from your profile</small></div>
                                                         <input type="hidden" id="f-inst" value="<%= user.unit %>">
                                                     <% } else { %>
-                                                        <input type="text" class="form-control" id="f-inst" placeholder="Enter your office/college...">
+                                                        <input type="text" class="form-control" id="f-inst">
                                                     <% } %>
                                                 </div>
                                             </div>
@@ -271,7 +271,7 @@
                                                         <div class="dr-readonly"><%= contactNumber %><small>Set when your account was registered</small></div>
                                                         <input type="hidden" id="f-contact" value="<%= contactNumber %>">
                                                     <% } else { %>
-                                                        <input type="tel" inputmode="numeric" class="form-control" id="f-contact" placeholder="e.g. 0917-000-0000">
+                                                        <input type="tel" inputmode="numeric" class="form-control" id="f-contact">
                                                     <% } %>
                                                     <div class="form-text text-danger fs-12 mb-0" id="f-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
                                                 </div>
@@ -282,7 +282,7 @@
                                                     <div class="doc-combo" id="f-type-combo">
                                                         <div class="doc-combo-chips" id="f-type-chips"></div>
                                                         <div class="doc-combo-input-wrap">
-                                                            <input type="text" class="form-control" id="f-type-input" placeholder="Type or search document..." autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                                            <input type="text" class="form-control" id="f-type-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                                                             <div class="doc-combo-dropdown" id="f-type-dropdown" role="listbox" style="display:none"></div>
                                                         </div>
                                                     </div>
@@ -292,7 +292,7 @@
                                             <div class="dr-row dr-row-tall">
                                                 <div class="dr-label">Purpose</div>
                                                 <div class="dr-value" style="display:block">
-                                                    <textarea class="form-control" id="f-notes" rows="4" placeholder="Describe what's needed and why..."></textarea>
+                                                    <textarea class="form-control" id="f-notes" rows="4"></textarea>
                                                 </div>
                                             </div>
                                             <div class="dr-row">

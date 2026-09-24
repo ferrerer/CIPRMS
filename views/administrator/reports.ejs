@@ -15,7 +15,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260924" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
     <!-- Shared Country option list (same one the Registry Add/Edit Partnership Country combobox uses) — backs
          the Custom Report Builder's Country filter below, so there is one country list in the app, not two. -->
     <script src="/velzon/assets/js/shared/country-options.js"></script>
@@ -301,7 +301,7 @@
                                                 <div class="row g-3 mb-3">
                                                     <div class="col-xl-6 col-md-6">
                                                         <label class="form-label fw-semibold">Report Title</label>
-                                                        <input type="text" class="form-control" id="cr-title" placeholder="e.g. List of Active International Partners">
+                                                        <input type="text" class="form-control" id="cr-title">
                                                     </div>
                                                     <div class="col-xl-6 col-md-6">
                                                         <label class="form-label fw-semibold">Report Type</label>
@@ -607,10 +607,10 @@
                                                         </select>
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <input type="date" id="audit-filter-from" class="form-control form-control-sm" placeholder="Date From" onchange="applyAuditFilters()">
+                                                        <input type="date" id="audit-filter-from" class="form-control form-control-sm" onchange="applyAuditFilters()">
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <input type="date" id="audit-filter-to" class="form-control form-control-sm" placeholder="Date To" onchange="applyAuditFilters()">
+                                                        <input type="date" id="audit-filter-to" class="form-control form-control-sm" onchange="applyAuditFilters()">
                                                     </div>
                                                     <div class="col-md-2">
                                                         <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset</button>
@@ -816,7 +816,7 @@
                 search: true,
                 pagination: { limit: 15 },
                 sort: true,
-                language: { search: { placeholder: 'Search audit log...' } },
+                language: { search: { placeholder: '' } },
                 style: {
                     table: { border: 'none' },
                     // 2026-09-18: background/color used to be set here as
@@ -1312,7 +1312,7 @@
                 '    <div class="row g-3">' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Label</label>' +
-                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-label" placeholder="Comparison ' + (index + 1) + '" value="' + escapeHtml(prefill.label || '') + '">' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-label" value="' + escapeHtml(prefill.label || '') + '">' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Report Type</label>' +
@@ -1327,7 +1327,7 @@
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Category</label>' +
-                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-cat" placeholder="e.g. Academic" value="' + escapeHtml(prefill.cat || '') + '">' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-cat" value="' + escapeHtml(prefill.cat || '') + '">' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Status</label>' +
@@ -1357,7 +1357,7 @@
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Country</label>' +
-                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-country" placeholder="e.g. Japan" value="' + escapeHtml(prefill.country || '') + '">' +
+                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-country" value="' + escapeHtml(prefill.country || '') + '">' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">College / Unit</label>' +

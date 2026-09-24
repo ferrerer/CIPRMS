@@ -119,7 +119,7 @@ function buildGrid() {
             search: 'mb-3'
         },
         language: {
-            search:     { placeholder: 'Search agreements...' },
+            search:     { placeholder: '' },
             pagination: { previous: '←', next: '→', showing: 'Showing', results: function() { return 'agreements'; } }
         }
     }).render(document.getElementById('lc-grid')));

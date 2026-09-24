@@ -11,7 +11,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260924" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
@@ -58,8 +58,7 @@
                                 <div class="row g-2 align-items-end mt-3">
                                     <div class="col-sm-8 col-md-6 col-lg-4">
                                         <div class="search-box">
-                                            <input class="form-control" id="usr-filter-email"
-                                                placeholder="Filter by email…" oninput="renderUsers()">
+                                            <input class="form-control" id="usr-filter-email" oninput="renderUsers()">
                                             <i class="ri-search-line search-icon"></i>
                                         </div>
                                     </div>
@@ -229,11 +228,11 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="u-name" placeholder="e.g. Dr. Santos">
+                        <input type="text" class="form-control" id="u-name">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Email Address <span class="text-danger">*</span></label>
-                        <input type="email" class="form-control" id="u-email" placeholder="user@cspc.edu.ph">
+                        <input type="email" class="form-control" id="u-email">
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Role</label>
@@ -246,30 +245,31 @@
                             <option value="potential_partner">Partner</option>
                         </select>
                     </div>
-                    <div class="col-md-6">
+                    <!-- Edit User only: on Add User these are left to the account owner's first-sign-in activation form. -->
+                    <div class="col-md-6 u-profile-field">
                         <label class="form-label">Department / College</label>
-                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE">
+                        <input type="text" class="form-control" id="u-unit">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 u-profile-field">
                         <label class="form-label">Institution / School</label>
-                        <input type="text" class="form-control" id="u-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges">
+                        <input type="text" class="form-control" id="u-institution">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 u-profile-field">
                         <label class="form-label">Designation / Position</label>
-                        <input type="text" class="form-control" id="u-position" placeholder="e.g. Director, Coordinator">
+                        <input type="text" class="form-control" id="u-position">
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-6 u-profile-field">
                         <label class="form-label">Contact Number</label>
-                        <input type="tel" inputmode="numeric" class="form-control" id="u-contact" maxlength="25" placeholder="e.g. 0917-123-4567" autocomplete="off" oninput="onContactInput()">
+                        <input type="tel" inputmode="numeric" class="form-control" id="u-contact" maxlength="25" autocomplete="off" oninput="onContactInput()">
                         <div class="form-text text-danger" id="u-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
                     </div>
                     <div class="col-12">
-                        <div class="form-text mt-0">Department, institution, position and contact number are set here when the account is registered. The user cannot change them from Settings, and a College Dean's request forms use this contact number.</div>
+                        <div class="form-text mt-0" id="u-profile-note"></div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
                         <div class="position-relative">
-                            <input type="password" class="form-control pe-5" id="u-password" placeholder="Enter password" autocomplete="new-password">
+                            <input type="password" class="form-control pe-5" id="u-password" autocomplete="new-password">
                             <button type="button" class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted" style="padding:.375rem .75rem;" onclick="togglePwdVis()" aria-label="Show or hide password">
                                 <i class="ri-eye-fill" id="u-pwd-eye"></i>
                             </button>
@@ -307,6 +307,7 @@
   // just drives the matching read-only UI for those specific rows).
   var CAN_MANAGE_USERS = <%- JSON.stringify(typeof user !== 'undefined' && user && ['Administrator', 'Staff'].includes(user.role)) %>;
   var CURRENT_ROLE = <%- JSON.stringify(typeof user !== 'undefined' && user ? user.role : '') %>;
+  var CURRENT_USER_ID = <%- JSON.stringify(typeof user !== 'undefined' && user ? user.id : null) %>;
 
   let editingId = null;
   let bsModal;
@@ -318,6 +319,9 @@
   }
   function apiPatch(id, payload) {
     return fetch('/api/users/' + id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).then(r => r.json());
+  }
+  function apiDelete(id) {
+    return fetch('/api/users/' + id, { method:'DELETE', headers:{'X-Requested-With':'ciprms'} }).then(r => r.json());
   }
 
   // HTML-escape untrusted text (name/email/unit are set by whichever
@@ -382,7 +386,8 @@
         <td class="fw-medium">${escapeHtml(u.name)}</td>
         <td class="text-muted">${escapeHtml(u.email)}</td>
         <td>${roleBadge(u.role)}</td>
-        <td>${u.unit ? escapeHtml(u.unit) : '<span class="text-muted">—</span>'}</td>
+        <td>${u.activated === false ? '<span class="badge bg-warning-subtle text-warning"><i class="ri-time-line align-middle me-1"></i>Not yet activated</span>'
+              : u.unit ? escapeHtml(u.unit) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted">${u.login || 'Never'}</td>
         <td>${statusBadge(u.status)}</td>
         <td>
@@ -394,6 +399,8 @@
               ? `<button class="btn btn-sm btn-soft-danger" onclick="toggleStatus(${u.id})"><i class="ri-forbid-line"></i> Deactivate</button>`
               : `<button class="btn btn-sm btn-soft-success" onclick="toggleStatus(${u.id})"><i class="ri-refresh-line"></i> Reactivate</button>`
             }
+            ${u.id === CURRENT_USER_ID ? '' /* the server refuses deleting your own account */
+              : `<button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})"><i class="ri-delete-bin-line"></i> Delete</button>`}
             `}
           </div>
         </td>
@@ -416,15 +423,25 @@
     el.value = cleaned;
   }
 
+  // Department, institution, designation and contact number are filled in by the account owner on first sign-in
+  // (the activation form), so Add User hides them; Edit User still shows them so they can be corrected later.
+  function setProfileFieldsVisible(visible) {
+    document.querySelectorAll('.u-profile-field').forEach(el => { el.style.display = visible ? '' : 'none'; });
+    document.getElementById('u-profile-note').textContent = visible
+      ? 'Department, institution, position and contact number were given by the user when activating the account. The user cannot change them from Settings, and a College Dean\'s request forms use this contact number.'
+      : 'On first sign-in the user fills up an activation form with their department/college, institution, designation and contact number. They cannot use the system until the account is activated.';
+  }
+
   function openAddUser() {
     editingId = null;
+    setProfileFieldsVisible(false);
     document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
     ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
     document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-role').value = 'Auth. Personnel';
     document.getElementById('u-pwd-required').style.display = '';
     document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
-    document.getElementById('u-password').placeholder = 'Enter password';
+    document.getElementById('u-password').placeholder = '';
     setBreadcrumb(['User Management', 'New User']);
     getModal().show();
   }
@@ -434,6 +451,7 @@
     if (!u) return;
     if (CURRENT_ROLE === 'Staff' && u.role === 'Administrator') return; // protected — server also blocks this
     editingId = id;
+    setProfileFieldsVisible(true);
     document.getElementById('usr-modal-title').innerHTML = `<i class="ri-edit-line me-2 text-primary"></i>Edit — ${escapeHtml(u.name)}`;
     document.getElementById('u-name').value  = u.name;
     document.getElementById('u-email').value = u.email;
@@ -446,7 +464,7 @@
     document.getElementById('u-password').value = '';
     document.getElementById('u-pwd-required').style.display = 'none';
     document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
-    document.getElementById('u-password').placeholder = 'New password (optional)';
+    document.getElementById('u-password').placeholder = '';
     ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
     setBreadcrumb(['User Management', u.name]);
     getModal().show();
@@ -519,7 +537,7 @@
     } else {
       // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
       const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-      apiPost({ name, email, role, unit, institution, position, contactNumber, password, login: 'Never', status: 'Active', createdAt: today })
+      apiPost({ name, email, role, password, login: 'Never', status: 'Active', createdAt: today })
         .then(data => {
           if (data.success) {
             users.unshift(data.user);
@@ -534,6 +552,24 @@
   }
 
   // â”€â”€ Toggle Active/Inactive â€” persists to MongoDB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Permanently removes the account (the person can no longer sign in at all). Unlike Deactivate this cannot be
+  // undone, so it asks first. Their past requests, documents and audit-trail entries are kept.
+  function deleteUser(id) {
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+    if (!confirm(`Delete the account of ${u.name} (${u.email})?\n\nThis permanently removes the account and cannot be undone. To only block access for now, use Deactivate instead.`)) return;
+    apiDelete(id)
+      .then(data => {
+        if (data.success) {
+          users = users.filter(x => x.id !== id);
+          renderUsers();
+          showToast(`<i class="ri-delete-bin-line me-1"></i>${escapeHtml(u.name)} deleted.`, '#f06548');
+        } else {
+          showToast(`<i class="ri-error-warning-line me-1"></i>${escapeHtml(data.error || 'Error deleting user.')}`, '#f06548');
+        }
+      }).catch(e => { console.error(e); showToast('Error deleting user.', '#f06548'); });
+  }
+
   function toggleStatus(id) {
     const u = users.find(x => x.id === id);
     if (!u) return;
