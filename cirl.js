@@ -7085,6 +7085,13 @@ app.get('/uploads/documents/:filename', requireUploader, async (req, res) => {
   }
 });
 app.use('/uploads/avatars', requireAuth, express.static(path.join(__dirname, 'uploads', 'avatars')));
+// A profile picture whose file is gone (e.g. the host's disk was reset by a redeploy — Render's free plan keeps no
+// files between deploys) falls back to the default picture instead of a broken image. no-store, so the real photo
+// shows again as soon as the user re-uploads (a re-upload gets a new file name anyway).
+app.use('/uploads/avatars', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', DEFAULT_AVATAR_URL));
+});
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
 // Shared by /dashboard (Administrator) and /staff/dashboard (Staff, 2026-08-27

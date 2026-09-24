@@ -58,6 +58,19 @@ describe('Profile picture', () => {
     expect(fake.status).toBe(400);
   });
 
+  test('a photo whose file is gone (e.g. the host disk was reset) shows the default picture, not a broken image', async () => {
+    const { agent } = await agentFor('Staff');
+    const up = await agent.post('/api/profile/avatar').attach('avatar', PNG, { filename: 'gone.png', contentType: 'image/png' });
+    uploadedFiles.push(up.body.avatarUrl);
+    fs.rmSync(path.join(__dirname, '..', up.body.avatarUrl), { force: true });
+
+    const res = await agent.get(up.body.avatarUrl);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+    expect(res.body.equals(fs.readFileSync(path.join(__dirname, '..', 'public', 'images', 'default-avatar.jpg')))).toBe(true);
+    expect((await request(app).get(up.body.avatarUrl)).status).toBe(302); // still sign-in only
+  });
+
   test('a Partner photo survives saving the Partner profile, and User Management cannot set anyone\'s picture', async () => {
     const { agent: partner, user } = await agentFor('potential_partner');
     const up = await partner.post('/api/partner/avatar').attach('avatar', PNG, { filename: 'p.png', contentType: 'image/png' });
