@@ -680,9 +680,24 @@ function loadPartnerships(live) {
         locationResolvedName: p.locationResolvedName, locationResolvedAt: p.locationResolvedAt
       };
     });
-    if (live) { applyFilter(); } else { filtered = partnerships.slice(); buildGrid(); }
+    if (live) { applyFilter(); } else { filtered = partnerships.slice(); if (!applyStatusFromQuery()) buildGrid(); }
   });
 }
+
+// Status pre-filter from the URL, e.g. the dashboard's Resource Optimization card
+// links to /lifecycle?status=Expired. Only a status the Status dropdown offers is
+// applied. Returns true when it filtered (applyFilter() has already rebuilt the grid).
+function applyStatusFromQuery() {
+  var st = new URLSearchParams(window.location.search).get('status');
+  var sel = document.getElementById('reg-status');
+  if (!st || !sel) return false;
+  var known = Array.prototype.some.call(sel.options, function(o) { return o.value === st; });
+  if (!known) return false;
+  sel.value = st;
+  applyFilter();
+  return true;
+}
+
 // Deep link from the global header search (a Partnerships result links here as `?q=<institution name>`) — reuses the
 // page's own existing search box/filter rather than trying to scroll to and highlight a row inside the Grid.js table
 // (which repaginates client-side, so a stable "row N" DOM handle doesn't exist across renders). This runs once the
@@ -878,6 +893,13 @@ function buildGrid() {
 
 // ── Modal helpers ────────────────────────────────────────────────────────────
 
+// Independent modals (no swap/stacking between them) — each drops the breadcrumb back
+// to the page base the moment it's closed for good. Registered once, not per open-call.
+['viewPartnershipModal', 'editPartnershipModal', 'renewPartnershipModal', 'deleteRecordModal'].forEach(function (id) {
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('hidden.bs.modal', function () { if (typeof resetBreadcrumb === 'function') resetBreadcrumb(); });
+});
+
 function openViewModal(id) {
   var p = partnerships.find(function(x){return x.id===id;}); if(!p) return;
   document.getElementById('view-title').textContent = p.inst;
@@ -900,6 +922,7 @@ function openViewModal(id) {
     +'<div class="col-sm-12"><div class="text-muted fs-12">Document Link</div><div>'+(safeDocLink?'<a href="'+safeDocLink+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(p.docLink)+'</a>':(p.docLink?'— Invalid link':'— Not uploaded'))+'</div></div>'
     +'<div class="col-sm-12"><div class="text-muted fs-12">Remarks</div><div>'+(p.remarks?escapeHtml(p.remarks):'—')+'</div></div>'
     +'</div>';
+  if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst]));
   new bootstrap.Modal(document.getElementById('viewPartnershipModal')).show();
 }
 
@@ -911,7 +934,12 @@ function approveRecord(id) {
 }
 
 var deletingId=null;
-function openDeleteModal(id){ deletingId=id; bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteRecordModal')).show(); }
+function openDeleteModal(id){
+  deletingId=id;
+  var p=partnerships.find(function(x){return x.id===id;});
+  if (p && typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Delete']));
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteRecordModal')).show();
+}
 function confirmDelete(){
   if(!deletingId) return;
   var id=deletingId;
@@ -950,6 +978,7 @@ function openEditModal(id){
   document.getElementById('e-doclink').value=p.docLink||''; document.getElementById('e-remarks').value=p.remarks||'';
   locPreviewSeq.e++; clearTimeout(locPreviewTimer.e);
   document.getElementById('e-location-status').innerHTML=describeStoredLocation(p);
+  if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Edit']));
   bootstrap.Modal.getOrCreateInstance(document.getElementById('editPartnershipModal')).show();
 }
 function computeEditStatus(){var v=document.getElementById('e-end').value;if(!v)return;var d=Math.ceil((new Date(v)-new Date())/86400000);document.getElementById('e-status').value=d<0?'Expired':d<=90?'Expiring Soon':'Active';}
@@ -999,6 +1028,7 @@ function openRenewModal(id){
   document.getElementById('renew-prev-end').value=p.end;
   document.getElementById('renew-new-end').value='';document.getElementById('renew-validity').value='';
   document.getElementById('renew-status').value='';document.getElementById('renew-remarks').value='';
+  if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Renew']));
   bootstrap.Modal.getOrCreateInstance(document.getElementById('renewPartnershipModal')).show();
 }
 function computeRenewStatus(){

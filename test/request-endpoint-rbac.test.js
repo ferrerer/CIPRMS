@@ -1,10 +1,10 @@
 // Backend RBAC for the Partnership Request API (/api/requests) — enforced by the server, not by hiding a page:
-//   * College Staff (stored role "Auth. Personnel") has no Partnership Request workflow any more (page and form
+//   * College Dean (stored role "Auth. Personnel") has no Partnership Request workflow any more (page and form
 //     removed; it submits Document Requests only), so every submitter route of /api/requests answers it 403 —
 //     create, edit a draft, submit a draft, delete a draft, withdraw;
 //   * Partner (Submit Only) and Administrator keep exactly what they had; CIRL Staff is still turned away
 //     (302, unchanged) and still reviews;
-//   * what College Staff legitimately keeps (Document Requests, its own Monitoring reads, renewal ownership
+//   * what College Dean legitimately keeps (Document Requests, its own Monitoring reads, renewal ownership
 //     check) is untouched, and nothing in the existing request records is modified by any of this.
 const request = require('supertest');
 const app = require('../cirl');
@@ -59,12 +59,12 @@ async function insertRequest(key, fields) {
 }
 const countFor = (email) => db.collection('requests').countDocuments({ submittedByEmail: email });
 
-describe('College Staff cannot use the Partnership Request API', () => {
+describe('College Dean cannot use the Partnership Request API', () => {
   test('POST /api/requests -> 403 with a JSON error, and nothing is created', async () => {
     const res = await agents.college.post('/api/requests').send(body('college'));
     expect(res.status).toBe(403);
     expect(res.headers['content-type']).toMatch(/json/);
-    expect(res.body.error).toMatch(/College Staff cannot submit Partnership Requests/);
+    expect(res.body.error).toMatch(/College Dean cannot submit Partnership Requests/);
     expect(res.body.success).toBeUndefined();
     expect(await countFor(users.college.email)).toBe(0);
   });
@@ -85,7 +85,7 @@ describe('College Staff cannot use the Partnership Request API', () => {
     expect(await countFor(users.partner.email)).toBe(0);
   });
 
-  test('an older draft or pending request owned by a College Staff account cannot be edited, submitted, deleted or withdrawn through the API', async () => {
+  test('an older draft or pending request owned by a College Dean account cannot be edited, submitted, deleted or withdrawn through the API', async () => {
     const draft = await insertRequest('college', { status: 'Draft' });
     const pending = await insertRequest('college', { status: 'Pending' });
     const before = await db.collection('requests').find({ id: { $in: [draft, pending] } }).sort({ id: 1 }).toArray();
@@ -106,7 +106,7 @@ describe('College Staff cannot use the Partnership Request API', () => {
     expect(await countFor(users.staff.email)).toBe(0);
   });
 
-  test('what College Staff legitimately keeps still works: Document Requests, its own request/partnership reads', async () => {
+  test('what College Dean legitimately keeps still works: Document Requests, its own request/partnership reads', async () => {
     const dr = await agents.college.post('/api/document-requests').send({ institution: 'jesttest RBAC college DR', documentTypes: ['Certificate'], notes: 'jesttest' });
     expect(dr.status).toBe(200);
     docRequestIds.push(dr.body.request.id);
@@ -195,7 +195,7 @@ describe('Administrator and CIRL Staff keep their request functionality', () => 
     expect((await agents.admin.patch('/api/requests/99999999').send({ status: 'Under Review' })).status).toBe(404);
   });
 
-  test('College Staff cannot review either (unchanged) — the reviewer route redirects it', async () => {
+  test('College Dean cannot review either (unchanged) — the reviewer route redirects it', async () => {
     expect((await agents.college.patch(`/api/requests/${target}`).send({ status: 'Approved' })).status).toBe(302);
     expect((await db.collection('requests').findOne({ id: target })).status).toBe('Pending');
   });

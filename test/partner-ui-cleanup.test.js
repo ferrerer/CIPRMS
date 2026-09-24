@@ -1,7 +1,7 @@
 // Potential Partner UI cleanup: no Dashboard, Document Library or Notifications PAGE, no Search bar,
 // no Notifications item in the profile menu — while the header Notifications bell keeps working
 // (user-specific, with its overflow protection). Nothing here may leak into Administrator, Staff or
-// College Staff.
+// College Dean.
 const request = require('supertest');
 const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
@@ -189,7 +189,7 @@ describe('Partner header notifications are user-specific and correctly counted',
   });
 });
 
-describe('Nothing leaks into Administrator, Staff or College Staff', () => {
+describe('Nothing leaks into Administrator, Staff or College Dean', () => {
   test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps Search, "See All", the Notifications menu item and NOT the Partner stylesheet (%s)', async (role, path) => {
     const { agent } = await agentFor(role);
     const html = (await agent.get(path)).text;
@@ -214,12 +214,35 @@ describe('Nothing leaks into Administrator, Staff or College Staff', () => {
     for (const href of ['/staff/dashboard', '/staff/documents', '/staff/notifications']) expect(staffNav).toContain(href);
   });
 
-  test('College Staff is untouched: no Search, no "See All", no Partner stylesheet, same sidebar', async () => {
+  test('College Dean is untouched: no Search, no "See All", no Partner stylesheet, same sidebar', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const html = (await agent.get('/personnel/monitoring')).text;
     expect(html).not.toContain('id="search-options"');
     expect(html).not.toMatch(/class="[^"]*view-all[^"]*"/);
     expect(html).not.toContain('header-notifications.css');
     expect(navHrefs(html)).toEqual(['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings', '#']);
+  });
+});
+
+describe('The header bell has no "Alerts" tab for College Dean and Partner', () => {
+  test.each([
+    ['Partner', 'potential_partner', '/partner/monitoring'],
+    ['College Dean', 'Auth. Personnel', '/personnel/monitoring']
+  ])('%s: just the notification list — no Alerts tab, no unread-only pane', async (_label, role, path) => {
+    const { agent } = await agentFor(role);
+    const html = (await agent.get(path)).text;
+    expect(html).toContain('id="notif-list"');            // the bell and its list are still there
+    expect(html).toContain('id="notif-badge"');
+    expect(html).not.toContain('>Alerts<');
+    expect(html).not.toContain('alerts-tab');
+    expect(html).not.toContain('id="notif-alerts-list"');   // (the header script still names it, and skips it when absent)
+    expect(html).not.toContain('id="notificationItemsTab"');
+  });
+
+  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps the All / Alerts tabs', async (role, path) => {
+    const { agent } = await agentFor(role);
+    const html = (await agent.get(path)).text;
+    expect(html).toContain('>Alerts<');
+    expect(html).toContain('id="notif-alerts-list"');
   });
 });

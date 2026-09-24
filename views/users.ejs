@@ -30,8 +30,8 @@
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                             <h4 class="mb-sm-0"><i class="ri-team-line me-2 text-primary"></i>User Management</h4>
                             <div class="page-title-right">
-                                <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                <ol class="breadcrumb m-0" id="page-breadcrumb">
+                                    <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                     <li class="breadcrumb-item active">User Management</li>
                                 </ol>
                             </div>
@@ -67,7 +67,7 @@
                                         <select class="form-select" id="usr-filter-role" onchange="renderUsers()">
                                             <option value="">All Roles</option>
                                             <option value="Administrator">Administrator</option>
-                                            <option value="Auth. Personnel">College Staff</option>
+                                            <option value="Auth. Personnel">College Dean</option>
                                             <option value="potential_partner">Partner</option>
                                             <option value="Staff">CIRL Staff</option>
                                         </select>
@@ -82,7 +82,7 @@
                                                 <th>Name</th>
                                                 <th>Email</th>
                                                 <th>Role</th>
-                                                <th>Unit</th>
+                                                <th>Department</th>
                                                 <th>Last Login</th>
                                                 <th>Status</th>
                                                 <th>Actions</th>
@@ -111,7 +111,7 @@
                                             <tr>
                                                 <th>Feature</th>
                                                 <th class="text-center"><i class="ri-shield-star-line me-1"></i>Administrator</th>
-                                                <th class="text-center"><i class="ri-user-star-line me-1"></i>College Staff</th>
+                                                <th class="text-center"><i class="ri-user-star-line me-1"></i>College Dean</th>
                                                 <th class="text-center"><i class="ri-handshake-line me-1"></i>Partner</th>
                                                 <th class="text-center"><i class="ri-briefcase-line me-1"></i>CIRL Staff</th>
                                                 <th style="min-width:280px;">Notes</th>
@@ -123,20 +123,20 @@
                                                    requireUploader / requireRequester / requireAuth, denyDepartmentPage) and the
                                                    API route each page calls. Changes since the 2026-08-27 audit that this reflects:
                                                    - Calendar: create/edit/delete is requireStaffAccess (Administrator AND CIRL Staff,
-                                                     since 2026-09-14). College Staff/Partner view it and JOIN meetings they are invited
+                                                     since 2026-09-14). College Dean/Partner view it and JOIN meetings they are invited
                                                      to (POST /api/calendarevents/:id/join, checked server-side); Administrator/CIRL
                                                      Staff read the attendance list. The org-wide Google Calendar connection stays
                                                      requireAdmin.
-                                                   - Dashboard: College Staff and Partner have none (/personnel/dashboard and
+                                                   - Dashboard: College Dean and Partner have none (/personnel/dashboard and
                                                      /partner/dashboard only redirect to Monitoring).
-                                                   - Document Library: the pages are closed to College Staff (denyDepartmentPage) and
+                                                   - Document Library: the pages are closed to College Dean (denyDepartmentPage) and
                                                      Partner (/partner/documents redirects). Administrator/CIRL Staff browse their own
                                                      uploads and may open any request attachment (GET /uploads/documents/:filename).
-                                                   - Notifications: College Staff and Partner keep the header bell (own notifications)
+                                                   - Notifications: College Dean and Partner keep the header bell (own notifications)
                                                      but not the Notifications page.
-                                                   - Requests: College Staff has Document Requests only; Partner has Partnership Requests
+                                                   - Requests: College Dean has Document Requests only; Partner has Partnership Requests
                                                      plus "Submission Of MOA/MOU" (which uses the Document Request endpoints).
-                                                     POST /api/requests is still requireRequester, i.e. open to College Staff at the API
+                                                     POST /api/requests is still requireRequester, i.e. open to College Dean at the API
                                                      level even though its page was removed - noted in the table, not changed here.
                                                    - Reports: Administrator and CIRL Staff (requireStaffAccess); Audit Trail scoped to
                                                      the caller for CIRL Staff (activityLogFilterFor).
@@ -149,25 +149,25 @@
                                                    N = function (t) { return { t: t || 'No', l: 'none' }; }; %>
                                             <% var perms = [
                                                 { feature: 'Dashboard', admin: F('Full'), college: N(), partner: N(), staff: F('Full'),
-                                                  note: 'College Staff and Partner have no Dashboard; they land on Monitoring.' },
+                                                  note: 'College Dean and Partner have no Dashboard; they land on Monitoring.' },
                                                 { feature: 'Calendar', admin: F('Full (create / edit / delete)'), college: S('View Only'), partner: S('View Only'), staff: F('Full (create / edit / delete)'),
                                                   note: 'Only Administrator and CIRL Staff manage events. Everyone sees just the events that are public or name them; Administrator sees all.' },
                                                 { feature: 'Meetings (invitations &amp; attendance)', admin: F('Full (invite, see who joined)'), college: S('Join When Invited'), partner: S('Join When Invited'), staff: F('Full (invite, see who joined)'),
                                                   note: 'Invitations are e-mailed by Google Calendar once it is connected. Join opens at the meeting start and is checked on the server, which records the join time.' },
                                                 { feature: 'Monitoring', admin: F('Full'), college: S('Own Only'), partner: S('Own Only'), staff: F('Full'),
-                                                  note: 'Administrator and CIRL Staff: partnership overview and registry. College Staff and Partner: only their own submitted requests.' },
+                                                  note: 'Administrator and CIRL Staff: partnership overview and registry. College Dean and Partner: only their own submitted requests.' },
                                                 { feature: 'Registry (inside Monitoring)', admin: F('Full (CRUD)'), college: N(), partner: N(), staff: F('Full (CRUD)'),
                                                   note: 'Add, edit, renew and delete partnerships.' },
                                                 { feature: 'Document Library', admin: S('Own + Review Attachments'), college: N(), partner: N(), staff: S('Own + Review Attachments'),
-                                                  note: 'The library lists a user\'s own uploads; reviewers can also open any request attachment. College Staff and Partner have no library page, but files they submit are still archived for review.' },
+                                                  note: 'The library lists a user\'s own uploads; reviewers can also open any request attachment. College Dean and Partner have no library page, but files they submit are still archived for review.' },
                                                 { feature: 'User Management', admin: F('Full'), college: N(), partner: N(), staff: S('Full (except Administrator accounts)'),
                                                   note: 'CIRL Staff cannot create, edit or delete an Administrator account, or grant the Administrator role.' },
                                                 { feature: 'Partnership Requests', admin: F('Full (Review / Approve / Reject)'), college: N(), partner: S('Submit Only'), staff: F('Full (Review / Approve / Reject)'),
-                                                  note: 'Partners submit and track their own. College Staff has no Partnership Request page (the submit API itself is still open to the role).' },
+                                                  note: 'Partners submit and track their own. College Dean has no Partnership Request page (the submit API itself is still open to the role).' },
                                                 { feature: 'Document Requests', admin: F('Full (Review / Fulfill / Reject)'), college: S('Submit Only'), partner: S('Submit MOA/MOU Only'), staff: F('Full (Review / Fulfill / Reject)'),
                                                   note: 'Partners use the &ldquo;Submission Of MOA/MOU&rdquo; form. Reviewers get the printable form and PDF.' },
                                                 { feature: 'Notifications', admin: S('Own Only'), college: S('Bell Only (own)'), partner: S('Bell Only (own)'), staff: S('Own Only'),
-                                                  note: 'Always the user\'s own notifications. College Staff and Partner have the header bell but no Notifications page.' },
+                                                  note: 'Always the user\'s own notifications. College Dean and Partner have the header bell but no Notifications page.' },
                                                 { feature: 'Reports &amp; Analytics', admin: F('Full'), college: N(), partner: N(), staff: S('Full, Own Audit Trail Only'),
                                                   note: 'Audit Trail: Administrator sees every record; CIRL Staff sees only their own actions.' },
                                                 { feature: 'Settings (own account)', admin: F('Full'), college: F('Full'), partner: F('Full'), staff: F('Full'),
@@ -241,14 +241,30 @@
                             <% if (typeof user !== 'undefined' && user && user.role === 'Administrator') { %>
                             <option value="Administrator">Administrator</option>
                             <% } %>
-                            <option value="Auth. Personnel" selected>College Staff</option>
+                            <option value="Auth. Personnel" selected>College Dean</option>
                             <option value="Staff">CIRL Staff</option>
                             <option value="potential_partner">Partner</option>
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Unit / Department</label>
-                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE (optional)">
+                        <label class="form-label">Department / College</label>
+                        <input type="text" class="form-control" id="u-unit" placeholder="e.g. CCS, CIRL, CETE">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Institution / School</label>
+                        <input type="text" class="form-control" id="u-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Designation / Position</label>
+                        <input type="text" class="form-control" id="u-position" placeholder="e.g. Director, Coordinator">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Contact Number</label>
+                        <input type="tel" inputmode="numeric" class="form-control" id="u-contact" maxlength="25" placeholder="e.g. 0917-123-4567" autocomplete="off" oninput="onContactInput()">
+                        <div class="form-text text-danger" id="u-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-text mt-0">Department, institution, position and contact number are set here when the account is registered. The user cannot change them from Settings, and a College Dean's request forms use this contact number.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
@@ -313,11 +329,27 @@
     });
   }
 
+  // ── Breadcrumb — reflects whichever user is currently open in the Add/Edit modal ──
+  var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+  function setBreadcrumb(labels) {
+    var ol = document.getElementById('page-breadcrumb');
+    if (!ol) return;
+    var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+    labels.forEach(function (label, i) {
+      var isLast = i === labels.length - 1;
+      html += isLast
+        ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+        : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + escapeHtml(label) + '</a></li>';
+    });
+    ol.innerHTML = html;
+  }
+  function resetBreadcrumb() { setBreadcrumb(['User Management']); }
+
   // â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Label only — the stored/RBAC value stays 'Auth. Personnel' (option values, filters, API).
   function formatRole(role) {
     if (role === 'potential_partner') return 'Partner';
-    if (role === 'Auth. Personnel') return 'College Staff';
+    if (role === 'Auth. Personnel') return 'College Dean';
     if (role === 'Staff') return 'CIRL Staff';
     return role || '';
   }
@@ -376,14 +408,24 @@
     else { inp.type = 'password'; eye.className = 'ri-eye-fill'; }
   }
 
+  // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
+  function onContactInput() {
+    const el = document.getElementById('u-contact');
+    const cleaned = el.value.replace(/[^0-9+()\-\s]/g, '');
+    document.getElementById('u-contact-warn').style.display = cleaned !== el.value ? '' : 'none';
+    el.value = cleaned;
+  }
+
   function openAddUser() {
     editingId = null;
     document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
-    ['u-name','u-email','u-unit','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-role').value = 'Auth. Personnel';
     document.getElementById('u-pwd-required').style.display = '';
     document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
     document.getElementById('u-password').placeholder = 'Enter password';
+    setBreadcrumb(['User Management', 'New User']);
     getModal().show();
   }
 
@@ -397,16 +439,24 @@
     document.getElementById('u-email').value = u.email;
     document.getElementById('u-role').value  = u.role;
     document.getElementById('u-unit').value  = u.unit || '';
+    document.getElementById('u-institution').value = u.institution || '';
+    document.getElementById('u-position').value = u.position || '';
+    document.getElementById('u-contact').value = u.contactNumber || '';
+    document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-password').value = '';
     document.getElementById('u-pwd-required').style.display = 'none';
     document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
     document.getElementById('u-password').placeholder = 'New password (optional)';
-    ['u-name','u-email','u-unit','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    setBreadcrumb(['User Management', u.name]);
     getModal().show();
   }
 
   function getModal() {
-    if (!bsModal) bsModal = new bootstrap.Modal(document.getElementById('usr-modal'));
+    if (!bsModal) {
+      bsModal = new bootstrap.Modal(document.getElementById('usr-modal'));
+      document.getElementById('usr-modal').addEventListener('hidden.bs.modal', resetBreadcrumb);
+    }
     return bsModal;
   }
 
@@ -416,6 +466,9 @@
     const email    = document.getElementById('u-email').value.trim();
     const role     = document.getElementById('u-role').value;
     const unit     = document.getElementById('u-unit').value.trim();
+    const institution = document.getElementById('u-institution').value.trim();
+    const position = document.getElementById('u-position').value.trim();
+    const contactNumber = document.getElementById('u-contact').value.trim();
     const password = document.getElementById('u-password').value;
     let valid = true;
 
@@ -424,6 +477,15 @@
       if (!val) { el.classList.add('is-invalid'); valid = false; }
       else el.classList.remove('is-invalid');
     });
+
+    // Contact number is optional, but when given it must be a real one (the server checks the same rule).
+    const contactEl = document.getElementById('u-contact');
+    if (contactNumber && contactNumber.replace(/\D/g, '').length < 7) {
+      contactEl.classList.add('is-invalid'); valid = false;
+      showToast('<i class="ri-error-warning-line me-1"></i>Enter a valid contact number (at least 7 digits).', '#f06548');
+    } else {
+      contactEl.classList.remove('is-invalid');
+    }
 
     // Password required on Add; optional on Edit. Must satisfy the same policy the server enforces.
     const pwdEl = document.getElementById('u-password');
@@ -441,12 +503,12 @@
 
     if (editingId) {
       // EDIT — only send password if the admin typed a new one
-      const payload = { name, email, role, unit };
+      const payload = { name, email, role, unit, institution, position, contactNumber };
       if (password) payload.password = password;
       apiPatch(editingId, payload)
         .then(data => {
           if (data.success) {
-            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit });
+            Object.assign(users.find(x => x.id === editingId), { name, email, role, unit, institution, position, contactNumber });
             getModal().hide();
             renderUsers();
             showToast(`<i class="ri-checkbox-circle-fill me-1"></i>${name} updated.`, '#405189');
@@ -457,7 +519,7 @@
     } else {
       // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
       const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-      apiPost({ name, email, role, unit, password, login: 'Never', status: 'Active', createdAt: today })
+      apiPost({ name, email, role, unit, institution, position, contactNumber, password, login: 'Never', status: 'Active', createdAt: today })
         .then(data => {
           if (data.success) {
             users.unshift(data.user);

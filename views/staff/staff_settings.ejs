@@ -64,9 +64,13 @@
                     <i class="ri-briefcase-line text-primary"></i>
                     <span id="info-position">—</span>
                   </div>
-                  <div class="d-flex align-items-center gap-2 text-muted small">
+                  <div class="d-flex align-items-center gap-2 mb-2 text-muted small">
                     <i class="ri-map-pin-line text-primary"></i>
                     <span id="info-institution">—</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2 text-muted small">
+                    <i class="ri-phone-line text-primary"></i>
+                    <span id="info-phone">—</span>
                   </div>
                 </div>
               </div>
@@ -106,25 +110,23 @@
                           <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. staff@cspc.edu.ph" disabled title="Email is tied to your login and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label" for="s-dept">Department / College <span class="text-danger">*</span></label>
-                          <select class="form-select" id="s-dept" onchange="updateCard()">
-                            <option value="">Select...</option>
-                            <option>CIRL</option>
-                            <option>CCS</option>
-                            <option>CHS</option>
-                            <option>CTDE</option>
-                            <option>CTHBM</option>
-                            <option>CAS</option>
-                            <option>CEA</option>
-                          </select>
+                          <label class="form-label" for="s-contact">Contact Number</label>
+                          <input type="text" class="form-control" id="s-contact" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
-                          <label class="form-label" for="s-position">Designation / Position <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="s-position" placeholder="e.g. Staff, Coordinator" oninput="updateCard()">
+                          <label class="form-label" for="s-dept">Department / College</label>
+                          <input type="text" class="form-control" id="s-dept" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-position">Designation / Position</label>
+                          <input type="text" class="form-control" id="s-position" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
+                        </div>
+                        <div class="col-md-6">
+                          <label class="form-label" for="s-institution">Institution / School</label>
+                          <input type="text" class="form-control" id="s-institution" placeholder="—" readonly title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-12">
-                          <label class="form-label" for="s-institution">Institution / School <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="s-institution" placeholder="e.g. Camarines Sur Polytechnic Colleges" oninput="updateCard()">
+                          <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position, institution and contact number are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
                         </div>
                       </div>
                       <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
@@ -220,6 +222,7 @@
     const dept = document.getElementById('s-dept').value;
     const pos  = document.getElementById('s-position').value.trim();
     const inst = document.getElementById('s-institution').value.trim();
+    const phone = document.getElementById('s-contact').value.trim();
     const parts = name.split(' ').filter(Boolean);
     const initials = parts.length >= 2 ? (parts[0][0]+parts[parts.length-1][0]).toUpperCase() : (parts[0] ? parts[0][0].toUpperCase() : '?');
     const av = document.getElementById('hero-avatar');
@@ -228,6 +231,7 @@
     document.getElementById('info-dept').textContent = dept || '—';
     document.getElementById('info-position').textContent = pos || '—';
     document.getElementById('info-institution').textContent = inst || '—';
+    document.getElementById('info-phone').textContent = phone || '—';
   }
 
   function applyPhoto(dataUrl) {
@@ -266,17 +270,16 @@
       if (data.dept)        document.getElementById('s-dept').value        = data.dept;
       if (data.position)    document.getElementById('s-position').value    = data.position;
       if (data.institution) document.getElementById('s-institution').value = data.institution;
+      document.getElementById('s-contact').value = data.contactNumber || '';
       updateCard();
     } catch(_) { updateCard(); }
   }
 
   async function saveSettings() {
     const name = document.getElementById('s-name').value.trim();
-    const dept = document.getElementById('s-dept').value;
-    const position = document.getElementById('s-position').value.trim();
-    const institution = document.getElementById('s-institution').value.trim();
-    if (!name || !dept || !position || !institution)
-      return showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields.', '#f06548');
+    // Only the name is editable: department, position, institution and contact number are fixed when the account is registered.
+    if (!name)
+      return showToast('<i class="ri-error-warning-line me-1"></i>Please enter your full name.', '#f06548');
     const btn = document.getElementById('save-btn');
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Saving…';
     try {
@@ -284,11 +287,13 @@
       // and cannot be changed from this form (server ignores it either way).
       const res = await fetch('/api/staff/profile', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, dept, position, institution })
+        body: JSON.stringify({ name })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed.');
       updateCard();
+      // Header/sidebar name is server-rendered; refresh it now instead of on the next page load.
+      document.querySelectorAll('.user-name-text, .sidebar-user-name-text').forEach(el => el.textContent = name);
       showToast('<i class="ri-checkbox-circle-line me-1"></i>Settings saved!', '#0ab39c');
     } catch(err) {
       showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');
@@ -298,9 +303,7 @@
   }
 
   function resetForm() {
-    ['s-name','s-position','s-institution'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('s-dept').value = '';
-    updateCard();
+    loadProfile();   // Cancel: back to the saved name; the other fields are read-only
   }
 
   async function changePassword(e) {
@@ -313,6 +316,7 @@
     const isStrongPassword = pw => pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
     if (!isStrongPassword(newP)) return showToast('<i class="ri-error-warning-line me-1"></i>Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.', '#f06548');
     const btn = document.getElementById('pwd-btn');
+    let relogin = false;
     btn.disabled = true; btn.innerHTML = '<i class="ri-loader-4-line me-1"></i>Updating…';
     try {
       const res = await fetch('/api/staff/password', {
@@ -321,12 +325,15 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Update failed.');
-      showToast('<i class="ri-lock-line me-1"></i>Password changed!', '#0ab39c');
       ['oldpasswordInput','newpasswordInput','confirmpasswordInput'].forEach(id => document.getElementById(id).value = '');
+      // The server ended this session with the password change: sign in again with the new password.
+      relogin = true;
+      showToast('<i class="ri-lock-line me-1"></i>Password changed. Please log in again with your new password…', '#0ab39c');
+      setTimeout(() => { window.location.href = '/?passwordChanged=1'; }, 2500);
     } catch(err) {
       showToast('<i class="ri-error-warning-line me-1"></i>' + err.message, '#f06548');
     } finally {
-      btn.disabled = false; btn.innerHTML = '<i class="ri-lock-line me-1"></i>Update Password';
+      if (!relogin) { btn.disabled = false; btn.innerHTML = '<i class="ri-lock-line me-1"></i>Update Password'; }
     }
   }
 

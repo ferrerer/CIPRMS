@@ -29,8 +29,8 @@
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                             <h4 class="mb-sm-0">Calendar</h4>
                             <div class="page-title-right">
-                                <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="<%= (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel') ? '/personnel/monitoring' : '/dashboard' %>">CIPRMS</a></li>
+                                <ol class="breadcrumb m-0" id="page-breadcrumb">
+                                    <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                     <li class="breadcrumb-item active">Calendar</li>
                                 </ol>
                             </div>
@@ -191,7 +191,7 @@
                                                     <optgroup label="Roles">
                                                         <option value="all">All Users</option>
                                                         <option value="Administrator">Administrators</option>
-                                                        <option value="Auth. Personnel">College Staff</option>
+                                                        <option value="Auth. Personnel">College Dean</option>
                                                         <option value="potential_partner">Partner</option>
                                                         <option value="Staff">CIRL Staff</option>
                                                     </optgroup>
@@ -312,6 +312,27 @@ function isPastNewEvent(dateStr, startStr){
   var candidate = new Date(+d[0], +d[1]-1, +d[2], +t[0], +t[1]);
   return candidate < now;
 }
+
+// â”€â”€ Breadcrumb â”€â”€ reflects whichever event is currently open, e.g. CIPRMS > Calendar >
+// <event title> [> Attendance]. swappingToAttendance guards event-modal's existing
+// hidden.bs.modal handler (below) so hiding it to make way for Attendance doesn't
+// stomp the breadcrumb Attendance just set.
+var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+var swappingToAttendance = false;
+function setBreadcrumb(labels) {
+  var ol = document.getElementById('page-breadcrumb');
+  if (!ol) return;
+  var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+  labels.forEach(function (label, i) {
+    var isLast = i === labels.length - 1;
+    html += isLast
+      ? '<li class="breadcrumb-item active">' + esc(label) + '</li>'
+      : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + esc(label) + '</a></li>';
+  });
+  ol.innerHTML = html;
+}
+function resetBreadcrumb() { setBreadcrumb(['Calendar']); }
+
 // Show a just-saved event. It is attached to the calendar's own event source (the /api/calendarevents
 // feed): FullCalendar wipes and reloads a source's events on every fetch — which happens whenever
 // you page to another month — so the saved event is then replaced by the feed's copy of itself. A
@@ -397,6 +418,8 @@ function openAttendance(){
         + '<td><span class="badge ' + (joined ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary') + '">' + esc(p.status) + '</span></td>'
         + '<td' + (joined ? ' title="' + esc(p.joinedDateDisplay) + ' (' + esc(d.timeZone) + ')"' : '') + '>' + (joined ? esc(p.joinedAtDisplay) : '\u2014') + '</td></tr>';
     }).join('') : '<tr><td colspan="6" class="text-muted text-center">Nobody was invited to this event.</td></tr>';
+    setBreadcrumb(['Calendar', d.event.title, 'Attendance']);
+    swappingToAttendance = true;
     bsModal.hide();
     attendanceModal.show();
   }).catch(function(){ showToast('Could not load the attendance list.', '#f06548'); });
@@ -476,6 +499,7 @@ function showView(ev){
   document.getElementById('btn-delete').classList.toggle('d-none', !CAN_MANAGE);
   document.getElementById('btn-edit-toggle').classList.toggle('d-none', !CAN_MANAGE);
   document.getElementById('btn-save').classList.add('d-none');
+  setBreadcrumb(['Calendar', ev.title]);
   bsModal.show();
 }
 
@@ -499,6 +523,7 @@ function showAdd(dateStr){
   document.getElementById('btn-delete').classList.add('d-none');
   document.getElementById('btn-edit-toggle').classList.add('d-none');
   document.getElementById('btn-save').classList.remove('d-none');
+  setBreadcrumb(['Calendar', 'New Event']);
   bsModal.show();
 }
 
@@ -523,6 +548,7 @@ function showEdit(){
   document.getElementById('btn-delete').classList.remove('d-none');
   document.getElementById('btn-edit-toggle').classList.add('d-none');
   document.getElementById('btn-save').classList.remove('d-none');
+  setBreadcrumb(['Calendar', currentEv.title, 'Edit']);
 }
 
 // â”€â”€ Build FullCalendar event object from DB doc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -554,6 +580,13 @@ document.addEventListener('DOMContentLoaded', function(){
   bsModal = new bootstrap.Modal(document.getElementById('event-modal'));
   attendanceModal = new bootstrap.Modal(document.getElementById('attendance-modal'));
   document.getElementById('event-modal').addEventListener('hidden.bs.modal', MeetingJoin.stop);
+  document.getElementById('event-modal').addEventListener('hidden.bs.modal', function () {
+    if (swappingToAttendance) { swappingToAttendance = false; return; }   // hidden only to make way for Attendance
+    resetBreadcrumb();
+  });
+  document.getElementById('attendance-modal').addEventListener('hidden.bs.modal', function () {
+    resetBreadcrumb();   // nothing brings event-modal back when Attendance closes — same as today's UX
+  });
   document.getElementById('btn-attendance').addEventListener('click', openAttendance);
   // If this user joins from the modal, keep the calendar's copy of the event current.
   MeetingJoin.onJoined(function(invite){ if(currentEv) currentEv.setExtendedProp('myInvite', invite); });

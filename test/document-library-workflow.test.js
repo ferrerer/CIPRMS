@@ -40,9 +40,9 @@ afterAll(async () => {
   await closeDB();
 });
 
-// College Staff (stored role "Auth. Personnel") no longer has a Partnership Request workflow — the API refuses it (403), so
+// College Dean (stored role "Auth. Personnel") no longer has a Partnership Request workflow — the API refuses it (403), so
 // there is nothing to archive. (It used to be accepted here; see denyCollegeStaffPartnershipRequests in cirl.js.)
-test('College Staff can no longer submit a Partnership Request, so nothing is archived for one', async () => {
+test('College Dean can no longer submit a Partnership Request, so nothing is archived for one', async () => {
   const res = await personnelAgent.post('/api/requests').send({
     institution: 'Jest DocLib University', country: 'Testland', type: 'MOA', nature: 'Research', notes: 'jesttest'
   });

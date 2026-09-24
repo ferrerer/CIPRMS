@@ -120,8 +120,8 @@
     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
       <h4 class="mb-sm-0">Monitoring</h4>
       <div class="page-title-right">
-        <ol class="breadcrumb m-0">
-          <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+        <ol class="breadcrumb m-0" id="page-breadcrumb">
+          <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
           <li class="breadcrumb-item active">Monitoring</li>
         </ol>
       </div>
@@ -927,6 +927,27 @@
 <!-- Shared Country option list (also used by Reports & Analytics' Custom Report Builder) — loaded before
      registry-gridjs.init.js, which reads its COUNTRY_OPTIONS global. -->
 <script src="/velzon/assets/js/shared/country-options.js"></script>
+<!-- Breadcrumb — reflects whichever partnership record is currently open in a modal
+     (View/Edit/Renew/Delete), e.g. CIPRMS > Monitoring > <institution>. The
+     open/close hooks live in registry-gridjs.init.js (shared with the now-dead
+     registry.ejs), which reads BREADCRUMB_BASE and calls these page-scoped globals. -->
+<script>
+  var HOME_HREF = '<%= typeof homeHref !== "undefined" ? homeHref : "/dashboard" %>';
+  var BREADCRUMB_BASE = ['Monitoring'];
+  function setBreadcrumb(labels) {
+    var ol = document.getElementById('page-breadcrumb');
+    if (!ol) return;
+    var html = '<li class="breadcrumb-item"><a href="' + HOME_HREF + '">CIPRMS</a></li>';
+    labels.forEach(function (label, i) {
+      var isLast = i === labels.length - 1;
+      html += isLast
+        ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+        : '<li class="breadcrumb-item"><a href="' + window.location.pathname + '">' + escapeHtml(label) + '</a></li>';
+    });
+    ol.innerHTML = html;
+  }
+  function resetBreadcrumb() { setBreadcrumb(BREADCRUMB_BASE); }
+</script>
 <!-- gridjs init — same script the standalone Registry page used; Monitoring
      is now this page's only home, see docs/SYSTEM_AUDIT_2026-07-16.md -->
 <script src="/velzon/assets/js/pages/registry-gridjs.init.js"></script>

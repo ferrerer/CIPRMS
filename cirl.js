@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -153,10 +154,27 @@ app.set('views', path.join(__dirname, 'views'));
 // always reads "http" and secure (HTTPS-only) session cookies never get set,
 // breaking login in production.
 app.set('trust proxy', 1);
+// 2026-09-22 perf fix: gzip every response (HTML pages, CSS/JS/JSON) — none of it was
+// compressed before. GET /api/realtime/stream (the EventSource below) is explicitly
+// excluded: it's a long-lived SSE connection that pushes events one at a time with no
+// res.flush() after each write, so anything compression buffered would just sit there
+// undelivered until the connection eventually closes instead of arriving live.
+app.use(compression({
+  filter: (req, res) => req.path === '/api/realtime/stream' ? false : compression.filter(req, res)
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/velzon/assets', express.static(path.join(__dirname, 'assets')));
+// 2026-09-22 perf fix: neither of these set a Cache-Control header before now, so a
+// browser revalidated EVERY css/js/font/image on EVERY full-page navigation (this app
+// has no client-side router — every sidebar click is a fresh page load) — dozens of
+// round-trips per click on top of the page's own request, compounding the session-
+// revalidation lag fixed above. /velzon/assets is the Velzon theme's vendor libraries,
+// which never change day to day in this project, so it can cache long; /public is this
+// app's own CSS/JS, touched far more often, so it gets a short cache just long enough to
+// eliminate repeat round-trips within one browsing session without risking a stale asset
+// surviving past the next deploy for very long.
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '10m' }));
+app.use('/velzon/assets', express.static(path.join(__dirname, 'assets'), { maxAge: '1d' }));
 if (!process.env.SESSION_SECRET) {
   console.warn('⚠️  SESSION_SECRET is not set in .env — using an insecure generated fallback for this run only.');
 }
@@ -199,10 +217,21 @@ app.use(passport.session());
 // deleting, or demoting a user in User Management has no effect on a session
 // that's already logged in — the old snapshot keeps granting access until it
 // happens to expire or the user manually logs out. Re-check against the real
-// users record on every request so a revoked/changed account takes effect
-// immediately, not up to 2 hours later.
+// users record so a revoked/changed account takes effect quickly, not up to
+// 2 hours later.
+//
+// 2026-09-22 perf fix: this used to re-run on EVERY request, adding a full
+// MongoDB round-trip (often the dominant cost of a page load on Atlas's
+// network latency) to every single page navigation, noticeably laggy when
+// clicking between pages. Throttled to once per REVALIDATE_INTERVAL_MS per
+// session instead — still catches a revoked/edited account within a few
+// seconds (nowhere near the old 2-hour session-expiry fallback), just not on
+// literally every click.
+const REVALIDATE_INTERVAL_MS = 15000;
 app.use(async (req, res, next) => {
   if (!req.session || !req.session.user) return next();
+  const now = Date.now();
+  if (req.session.revalidatedAt && now - req.session.revalidatedAt < REVALIDATE_INTERVAL_MS) return next();
   try {
     const db = getDb();
     const dbUser = await db.collection('users').findOne(
@@ -220,10 +249,20 @@ app.use(async (req, res, next) => {
     req.session.user.role = dbUser.role;
     req.session.user.name = dbUser.name;
     req.session.user.unit = dbUser.unit || '';
+    req.session.revalidatedAt = now;
     next();
   } catch (err) {
     next(err);
   }
+});
+
+// Where the "CIPRMS" breadcrumb (and any other "home" link) of the signed-in user goes: Administrator → /dashboard,
+// CIRL Staff → /staff/dashboard, College Dean and Partner → their Monitoring page. Several page templates are shared
+// between roles (the Administrator's own views also render for Staff and College Dean), so a link written into the
+// template can only be right for one of them — the page reads this instead.
+app.use((req, res, next) => {
+  res.locals.homeHref = req.session && req.session.user ? homeForRole(req.session.user.role) : '/';
+  next();
 });
 
 // ── PASSPORT CONFIG ───────────────────────────────────────────────────────────
@@ -280,7 +319,7 @@ function requirePersonnel(req, res, next) {
 }
 
 /**
- * College Staff (backend role "Auth. Personnel") has a deliberately
+ * College Dean (backend role "Auth. Personnel") has a deliberately
  * reduced UI: Monitoring, Requests (Document Requests only) and Calendar.
  * This guard sits behind requirePersonnel on the pages that role does not
  * get — the Notifications PAGE and Document Library — and bounces ONLY an
@@ -315,8 +354,8 @@ function requireRequester(req, res, next) {
 
 /**
  * Chained AFTER requireRequester on the Partnership Request routes (/api/requests: create, edit a draft,
- * submit a draft, delete a draft, withdraw). requireRequester also admits College Staff (backend role
- * "Auth. Personnel") because the Document Request routes share it — but College Staff no longer has a
+ * submit a draft, delete a draft, withdraw). requireRequester also admits College Dean (backend role
+ * "Auth. Personnel") because the Document Request routes share it — but College Dean no longer has a
  * Partnership Request workflow (its page and form were removed; Document Requests are all it submits), so
  * the API is closed to it here on the server rather than left to a hidden button. A JSON 403, not a
  * redirect: this is an API refusal. Administrator and Partner pass unchanged; Staff never reaches this
@@ -325,7 +364,7 @@ function requireRequester(req, res, next) {
 function denyCollegeStaffPartnershipRequests(req, res, next) {
   const user = req.session && req.session.user;
   if (user && user.role === 'Auth. Personnel') {
-    return res.status(403).json({ error: 'College Staff cannot submit Partnership Requests. Use a Document Request instead.' });
+    return res.status(403).json({ error: 'College Dean cannot submit Partnership Requests. Use a Document Request instead.' });
   }
   return next();
 }
@@ -402,10 +441,11 @@ function homeForRole(role) {
 // permission check, API payloads, <option value="…"> and role filters keep "Staff",
 // "Auth. Personnel" and "potential_partner". Only what people SEE is renamed:
 //   Staff             → "CIRL Staff"
-//   Auth. Personnel   → "College Staff"   (shown earlier as "Department/Colleges")
+//   Auth. Personnel   → "College Dean"   (shown earlier as "Department/Colleges")
 //   potential_partner → "Partner"
-const ROLE_LABELS = { 'Staff': 'CIRL Staff', 'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner' };
+const ROLE_LABELS = { 'Staff': 'CIRL Staff', 'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner' };
 const PREVIOUS_COLLEGE_STAFF_LABEL = 'Department/Colleges'; // stored in some audit text written between the two renames
+const EARLIER_COLLEGE_LABEL = 'College Staff';               // what the role was called before "College Dean" — may be in older stored text
 function displayRoleName(role) {
   return Object.prototype.hasOwnProperty.call(ROLE_LABELS, role) ? ROLE_LABELS[role] : role;
 }
@@ -417,6 +457,7 @@ function displayRoleText(text) {
   return text
     .split('Auth. Personnel').join(ROLE_LABELS['Auth. Personnel'])
     .split(PREVIOUS_COLLEGE_STAFF_LABEL).join(ROLE_LABELS['Auth. Personnel'])
+    .split(EARLIER_COLLEGE_LABEL).join(ROLE_LABELS['Auth. Personnel'])
     .replace(/\(Staff\)/g, '(' + ROLE_LABELS['Staff'] + ')')
     .replace(/\brole: Staff\b/g, 'role: ' + ROLE_LABELS['Staff']);
 }
@@ -430,7 +471,11 @@ app.get('/', (req, res) => {
   if (req.session && req.session.user) {
     return res.redirect(homeForRole(req.session.user.role));
   }
-  res.render('index', { activePage: '', error: undefined });
+  res.render('index', {
+    activePage: '', error: undefined,
+    // set by the Settings pages after a password change, which ends the session
+    notice: req.query.passwordChanged === '1' ? 'Your password was changed. Please log in again with your new password.' : undefined
+  });
 });
 
 app.get('/signup', (req, res) => {
@@ -721,7 +766,8 @@ app.get('/api/partnerships', requireUploader, async (req, res) => {
 // and Reports pages so they never receive other organizations' registry data,
 // unlike the full /api/partnerships feed above.
 async function partnershipsOwnedBy(db, email) {
-  const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
+  // A MOA/MOU submission is a file the partner sends CIRL, not a partnership — approving one never links a registry row.
+  const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved', isSubmission: { $ne: true } }).toArray();
   const names = [...new Set(myApproved.map(r => r.institution).filter(Boolean))];
   if (names.length === 0) return [];
   const patterns = names.map(name => new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'));
@@ -795,7 +841,7 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, announce('request')
 
     // Ownership check — same institution-name match used by /api/partnerships/mine.
     const email = req.session.user ? req.session.user.email : '';
-    const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved' }).toArray();
+    const myApproved = await db.collection('requests').find({ submittedByEmail: email, status: 'Approved', isSubmission: { $ne: true } }).toArray();
     const myNames = new Set(myApproved.map(r => (r.institution || '').trim().toLowerCase()).filter(Boolean));
     const partnershipName = (partnership.inst || partnership.institution || '').trim().toLowerCase();
     if (!partnershipName || !myNames.has(partnershipName)) {
@@ -858,12 +904,19 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
   const {
     institution, country, type, nature, notes, requestedBy, isDraft,
     category, region, unit, startDate, endDate, attachmentLink,
-    isRenewal, renewalPartnershipId
+    isRenewal, renewalPartnershipId, isSubmission
   } = req.body;
 
-  const draft = isDraft === true;
+  // "Submission Of MOA/MOU" (Partner only): the partner sends CIRL their MOA/MOU file/notes. It is filed as a Partnership
+  // Request (so reviewers handle it under Partnership Requests/Submission, not Document Requests) but is not a request
+  // to create a partnership — no country/type/nature, never a draft, and approving it never touches the registry.
+  const submission = isSubmission === true && !!req.session.user && req.session.user.role === 'potential_partner';
+  const draft = isDraft === true && !submission;
   // Drafts are allowed to be incomplete — only a real submission requires the core fields.
-  if (!draft && (!institution || !country || !type || !nature)) {
+  if (submission && !(institution || '').trim()) {
+    return res.status(400).json({ error: 'Institution is required.' });
+  }
+  if (!draft && !submission && (!institution || !country || !type || !nature)) {
     return res.status(400).json({ error: 'Missing required fields: institution, country, type, nature.' });
   }
   // The Partner form offers only MOA and MOU (the only agreement types the partnership registry accepts —
@@ -875,11 +928,13 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
   try {
     const db = getDb();
 
-    // Prevent duplicate active requests for the same institution (drafts don't count).
-    if (!draft && institution) {
+    // Prevent duplicate active requests for the same institution (drafts and MOA/MOU submissions don't count — a
+    // partner may send several files, and a pending submission must not block a real partnership request).
+    if (!draft && !submission && institution) {
       const existing = await db.collection('requests').findOne({
         institution,
-        status: { $in: ['Pending', 'Under Review'] }
+        status: { $in: ['Pending', 'Under Review'] },
+        isSubmission: { $ne: true }
       });
       if (existing) {
         return res.status(409).json({ error: 'A pending request for this institution already exists.' });
@@ -894,7 +949,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       institution: (institution || '').trim(),
       country: (country || '').trim(),
       type: type || '',
-      nature: (nature || '').trim(),
+      nature: submission ? 'MOA/MOU Submission' : (nature || '').trim(),
       category: category || '',
       region: region || '',
       unit: unit || '',
@@ -907,13 +962,16 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       status: draft ? 'Draft' : 'Pending',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       updatedAt: new Date().toISOString(),
+      ...(submission ? { isSubmission: true } : {}),
       ...(isRenewal ? { isRenewal: true, renewalPartnershipId: renewalPartnershipId } : {})
     };
 
     await db.collection('requests').insertOne(entry);
     if (!draft) {
       await logActivity(db, req.session.user, 'SUBMIT',
-        `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
+        submission
+          ? `MOA/MOU submission sent: ${entry.institution} by ${entry.requestedBy}`
+          : `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
 
       // Administrator and Staff — both review Partnership/Renewal Requests
       // (PATCH /api/requests/:id is requireStaffAccess-gated as of the
@@ -930,16 +988,20 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
         tag: isRenewal ? 'Renewal Request' : 'Partnership Request',
         icon: isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
         color: isRenewal ? 'info' : 'primary',
-        title: isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
-        desc: isRenewal
-          ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
-          : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
+        title: submission ? `New MOA/MOU submission: ${entry.institution}`
+          : isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
+        desc: submission
+          ? `${entry.requestedBy} sent a MOA/MOU submission for ${entry.institution}.`
+          : isRenewal
+            ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
+            : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
       }, role => prLinkForRole(role, nextId));
 
       // Give the submitter their own copy in the Document Library — skipped
       // when an OCR attachment already exists, since that upload was already
-      // archived there (avoids a duplicate entry for one submission).
-      if (['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
+      // archived there (avoids a duplicate entry for one submission). A MOA/MOU
+      // submission archives the file the partner attaches instead of a request record.
+      if (!submission && ['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
         await archiveRequestRecordToLibrary(db, {
           requestType: 'partnership', requestId: nextId, institution: entry.institution,
           type: entry.type, submittedBy: entry.requestedBy, submittedByEmail: entry.submittedByEmail
@@ -1013,6 +1075,7 @@ app.post('/api/requests/:id/submit', requireRequester, denyCollegeStaffPartnersh
     const existing = await db.collection('requests').findOne({
       institution: target.institution,
       status: { $in: ['Pending', 'Under Review'] },
+      isSubmission: { $ne: true },
       id: { $ne: id }
     });
     if (existing) {
@@ -1142,22 +1205,23 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
       const label = updated.isRenewal ? 'Renewal Request' : 'Partnership Request';
       const submitter = await db.collection('users').findOne({ email: updated.submittedByEmail });
       const link = prLinkForRole(submitter && submitter.role, id);
+      const what = updated.isSubmission ? 'MOA/MOU submission' : updated.isRenewal ? 'renewal request' : 'partnership request';
       let title, desc, icon, color;
       if (status === 'Under Review') {
         title = `Additional documents requested: ${updated.institution}`;
-        desc = `The Administrator has requested additional documents or information for your ${updated.isRenewal ? 'renewal' : 'partnership'} request (${updated.institution}).${notes ? ' Note: ' + notes : ''}`;
+        desc = `The Administrator has requested additional documents or information for your ${what} (${updated.institution}).${notes ? ' Note: ' + notes : ''}`;
         icon = 'ri-file-add-line'; color = 'warning';
       } else {
-        title = `${label} ${status}: ${updated.institution}`;
+        title = `${updated.isSubmission ? 'MOA/MOU Submission' : label} ${status}: ${updated.institution}`;
         icon = status === 'Approved' ? 'ri-checkbox-circle-line' : 'ri-close-circle-line';
         color = status === 'Approved' ? 'success' : 'danger';
         desc = status === 'Approved'
           ? (updated.isRenewal
             ? `Your renewal request for ${updated.institution} has been approved. The partnership has been extended.`
-            : `Your partnership request for ${updated.institution} has been approved.`)
+            : `Your ${what} for ${updated.institution} has been approved.`)
           : (updated.isRenewal
             ? `Your renewal request for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`
-            : `Your partnership request for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
+            : `Your ${what} for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
       }
       await notifyUsers(db, [updated.submittedByEmail], { module: 'request', tag: label, icon, color, title, desc, link });
     }
@@ -1242,10 +1306,10 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
       let documentId = null, fileLink = null;
       if (req.file) {
         ({ documentId, fileLink } = await archiveToDocumentLibrary(req.file.path, req.file.originalname, {
-          documentType: expandDocTypeLabel(target.type),
+          documentType: target.isSubmission ? 'MOA/MOU Submission' : expandDocTypeLabel(target.type),
           institution: target.institution,
           partner: target.institution,
-          title: `${target.type || 'Document'} – ${target.institution} (Request #${id})`
+          title: `${target.isSubmission ? 'MOA/MOU Submission' : (target.type || 'Document')} – ${target.institution} (Request #${id})`
         }, {
           uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
           uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
@@ -1262,10 +1326,15 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
         note, fileType: req.file ? req.file.mimetype : null, fileSize: req.file ? req.file.size : 0
       };
       const setFields = { updatedAt: new Date().toISOString() };
+      // The file that goes with a brand-new MOA/MOU submission is part of the submission itself: it is not a "revised
+      // draft", so it neither starts the review nor sends reviewers a second notification. Only the owner, only on a
+      // submission that has no document yet, and only when the page says it is the initial attachment.
+      const initialSubmissionFile = !!target.isSubmission && isOwner && req.body.initial === '1'
+        && !(Array.isArray(target.supportingDocuments) && target.supportingDocuments.length);
       // A new version puts the request back "in collaboration" — reuses the
       // existing Under Review status rather than inventing a new one (it
       // already means exactly this for Approve/Reject purposes too).
-      if (target.status === 'Pending') setFields.status = 'Under Review';
+      if (target.status === 'Pending' && !initialSubmissionFile) setFields.status = 'Under Review';
       await db.collection('requests').updateOne({ id }, { $push: { supportingDocuments: docRecord }, $set: setFields });
       const updated = await db.collection('requests').findOne({ id });
 
@@ -1290,7 +1359,7 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
           link: prLinkForRole(submitter && submitter.role, id),
           downloadLink: fileLink
         });
-      } else if (isOwner) {
+      } else if (isOwner && !initialSubmissionFile) {
         const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
         await notifyReviewers(db, reviewers, {
           module: 'request',
@@ -1419,6 +1488,15 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
     const last = await db.collection('documentrequests').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length > 0 ? (last[0].id + 1) : 1;
 
+    // A College Dean's contact number is the one entered when the account was registered — the request form shows it
+    // read-only, and whatever the client sends is ignored here too. (An account registered without a number can still
+    // type one on the request, as before.)
+    let requestContactNumber = contactNumber || '';
+    if (req.session.user && req.session.user.role === 'Auth. Personnel') {
+      const me = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { contactNumber: 1 } });
+      if (me && me.contactNumber) requestContactNumber = me.contactNumber;
+    }
+
     const entry = {
       id: nextId,
       institution: institution.trim(),
@@ -1431,7 +1509,7 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       // Contact Number and Document Form (Printed/Digital Copy) exist solely to
       // populate the official CSPC-F-CIRL-04 printable form — no other part of
       // the app reads them.
-      contactNumber: contactNumber || '',
+      contactNumber: requestContactNumber,
       documentForm: documentForm || '',
       requestedBy: req.session.user ? req.session.user.name : 'Unknown',
       requestedByEmail: req.session.user ? req.session.user.email : '',
@@ -1687,7 +1765,10 @@ app.post('/api/document-requests/:id/documents', requireAuth, announce('document
 
       const isReviewer = REQUEST_REVIEWER_ROLES.includes(actor.role);
       const isOwner = target.requestedByEmail && target.requestedByEmail === actor.email;
-      if (!isReviewer && !isOwner) {
+      // College Dean (role "Auth. Personnel") can submit a Document Request and track its drafts, but does not
+      // upload new versions itself — only a reviewer (Administrator/Staff) or an owning potential_partner may.
+      const canUpload = isReviewer || (isOwner && actor.role === 'potential_partner');
+      if (!canUpload) {
         if (req.file) fs.unlink(req.file.path, () => { });
         return res.status(403).json({ error: 'You are not authorized to upload documents to this request.' });
       }
@@ -5041,6 +5122,9 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     if (!VALID_USER_STATUSES.includes(status)) {
       return res.status(400).json({ error: 'Invalid status.' });
     }
+    // Optional; validated so a College Dean's request forms always carry a real number.
+    const contact = parseContactNumber(req.body.contactNumber);
+    if (contact.error) return res.status(400).json({ error: contact.error });
 
     const db = getDb();
     const existing = await db.collection('users').findOne({ email });
@@ -5069,9 +5153,12 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     const { id: _clientId, _id: _clientMongoId, ...safeBody } = req.body;
     const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
-    // Unit/Department is optional — normalize to an empty string rather than
-    // storing it as undefined/missing when the admin leaves it blank.
-    const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(), password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
+    // Unit/Department, Institution and Position are optional — normalize to an empty string rather than
+    // storing them as undefined/missing when the admin leaves them blank. They are fixed at registration: the
+    // account owner cannot change them from Settings (only User Management edits them).
+    const entry = { id: nextId, ...safeBody, name, email, role, status, unit: (req.body.unit || '').trim(),
+      institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
+      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
     await db.collection('users').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
     const { password: _, ...safeEntry } = entry; // don't return the password hash
@@ -5146,6 +5233,15 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     // to a trimmed string (never leave it as undefined/null in the update).
     if (updateData.unit !== undefined) {
       updateData.unit = (updateData.unit || '').trim();
+    }
+    for (const field of ['institution', 'position']) {
+      if (updateData[field] !== undefined) updateData[field] = typeof updateData[field] === 'string' ? updateData[field].trim() : '';
+    }
+    // Contact number: validated like at registration; a non-string is dropped rather than stored.
+    if (updateData.contactNumber !== undefined) {
+      const contact = parseContactNumber(updateData.contactNumber);
+      if (contact.error) return res.status(400).json({ error: contact.error });
+      if (contact.value === undefined) delete updateData.contactNumber; else updateData.contactNumber = contact.value;
     }
 
     // Never let an admin lock everyone out: block deactivating your own account,
@@ -5331,16 +5427,18 @@ async function partnershipAudience(db, institution) {
   const staff = realtime.audience.roles(REQUEST_REVIEWER_ROLES);
   if (!institution) return staff;
   const pattern = new RegExp('^' + String(institution).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
-  const owners = await db.collection('requests').find({ status: 'Approved', institution: pattern }).project({ submittedByEmail: 1 }).toArray();
+  const owners = await db.collection('requests').find({ status: 'Approved', isSubmission: { $ne: true }, institution: pattern }).project({ submittedByEmail: 1 }).toArray();
   return realtime.audience.merge(staff, realtime.audience.emails(owners.map(o => o.submittedByEmail)));
 }
 
-// Mirrors GET /api/calendarevents: Administrator sees every event; everybody else sees an event with no recipient list, one
-// that names them, or one they created.
+// Mirrors GET /api/calendarevents: Administrator sees every event; CIRL Staff also see an event with no recipient list, one
+// that names them, or one they created; College Dean and Partners only see an event that names them or is for "All Users".
 function calendarAudience(ev) {
   if (!ev) return realtime.audience.roles(['Administrator']);
-  if (!Array.isArray(ev.recipientEmails)) return realtime.audience.all();
-  return realtime.audience.merge(realtime.audience.roles(['Administrator']), realtime.audience.emails([...ev.recipientEmails, ev.createdByEmail]));
+  if (ev.forEveryone) return realtime.audience.all();
+  const invited = [...(ev.recipientEmails || []), ...(ev.participantEmails || []), ...(ev.googleAttendeeEmails || []), ev.createdByEmail];
+  const staffRoles = Array.isArray(ev.recipientEmails) ? ['Administrator'] : ['Administrator', 'Staff'];
+  return realtime.audience.merge(realtime.audience.roles(staffRoles), realtime.audience.emails(invited));
 }
 
 async function publishChange(topic, req, body, prior) {
@@ -5484,7 +5582,7 @@ function expandDocTypeLabel(shortCode) {
 // A notification stores the link that was right for its recipient's role WHEN IT WAS CREATED. Clicking that
 // stored link later went wrong whenever the route no longer suited the reader: an old "/calendar" link opened
 // by CIRL Staff (requirePersonnel bounces them to their home = the Dashboard), a removed page such as
-// /viewonly/request-access (404), a College Staff "partnership request" link (that role has no Partnership
+// /viewonly/request-access (404), a College Dean "partnership request" link (that role has no Partnership
 // Request page any more) or a Partner "document request" link (Monitoring has no such table any more, so the
 // click just landed on the Monitoring home). notificationHref() re-resolves the destination for the role that is
 // actually reading it, from the stored link/module/tag, and only ever returns a page that role can open. The
@@ -5528,7 +5626,7 @@ function notificationHref(role, n) {
   if (reqKind !== 'pr' && reqKind !== 'dr') reqKind = /partnership/i.test(n.tag || '') ? 'pr' : /document/i.test(n.tag || '') ? 'dr' : null;
   if ((kind === 'requests' || kind === 'monitoring') && reqKind) {
     if ((role === 'Administrator' || role === 'Staff') && id) return pages.requests + '?open=' + reqKind + '&id=' + id;
-    if (role === 'Auth. Personnel' && id) return reqKind === 'dr' ? pages.monitoring + '?type=dr&id=' + id : pages.monitoring;   // no Partnership Request page for College Staff
+    if (role === 'Auth. Personnel' && id) return reqKind === 'dr' ? pages.monitoring + '?type=dr&id=' + id : pages.monitoring;   // no Partnership Request page for College Dean
     if (role === 'potential_partner') {
       if (reqKind === 'dr') return pages.requests + '?tab=dr';                       // MOA/MOU submissions live on the Requests page itself
       if (id) return pages.monitoring + '?type=pr&id=' + id;
@@ -5536,7 +5634,7 @@ function notificationHref(role, n) {
   }
   if (kind === 'requests') return pages.requests;
   if (kind === 'monitoring') return pages.monitoring;
-  // Administrator and CIRL Staff still have a real Dashboard; College Staff and Partner do not (Monitoring is their home)
+  // Administrator and CIRL Staff still have a real Dashboard; College Dean and Partner do not (Monitoring is their home)
   if (kind === 'dashboard') return pages.dashboard || pages.monitoring;
   return pages.fallback;
 }
@@ -5854,23 +5952,26 @@ function attendanceRecordFor(ev, email) {
   return (Array.isArray(ev.attendance) ? ev.attendance : []).find(a => a.emailKey === key) || null;
 }
 
-// What the signed-in user needs to render the Join control. `startsAt` and
-// `serverNow` come from the server: the browser counts down to `startsAt`
-// against the server's clock, and the server re-checks on the actual Join
-// request, so a wrong device clock can neither unlock nor block a join.
+// What the signed-in user needs to render the Join control. `startsAt`, `endsAt`
+// and `serverNow` come from the server: the browser only shows Join while the
+// meeting is on (start ≤ now < end, by the server's clock), and the server
+// re-checks both bounds on the actual Join request, so a wrong device clock can
+// neither unlock nor block a join. The Meet link itself is never in here — it
+// is only handed out by the Join request, and only while the meeting is on.
 function buildMyInvite(ev, user, now) {
   if (!isMeetingEvent(ev)) return null;
   if (!eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { invited: false };
-  const start = meetingTime.eventStartInstant(ev);
+  const win = meetingTime.eventJoinWindow(ev);
   const record = attendanceRecordFor(ev, user.email);
   return {
     invited: true,
     joined: !!record,
     joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
     joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
-    startsAt: start ? start.toISOString() : null,
+    startsAt: win ? win.start.toISOString() : null,
+    endsAt: win ? win.end.toISOString() : null,
     serverNow: now.toISOString(),
-    canJoinNow: !!start && now >= start,
+    canJoinNow: !!win && now >= win.start && now < win.end,
     timeZone: meetingTime.appTimeZone()
   };
 }
@@ -5886,6 +5987,9 @@ const CALENDAR_EVENT_PRIVATE_FIELDS = [
 ];
 function calendarEventView(ev, user, now) {
   const view = { ...ev, myInvite: buildMyInvite(ev, user, now) };
+  // The Google Meet address is only released by the Join request while the meeting is on — the feed never carries it,
+  // not even to the people who manage the calendar.
+  delete view.googleMeetLink;
   if (canManageCalendarRole(user)) {
     view.participantCount = eventParticipantKeys(ev).size;
     view.joinedCount = Array.isArray(ev.attendance) ? ev.attendance.length : 0;
@@ -5903,16 +6007,32 @@ function calendarEventView(ev, user, now) {
 // feature, and events created with no/"all" recipients, carry no
 // `recipientEmails` field at all, so they stay visible to everyone exactly as
 // before (closes the "existing calendar functionality unaffected" requirement).
+//
+// College Dean and Partners are stricter: an event with no recipient list is NOT for them. They only see an event that
+// names them (recipient / participant / Google attendee) or one explicitly created for "All Users" (forEveryone).
+const INVITE_ONLY_CALENDAR_ROLES = ['Auth. Personnel', 'potential_partner'];
+function calendarFeedFilter(user) {
+  if (user.role === 'Administrator') return {};
+  if (INVITE_ONLY_CALENDAR_ROLES.includes(user.role)) {
+    const mine = [...new Set([user.email, meetingTime.emailKey(user.email)].filter(Boolean))];
+    return { $or: [
+      { forEveryone: true },
+      { recipientEmails: { $in: mine } },
+      { participantEmails: { $in: mine } },
+      { googleAttendeeEmails: { $in: mine } },
+      { createdByEmail: { $in: mine } }
+    ] };
+  }
+  // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
+  // meeting they scope to other people, so without this their own event vanished from their calendar the
+  // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
+  return { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+}
 app.get('/api/calendarevents', requireAuth, async (req, res) => {
   try {
     const db = getDb();
     const user = req.session.user;
-    const filter = user.role === 'Administrator'
-      ? {}
-      // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
-      // meeting they scope to other people, so without this their own event vanished from their calendar the
-      // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
-      : { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+    const filter = calendarFeedFilter(user);
     const docs = await db.collection('calendarevents').find(filter).toArray();
     const now = new Date();
     res.json(docs.map(d => calendarEventView(d, user, now)));
@@ -6090,6 +6210,7 @@ async function recordGoogleSyncOnEvent(db, ev, sync) {
   if (sync.ok && sync.googleEventId) set.googleEventId = sync.googleEventId;
   if (sync.ok && sync.organizerEmail) set.googleOrganizerEmail = sync.organizerEmail;
   if (sync.ok && sync.htmlLink) set.googleHtmlLink = sync.htmlLink;
+  if (sync.ok && sync.meetLink) set.googleMeetLink = sync.meetLink;
   await db.collection('calendarevents').updateOne({ id: ev.id }, { $set: set });
   Object.assign(ev, set);
 }
@@ -6156,6 +6277,9 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     const base = {
       ...fields,
       ...(isScoped ? { recipientEmails: targetEmails } : {}),
+      // Explicit "All Users" marker: College Dean and Partners only see unscoped events that carry it
+      // (an event created with no recipients at all is internal, not for them).
+      ...(Array.isArray(rawRecipients) && rawRecipients.includes('all') ? { forEveryone: true } : {}),
       // Every invited CIPRMS user (visibility for a scoped event is
       // recipientEmails; this is the always-populated "who was invited" list
       // that the Join control and the attendance view rely on).
@@ -6315,14 +6439,24 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
     if (!eventParticipantKeys(ev).has(key)) {
       return res.status(403).json({ error: 'You are not an invited participant of this meeting.' });
     }
-    const start = meetingTime.eventStartInstant(ev);
-    if (!start) return res.status(409).json({ error: 'This meeting has no valid start time.' });
+    const win = meetingTime.eventJoinWindow(ev);
+    if (!win) return res.status(409).json({ error: 'This meeting has no valid start time.' });
     const now = new Date();
-    if (now < start) {
+    if (now < win.start) {
       return res.status(403).json({
         error: 'This meeting has not started yet. You can join when it starts.',
         code: 'MEETING_NOT_STARTED',
-        startsAt: start.toISOString(),
+        startsAt: win.start.toISOString(),
+        endsAt: win.end.toISOString(),
+        serverNow: now.toISOString()
+      });
+    }
+    if (now >= win.end) {
+      return res.status(403).json({
+        error: 'This meeting has ended.',
+        code: 'MEETING_ENDED',
+        startsAt: win.start.toISOString(),
+        endsAt: win.end.toISOString(),
         serverNow: now.toISOString()
       });
     }
@@ -6335,7 +6469,16 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
       { $push: { attendance: { email: user.email, emailKey: key, userId: user.id, name: user.name, role: user.role, joinedAt: now } } }
     );
     const fresh = await db.collection('calendarevents').findOne({ id });
-    res.json({ success: true, alreadyJoined: result.modifiedCount === 0, myInvite: buildMyInvite(fresh, user, new Date()) });
+
+    // The Google Meet room the person is sent to. Google can attach it a moment after the event is created, so when
+    // none is stored yet it is read from the Google event now (and kept). No link is not an error: the attendance is
+    // recorded either way and the page tells the person there is no Meet room to open.
+    let meetLink = fresh.googleMeetLink || null;
+    if (!meetLink && fresh.googleEventId) {
+      meetLink = await googleCalendarService.getGoogleMeetLink(db, fresh.googleEventId);
+      if (meetLink) await db.collection('calendarevents').updateOne({ id }, { $set: { googleMeetLink: meetLink } });
+    }
+    res.json({ success: true, alreadyJoined: result.modifiedCount === 0, meetLink, myInvite: buildMyInvite(fresh, user, new Date()) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6528,41 +6671,89 @@ app.post('/api/google-calendar/disconnect', requireAdmin, async (req, res) => {
 });
 
 // ── MONGO-BACKED PROFILE STORES ───────────────────────────────────────────────
-// Admin profile GET
-app.get('/api/admin/profile', requireAdmin, async (req, res) => {
+// A request stores the requestor's name when it is created, so renaming an account in Settings would leave every
+// request they already submitted under the old name. Keep the account's own requests (matched by e-mail, the same
+// ownership key the routes use) in step with the new name. Only the requestor field is touched — never a reviewer's.
+async function propagateRequestorName(db, email, name) {
+  if (!email || !name) return;
+  await db.collection('requests').updateMany({ submittedByEmail: email }, { $set: { requestedBy: name } });
+  await db.collection('documentrequests').updateMany({ requestedByEmail: email }, { $set: { requestedBy: name } });
+}
+
+// Department/College, Institution/School, Designation/Position and the Contact Number are set once, when the account is
+// registered in User Management (users.unit / institution / position / contactNumber), and cannot be changed from
+// Settings. The Settings profile endpoints therefore read them from the account itself and accept ONLY the person's
+// own name.
+function registeredProfile(userDoc) {
+  if (!userDoc) return {};
+  return {
+    name: userDoc.name || '', email: userDoc.email || '',
+    dept: userDoc.unit || '', position: userDoc.position || '', institution: userDoc.institution || '',
+    contactNumber: userDoc.contactNumber || ''
+  };
+}
+
+// The contact number entered when an account is registered / edited in User Management. Digits and the usual phone
+// punctuation only, at least 7 digits when one is given; empty clears it. Returns { value } (undefined = not sent, so
+// the stored number is left alone) or { error }.
+const CONTACT_NUMBER_RE = /^[0-9+()\-\s]{1,25}$/;
+function parseContactNumber(raw) {
+  if (typeof raw !== 'string') return { value: undefined };
+  const value = raw.trim();
+  if (!value) return { value: '' };
+  if (!CONTACT_NUMBER_RE.test(value) || value.replace(/\D/g, '').length < 7) {
+    return { error: 'Enter a valid contact number — numbers only (spaces and + ( ) - are fine), at least 7 digits.' };
+  }
+  return { value };
+}
+
+async function readOwnProfile(req, res) {
   try {
     const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'admin' });
-    res.json(doc ? doc.profile : {});
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    res.json(registeredProfile(userDoc));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
 
-// Admin profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening): it is the authenticated identity, not an editable
-// profile field, and almost every ownership check in this app is keyed on
-// req.session.user.email. Any `email` in the request body is ignored — the
-// stored/returned profile always uses the real session email.
-app.post('/api/admin/profile', requireAdmin, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
+// Email is intentionally NOT accepted from the client (2026-09-06 security hardening): it is the authenticated
+// identity, not an editable profile field, and almost every ownership check in this app is keyed on
+// req.session.user.email. Any `email` — and any dept/position/institution/contact number — in the request body is
+// ignored. Only the name is saved.
+async function saveOwnName(req, res) {
+  const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+  if (!name) return res.status(400).json({ error: 'Name is required.' });
   const email = req.session.user.email;
   try {
     const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'admin' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
+    // The per-request session sync re-reads users.name, so the rename must be stored on the users document —
+    // otherwise it reverts on the next page.
+    await db.collection('users').updateOne({ id: req.session.user.id }, { $set: { name } });
+    await propagateRequestorName(db, email, name);
     req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
+    res.json({ success: true, profile: registeredProfile(userDoc) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}
+
+// After the password is changed the current session ends: the person has to sign in again with the new password.
+// (Same teardown as POST /logout — the session is destroyed, its live connections closed and the cookie cleared.)
+function endSessionAfterPasswordChange(req, res) {
+  const endingSession = req.sessionID;
+  req.session.destroy((err) => {
+    realtime.disconnectSession(endingSession);
+    if (err) console.error('❌ Session destroy after password change failed:', err);
+    res.clearCookie('connect.sid', { path: '/' });
+    res.json({ success: true, reloginRequired: true });
+  });
+}
+
+// Admin profile GET / POST
+app.get('/api/admin/profile', requireAdmin, readOwnProfile);
+app.post('/api/admin/profile', requireAdmin, saveOwnName);
 
 // Admin password POST
 app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, res) => {
@@ -6580,7 +6771,7 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     // 2026-09-06 security hardening (Finding #6): every real validation
     // failure already returns its own clean message above — this only
@@ -6591,38 +6782,9 @@ app.post('/api/admin/password', adminPasswordLimiter, requireAdmin, async (req, 
   }
 });
 
-// Personnel profile GET
-app.get('/api/personnel/profile', requirePersonnel, async (req, res) => {
-  try {
-    const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'personnel' });
-    res.json(doc ? doc.profile : {});
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Personnel profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening) — see the identical note on /api/admin/profile above.
-app.post('/api/personnel/profile', requirePersonnel, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
-  const email = req.session.user.email;
-  try {
-    const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'personnel' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
-    req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Personnel profile GET / POST — name only; see registeredProfile() above.
+app.get('/api/personnel/profile', requirePersonnel, readOwnProfile);
+app.post('/api/personnel/profile', requirePersonnel, saveOwnName);
 
 // Personnel password POST
 app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, async (req, res) => {
@@ -6640,46 +6802,16 @@ app.post('/api/personnel/password', personnelPasswordLimiter, requirePersonnel, 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Personnel password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
   }
 });
 
-// Staff profile GET (2026-08-27 View-Only → Staff migration — mirrors the
-// Personnel profile store above exactly, keyed to its own 'staff' role doc).
-app.get('/api/staff/profile', requireStaffAccess, async (req, res) => {
-  try {
-    const db = getDb();
-    const doc = await db.collection('profiles').findOne({ role: 'staff' });
-    res.json(doc ? doc.profile : {});
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Staff profile POST
-// Email is intentionally NOT accepted from the client here (2026-09-06
-// security hardening) — see the identical note on /api/admin/profile above.
-app.post('/api/staff/profile', requireStaffAccess, async (req, res) => {
-  const { name, dept, position, institution } = req.body;
-  if (!name || !dept || !position || !institution)
-    return res.status(400).json({ error: 'Missing required fields.' });
-  const email = req.session.user.email;
-  try {
-    const db = getDb();
-    await db.collection('profiles').updateOne(
-      { role: 'staff' },
-      { $set: { profile: { name, email, dept, position, institution } } },
-      { upsert: true }
-    );
-    req.session.user.name = name;
-    res.json({ success: true, profile: { name, email, dept, position, institution } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Staff profile GET / POST — name only; see registeredProfile() above.
+app.get('/api/staff/profile', requireStaffAccess, readOwnProfile);
+app.post('/api/staff/profile', requireStaffAccess, saveOwnName);
 
 // Staff password POST
 app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async (req, res) => {
@@ -6697,7 +6829,7 @@ app.post('/api/staff/password', staffPasswordLimiter, requireStaffAccess, async 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Staff password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });
@@ -7114,11 +7246,11 @@ async function computeDashboardStats(db) {
   }
 
   // ── DSS: Expansion Opportunity ────────────────────────────────────────────
-  const openRequests = allRequests.filter(r => r.status === 'Pending' || r.status === 'Under Review');
+  const pendingRequests = allRequests.filter(r => r.status === 'Pending');
   let insightExpansion;
-  if (openRequests.length) {
+  if (pendingRequests.length) {
     const byCountry = {};
-    openRequests.forEach(r => { const c = r.country || 'an unspecified country'; byCountry[c] = (byCountry[c] || 0) + 1; });
+    pendingRequests.forEach(r => { const c = r.country || 'an unspecified country'; byCountry[c] = (byCountry[c] || 0) + 1; });
     const [topCountry, topCount] = Object.entries(byCountry).sort((a, b) => b[1] - a[1])[0];
     insightExpansion = `${topCount} pending request${topCount > 1 ? 's' : ''} target${topCount > 1 ? '' : 's'} partnerships in ${topCountry}. Consider prioritizing this region for new agreements.`;
   } else {
@@ -7232,7 +7364,7 @@ app.get('/admin/settings', requireAdmin, (req, res) => {
 });
 
 // ── AUTH. PERSONNEL ROUTES ────────────────────────────────────────────────────
-// College Staff (stored role "Auth. Personnel") sees Monitoring, Requests, Calendar and Settings/Profile
+// College Dean (stored role "Auth. Personnel") sees Monitoring, Requests, Calendar and Settings/Profile
 // (plus the header Notifications bell). It has NO Dashboard page (the
 // personnel_dashboard view was deliberately removed), and the Notifications
 // PAGE and Document Library below are closed to that role via
@@ -7246,11 +7378,20 @@ app.get('/personnel/dashboard', requirePersonnel, (req, res) => {
   res.redirect(homeForRole(req.session.user.role));
 });
 
-app.get('/personnel/requests', requirePersonnel, (req, res) => {
+app.get('/personnel/requests', requirePersonnel, async (req, res) => {
+  // The request form's Contact No. starts as the number saved in Settings (still editable for this one request).
+  let contactNumber = '';
+  try {
+    const doc = await getDb().collection('users').findOne({ id: req.session.user.id }, { projection: { contactNumber: 1 } });
+    contactNumber = (doc && doc.contactNumber) || '';
+  } catch (err) {
+    console.error('Request form: could not read the saved contact number:', err.message);
+  }
   res.render('auth. personnel/personnel_requests', {
     activePage: 'requests',
     sidebarPartial: 'sidebar_personnel',
-    user: req.session.user
+    user: req.session.user,
+    contactNumber
   });
 });
 
@@ -7508,6 +7649,7 @@ app.post('/api/partner/profile', requirePartner, async (req, res) => {
     if (contactName) {
       req.session.user.name = contactName;
       await db.collection('users').updateOne({ email: req.session.user.email }, { $set: { name: contactName, organization: organization || '' } });
+      await propagateRequestorName(db, req.session.user.email, contactName);
     }
     res.json({ success: true, profile });
   } catch (err) {
@@ -7529,7 +7671,7 @@ app.post('/api/partner/password', partnerPasswordLimiter, requirePartner, async 
     if (!isStrongPassword(newPassword))
       return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     await db.collection('users').updateOne({ id: userId }, { $set: { password: await hashPassword(newPassword) } });
-    res.json({ success: true });
+    return endSessionAfterPasswordChange(req, res);
   } catch (err) {
     console.error('❌ Partner password change error:', err);
     res.status(500).json({ error: 'Unable to update password right now. Please try again.' });

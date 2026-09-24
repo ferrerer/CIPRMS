@@ -56,7 +56,7 @@
                                         <h4 class="mb-sm-0">Reports & Analytics</h4>
                                         <div class="page-title-right">
                                             <ol class="breadcrumb m-0">
-                                                <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                                                <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                                 <li class="breadcrumb-item active">Reports</li>
                                             </ol>
                                         </div>
@@ -601,7 +601,7 @@
                                                         <select id="audit-filter-role" class="form-select form-select-sm" onchange="applyAuditFilters()">
                                                             <option value="">All Roles</option>
                                                             <option value="Administrator">Administrator</option>
-                                                            <option value="Auth. Personnel">College Staff</option>
+                                                            <option value="Auth. Personnel">College Dean</option>
                                                             <option value="potential_partner">Partner</option>
                                                             <option value="Staff">CIRL Staff</option>
                                                         </select>
@@ -755,7 +755,7 @@
         // Labels only — the stored/RBAC value stays 'Auth. Personnel' (roleBadge keys, the role filter, API).
         function formatRole(role) {
             if (role === 'potential_partner') return 'Partner';
-            if (role === 'Auth. Personnel') return 'College Staff';
+            if (role === 'Auth. Personnel') return 'College Dean';
             if (role === 'Staff') return 'CIRL Staff';
             return role || '';
         }
@@ -765,8 +765,8 @@
         function displayRoleText(text) {
             if (typeof text !== 'string') return text;
             return text
-                .split('Auth. Personnel').join('College Staff')
-                .split('Department/Colleges').join('College Staff')
+                .split('Auth. Personnel').join('College Dean')
+                .split('Department/Colleges').join('College Dean')
                 .replace(/\(Staff\)/g, '(CIRL Staff)')
                 .replace(/\brole: Staff\b/g, 'role: CIRL Staff');
         }

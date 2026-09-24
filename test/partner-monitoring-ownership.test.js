@@ -119,7 +119,7 @@ describe('the partnership registry feed is scoped for a Partner', () => {
     expect((await agents.partnerA.get('/api/partnerships/mine')).body.map(p => p.id)).toEqual([pA]);
   });
 
-  test('Administrator, CIRL Staff and College Staff keep the full registry feed (unchanged)', async () => {
+  test('Administrator, CIRL Staff and College Dean keep the full registry feed (unchanged)', async () => {
     for (const key of ['admin', 'staff', 'college']) {
       const ids = (await agents[key].get('/api/partnerships')).body.map(p => p.id);
       expect(ids).toEqual(expect.arrayContaining([pA, pB]));

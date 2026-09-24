@@ -26,7 +26,7 @@
                     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
                       <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
+                        <ol class="breadcrumb m-0" id="page-breadcrumb">
                           <li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Monitoring</li>
                         </ol>
@@ -163,18 +163,6 @@
                     </div>
                 </div>
 
-                <div class="row">
-                    <!-- Renewal Status -->
-                    <div class="col-xl-12">
-                        <div class="card">
-                            <div class="card-header"><h4 class="card-title mb-0"><i class="ri-refresh-line me-2"></i>Renewal Status</h4></div>
-                            <div class="card-body" id="renewal-status-body">
-                                <div class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
 
@@ -188,21 +176,8 @@
                     </div>
                     <div class="modal-body">
                         <div id="dr-draft-timeline" class="mb-3"></div>
-                        <div id="dr-draft-upload-wrap" class="border-top pt-3">
-                            <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
-                            <div class="mb-2">
-                                <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
-                            </div>
-                            <div class="mb-2">
-                                <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version (optional)…"></textarea>
-                            </div>
-                            <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
-                                <i class="ri-upload-2-line me-1"></i>Upload
-                            </button>
-                            <small class="text-muted d-block mt-2">PDF, JPG, or PNG — max 10MB. CIRL is notified of your revision.</small>
-                        </div>
-                        <div id="dr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
-                            <i class="ri-lock-line me-1"></i>This document request has already been decided — no further documents can be added.
+                        <div class="alert alert-secondary fs-13 mb-0 border-top pt-3">
+                            <i class="ri-information-line me-1"></i>Draft versions are uploaded by CIRL — track every version above as they come in.
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -270,36 +245,6 @@
             </div>
         </div>
 
-        <!-- Request Renewal Modal -->
-        <div class="modal fade" id="renewal-request-modal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title"><i class="ri-refresh-line me-2 text-primary"></i>Request Renewal</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="mb-3">Requesting renewal for <strong id="rr-institution">—</strong>. Current expiry: <span id="rr-current-end">—</span>.</p>
-                        <div class="mb-3">
-                            <label class="form-label">Proposed New End Date <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control" id="rr-end-date">
-                        </div>
-                        <div class="mb-1">
-                            <label class="form-label">Notes</label>
-                            <textarea class="form-control" id="rr-notes" rows="3" placeholder="Optional context for the renewal…"></textarea>
-                        </div>
-                        <div class="alert alert-danger d-none mt-3 mb-0 py-2 fs-13" id="rr-error"></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="rr-submit-btn" onclick="submitRenewalRequest()">
-                            <i class="ri-send-plane-line me-1"></i>Submit Request
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <footer class="footer">
             <div class="container-fluid">
                 <div class="row">
@@ -360,6 +305,28 @@
         btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
     }
 
+    // ── Breadcrumb — reflects whichever Document Request modal is currently
+    // open on top of Monitoring, e.g. CIPRMS > Monitoring > Document Request >
+    // <institution> [> Draft Collaboration]. `labels` is everything after
+    // "CIPRMS"; the last one renders as the active (non-link) crumb. ────────
+    function setBreadcrumb(labels) {
+        var ol = document.getElementById('page-breadcrumb');
+        if (!ol) return;
+        var html = '<li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>';
+        labels.forEach(function (label, i) {
+            var isLast = i === labels.length - 1;
+            html += isLast
+                ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+                : '<li class="breadcrumb-item"><a href="/personnel/monitoring">' + escapeHtml(label) + '</a></li>';
+        });
+        ol.innerHTML = html;
+    }
+    function resetBreadcrumb() { setBreadcrumb(['Monitoring']); }
+
+    function drRequestLabel(r) {
+        return (r.institution || ('Document Request #' + r.id)) + ' — #' + r.id;
+    }
+
     // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
     // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
     // item.link can be a submitter's free-text attachmentLink. Only allow
@@ -391,7 +358,6 @@
     // Review/Fulfilled — is already normalized before it ever reaches this
     // page).
     var DR_WORKFLOW_STATUSES = ['Received', 'Preparing', 'Awaiting for Approval', 'Approved', 'Release', 'Completed'];
-    var DR_TERMINAL_STATUSES = ['Completed', 'Rejected'];
     var DR_STAGE_LABEL = {
         'Received': 'Received — Awaiting Processing',
         'Preparing': 'Preparing Documents',
@@ -473,7 +439,7 @@
        is no way to reach another user's request id from this page). ─── */
     var ROLE_LABEL = {
         'Administrator': 'Administrator', 'Staff': 'CIRL Staff',
-        'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner',
+        'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner',
         'Requester': 'You'
     };
 
@@ -515,16 +481,23 @@
     // draft modal closes for real (not the temporary hide-for-preview above,
     // which is why this checks draftPreviewReturnTo first).
     var draftDetailReturnTo = null;
-    function wireDraftModalReturn(draftModalId, detailModalId) {
+    function wireDraftModalReturn(draftModalId, detailModalId, onReturn) {
         document.getElementById(draftModalId).addEventListener('hidden.bs.modal', function () {
             if (draftPreviewReturnTo === draftModalId) return;
             if (draftDetailReturnTo === detailModalId) {
                 draftDetailReturnTo = null;
                 new bootstrap.Modal(document.getElementById(detailModalId)).show();
+                if (onReturn) onReturn();
+            } else {
+                resetBreadcrumb();   // opened without a detail modal to return to — nothing left on top of Monitoring
             }
         });
     }
-    wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal');
+    // Restore the Document Request-level breadcrumb (drops "Draft Collaboration") when swapping back to Details.
+    wireDraftModalReturn('dr-draft-modal', 'dr-detail-modal', function () {
+        var r = myDocRequests.find(function (x) { return x.id === currentDraftDRId; });
+        if (r) setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r)]);
+    });
 
     function openDraftPreviewModal(prefix, idx) {
         var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
@@ -628,41 +601,10 @@
         currentDraftDRId = id;
         document.getElementById('dr-draft-modal-title').innerHTML = '<i class="ri-file-list-3-line me-2 text-primary"></i>Draft Collaboration — #' + r.id;
         renderDRDraftTimeline(r);
-        var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
-        document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
-        document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
-        document.getElementById('dr-draft-file').value = '';
-        document.getElementById('dr-draft-note').value = '';
+        setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r), 'Draft Collaboration']);
         var drDetailInstance = bootstrap.Modal.getInstance(document.getElementById('dr-detail-modal'));
         if (drDetailInstance) { draftDetailReturnTo = 'dr-detail-modal'; drDetailInstance.hide(); }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-draft-modal')).show();
-    }
-
-    function uploadDRDraftDocument() {
-        var fileInput = document.getElementById('dr-draft-file');
-        var noteInput = document.getElementById('dr-draft-note');
-        var file = fileInput.files[0];
-        if (!file || !currentDraftDRId) { showToast('Choose a file first.', '#f06548'); return; }
-        var btn = document.getElementById('dr-draft-upload-btn');
-        var originalHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Uploading…';
-        var formData = new FormData();
-        formData.append('document', file);
-        formData.append('note', noteInput.value.trim());
-        CIPRMS.api('/api/document-requests/' + currentDraftDRId + '/documents', { method: 'POST', body: formData, quiet: true })
-            .then(function (result) {
-                if (!result.ok) throw new Error(result.error || 'Upload failed.');
-                var idx = myDocRequests.findIndex(function (x) { return x.id === currentDraftDRId; });
-                if (idx !== -1 && result.data.request) myDocRequests[idx] = result.data.request;
-                renderDRDraftTimeline(myDocRequests.find(function (x) { return x.id === currentDraftDRId; }));
-                renderDRTable();
-                fileInput.value = '';
-                noteInput.value = '';
-                showToast('New draft version uploaded.', '#0ab39c');
-            })
-            .catch(function (e) { showToast(e.message, '#f06548'); })
-            .finally(function () { btn.disabled = false; btn.innerHTML = originalHtml; });
     }
 
     var myDocRequests = [];
@@ -677,7 +619,7 @@
         }
         body.innerHTML = myDocRequests.map(function (r) {
             var cs = r.canonicalStatus || r.status;
-            // Requester-facing Actions: View Details only. Draft history, Print,
+            // Requester-facing Actions: View Details only. Draft history,
             // PDF download and Cancel remain reachable from the details modal.
             var actions = '<button class="btn btn-sm btn-soft-secondary" onclick="openDRDetail(' + r.id + ')" title="View Details"><i class="ri-eye-line me-1"></i>View Details</button>';
             return '<tr data-dr-id="' + r.id + '"' + (flashDRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
@@ -711,9 +653,9 @@
         document.getElementById('drd-purpose').textContent = r.notes || '—';
         document.getElementById('drd-remark').textContent = r.remark || '—';
         document.getElementById('drd-docs').innerHTML = renderAttachedDocs(r);
+        setBreadcrumb(['Monitoring', 'Document Request', drRequestLabel(r)]);
 
         var footer = '<button class="btn btn-soft-info" onclick="openDRDraftModal(' + id + ')"><i class="ri-file-list-3-line me-1"></i>View Draft</button>' +
-            '<a href="/document-requests/' + id + '/print" target="_blank" rel="noopener" class="btn btn-soft-primary"><i class="ri-printer-line me-1"></i>Print</a>' +
             '<a href="/api/document-requests/' + id + '/pdf" class="btn btn-soft-info"><i class="ri-file-download-line me-1"></i>Download PDF</a>';
         if (cs === 'Received') {
             footer += '<button class="btn btn-danger" onclick="cancelDocRequest(' + r.id + ', this)"><i class="ri-close-circle-line me-1"></i>Cancel</button>';
@@ -723,6 +665,12 @@
 
         bootstrap.Modal.getOrCreateInstance(document.getElementById('dr-detail-modal')).show();
     }
+
+    // A real close (Close button, Esc, backdrop click, or after Cancel) drops the breadcrumb back to Monitoring.
+    // "View Draft" also hides this modal, but sets draftDetailReturnTo first (checked here) so that swap doesn't count.
+    document.getElementById('dr-detail-modal').addEventListener('hidden.bs.modal', function () {
+        if (!draftDetailReturnTo) resetBreadcrumb();
+    });
 
     function cancelDocRequest(id, btn) {
         if (!confirm('Cancel this document request?')) return;
@@ -836,12 +784,7 @@
         if (shown('dr-detail-modal') && currentDRDetailId && myDocRequests.some(function (x) { return x.id === currentDRDetailId; })) openDRDetail(currentDRDetailId);
         if (shown('dr-draft-modal') && currentDraftDRId) {
             var r = myDocRequests.find(function (x) { return x.id === currentDraftDRId; });
-            if (r) {
-                renderDRDraftTimeline(r);
-                var closed = DR_TERMINAL_STATUSES.indexOf(r.canonicalStatus || r.status) !== -1;
-                document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
-                document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
-            }
+            if (r) renderDRDraftTimeline(r);
         }
     }
 
@@ -882,103 +825,12 @@
     }
     refreshDocs();
 
-    var myPartnerships = [];
-
-    function loadRenewalStatus(opts) {
-        var live = !!(opts && opts.live);
-        return Promise.all([
-            CIPRMS.api('/api/partnerships/mine', { quiet: true }),
-            CIPRMS.api('/api/requests/mine', { quiet: true })
-        ]).then(function (results) {
-            var box = document.getElementById('renewal-status-body');
-            if (!results[0].ok || !results[1].ok) {
-                if (!live) box.innerHTML = '<p class="text-danger text-center py-3 mb-0">Failed to load renewal status.</p>';
-                return live ? false : undefined;
-            }
-            var partnerships = Array.isArray(results[0].data) ? results[0].data : [];
-            var reqs = Array.isArray(results[1].data) ? results[1].data : [];
-            myPartnerships = partnerships;
-
-            // Partnerships that already have a renewal request awaiting a decision.
-            var pendingRenewalIds = new Set(
-                reqs
-                    .filter(function (r) { return r.isRenewal && (r.status === 'Pending' || r.status === 'Under Review'); })
-                    .map(function (r) { return r.renewalPartnershipId; })
-            );
-
-            if (partnerships.length === 0) {
-                box.innerHTML = '<p class="text-muted text-center py-3 mb-0">No active partnership record is linked to your account yet. Once an approved request becomes an official partnership, its renewal status will appear here.</p>';
-                return;
-            }
-            box.innerHTML = partnerships.map(function (p) {
-                var status = p.status || 'Unknown';
-                var badge = status === 'Expired' ? 'bg-danger-subtle text-danger' : status === 'Expiring Soon' ? 'bg-warning-subtle text-warning' : 'bg-success-subtle text-success';
-                var inst = p.inst || p.institution || '';
-                var renewalPending = pendingRenewalIds.has(p.id);
-                var actionHtml = renewalPending
-                    ? '<span class="badge bg-info-subtle text-info mt-1">Renewal Requested</span>'
-                    : '<button class="btn btn-sm btn-soft-primary mt-1" onclick="openRenewalModal(' + p.id + ')"><i class="ri-refresh-line me-1"></i>Request Renewal</button>';
-                return '<div class="d-flex justify-content-between align-items-center border-bottom py-2">' +
-                    '<div><strong>' + escapeHtml(inst) + '</strong><div class="fs-12 text-muted">Ends: ' + (p.end || '—') + '</div></div>' +
-                    '<div class="text-end"><span class="badge ' + badge + ' d-block">' + status + '</span>' + actionHtml + '</div></div>';
-            }).join('');
-        });
-    }
-
-    var renewalModal = null;
-    var renewingPartnershipId = null;
-
-    function openRenewalModal(id) {
-        var p = myPartnerships.find(function (x) { return x.id === id; });
-        if (!p) return;
-        renewingPartnershipId = id;
-        document.getElementById('rr-institution').textContent = p.inst || p.institution || '';
-        document.getElementById('rr-current-end').textContent = p.end || '—';
-        document.getElementById('rr-end-date').value = '';
-        document.getElementById('rr-notes').value = '';
-        document.getElementById('rr-error').classList.add('d-none');
-        if (!renewalModal) renewalModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('renewal-request-modal'));
-        renewalModal.show();
-    }
-
-    function submitRenewalRequest() {
-        if (!renewingPartnershipId) return;
-        var endDate = document.getElementById('rr-end-date').value;
-        var notes = document.getElementById('rr-notes').value.trim();
-        var errBox = document.getElementById('rr-error');
-        errBox.classList.add('d-none');
-
-        if (!endDate) {
-            errBox.textContent = 'Please choose a proposed new end date.';
-            errBox.classList.remove('d-none');
-            return;
-        }
-
-        var btn = document.getElementById('rr-submit-btn');
-        return CIPRMS.busy(btn, function () {
-            return CIPRMS.api('/api/partnerships/' + renewingPartnershipId + '/renew-request', {
-                method: 'POST', json: { proposedEndDate: endDate, notes: notes }, quiet: true
-            }).then(function (res) {
-                if (res.ok) {
-                    renewalModal.hide();
-                    showToast('Renewal request submitted.', '#15803d');
-                    return loadRenewalStatus({ live: true });
-                }
-                errBox.textContent = res.error || 'Failed to submit renewal request.';
-                errBox.classList.remove('d-none');
-                if (res.status === 409 || res.status === 404) return loadRenewalStatus({ live: true });   // the card was stale
-            });
-        }, 'Submitting…');
-    }
-
-    loadRenewalStatus();
     loadDRRequests();
-    // Live updates: a reviewer moved one of my Document Requests to the next stage, or acted on a renewal request. The
-    // server is asked again for the real data — counters, Approval Progress, the table and the renewal card are all
-    // recomputed from it, never from the event itself.
+    // Live updates: a reviewer moved one of my Document Requests to the next stage. The server is asked again for the
+    // real data — counters, Approval Progress and the table are all recomputed from it, never from the event itself.
     if (window.CIPRMS && CIPRMS.live) {
         CIPRMS.live(['documentRequest.updated', 'documentRequest.statusChanged', 'request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
-            return Promise.all([loadDRRequests({ live: true }), loadRenewalStatus({ live: true }), refreshDocs()]).then(function (r) { return r.indexOf(false) === -1; });
+            return Promise.all([loadDRRequests({ live: true }), refreshDocs()]).then(function (r) { return r.indexOf(false) === -1; });
         }, { debounce: 250 });
     }
 </script>

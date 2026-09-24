@@ -65,7 +65,7 @@ describe('the matrix as rendered', () => {
   test('uses the visible role names and never the old "Department/Colleges" or bare internal "Auth. Personnel"', async () => {
     const html = (await agents.admin.get('/users')).text;
     const section = html.slice(html.indexOf('Role Permissions Matrix (RBAC)'), html.indexOf('</table>', html.indexOf('Role Permissions Matrix (RBAC)')));
-    expect(section).toContain('College Staff');
+    expect(section).toContain('College Dean');
     expect(section).toContain('CIRL Staff');
     expect(section).not.toMatch(/Department\/Colleges|Auth\. Personnel/);
   });
@@ -117,7 +117,7 @@ describe('every row agrees with what the routes really do', () => {
     expect(matrix['Partnership Requests'].college.level).toBe('none');
   });
 
-  test('Document Requests: College Staff and Partner can submit but not review; reviewers can review', async () => {
+  test('Document Requests: College Dean and Partner can submit but not review; reviewers can review', async () => {
     const review = async (k) => (await agents[k].patch('/api/document-requests/99999999').send({ status: 'Preparing' })).status !== 302;
     const submit = async (k) => (await agents[k].post('/api/document-requests').send({})).status !== 302;   // 400 (no fields) still means the role reached the handler
     for (const k of ['admin', 'staff']) expect({ k, review: await review(k), full: matrix['Document Requests'][k].level === 'full' }).toEqual({ k, review: true, full: true });
@@ -142,7 +142,7 @@ describe('every row agrees with what the routes really do', () => {
     for (const k of ['college', 'partner']) expect([403, 404]).toContain((await agents[k].post('/api/calendarevents/99999999/join')).status);
   });
 
-  test('Notifications: every role has its own bell feed; the Notifications PAGE is closed to College Staff and Partner', async () => {
+  test('Notifications: every role has its own bell feed; the Notifications PAGE is closed to College Dean and Partner', async () => {
     for (const k of ROLES) expect((await agents[k].get('/api/notifications/unread-count')).status).toBe(200);
     expect(await pageOpens('admin', { admin: '/notifications' })).toBe(true);
     expect(await pageOpens('staff', { staff: '/staff/notifications' })).toBe(true);

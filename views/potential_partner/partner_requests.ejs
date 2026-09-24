@@ -602,7 +602,7 @@
 
     /* ═══════════════════════════════════════════════════
        SUBMISSION OF MOA/MOU (was the Document Request form) —
-       same /api/document-requests endpoints, with `dr-` prefixed
+       now filed through /api/requests as a Partnership Request, with `dr-` prefixed
        ids/function names so it can coexist on the same page
        as the Partnership Request form above
        ═══════════════════════════════════════════════════ */
@@ -634,13 +634,13 @@
         });
     }
 
-    /* Submission Of MOA/MOU rides on the EXISTING Document Request endpoints — no new backend:
-         POST /api/document-requests              creates the submission (institution + notes) and notifies the reviewers
-         POST /api/document-requests/:id/documents attaches the file/image through the normal secure upload +
-                                                   Document Library archive. That route only requires a file OR a
-                                                   note, so the file is genuinely optional.
+    /* Submission Of MOA/MOU is filed as a PARTNERSHIP REQUEST (reviewers handle it under Partnership
+       Requests/Submission, and the partner tracks it on Monitoring), not a Document Request:
+         POST /api/requests { isSubmission: true }  creates the submission (institution + notes) and notifies the reviewers
+         POST /api/requests/:id/documents           attaches the file/image through the normal secure upload +
+                                                    Document Library archive (`initial` marks it as part of the
+                                                    submission itself, so it is not treated as a revised draft).
        Accepted: notes only, a file/image only, or both. */
-    var MOA_MOU_TYPE = 'MOA/MOU Submission';
     var MOA_MAX_BYTES = 10 * 1024 * 1024;
     var moaPendingId = null; // a submission that was created but whose file upload failed — Submit then retries ONLY the upload
 
@@ -678,8 +678,8 @@
 
         var create = moaPendingId
             ? Promise.resolve(moaPendingId)
-            : CIPRMS.api('/api/document-requests', {
-                method: 'POST', json: { institution: inst, documentTypes: [MOA_MOU_TYPE], notes: notes }, quiet: true
+            : CIPRMS.api('/api/requests', {
+                method: 'POST', json: { institution: inst, notes: notes, isSubmission: true }, quiet: true
             }).then(function (res) {
                 if (!res.ok) throw new Error(res.error || 'Error submitting.');
                 return res.data.request.id;
@@ -689,7 +689,8 @@
             if (!file) return id; // notes only — nothing to upload
             var fd = new FormData();
             fd.append('document', file);
-            return CIPRMS.api('/api/document-requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
+            fd.append('initial', '1');
+            return CIPRMS.api('/api/requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
                 if (!res.ok) { var err = new Error(res.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
                 return id;
             });

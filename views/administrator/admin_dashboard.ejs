@@ -38,7 +38,7 @@
                                         <h4 class="mb-sm-0">Dashboard</h4>
                                         <div class="page-title-right">
                                             <ol class="breadcrumb m-0">
-                                                <li class="breadcrumb-item"><a href="<%= isStaffRole ? '/staff/dashboard' : '/dashboard' %>">CIPRMS</a></li>
+                                                <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                                                 <li class="breadcrumb-item active">Dashboard</li>
                                             </ol>
                                         </div>
@@ -199,7 +199,7 @@
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-renewal"><%=
                                                                     insightRenewal %></p>
-                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>?status=Expiring%20Soon"
                                                                 class="btn btn-link text-warning p-0 fw-medium">Initiate
                                                                 Renewals <i
                                                                     class="ri-arrow-right-line align-middle ms-1"></i></a>
@@ -223,9 +223,9 @@
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-expansion"><%=
                                                                     insightExpansion %></p>
-                                                            <a href="<%= isStaffRole ? '/staff/reports' : '/reports' %>"
-                                                                class="btn btn-link text-info p-0 fw-medium">View Region
-                                                                Data <i
+                                                            <a href="<%= isStaffRole ? '/staff/requests' : '/partnership-requests' %>?status=Pending"
+                                                                class="btn btn-link text-info p-0 fw-medium">View Pending
+                                                                Requests <i
                                                                     class="ri-arrow-right-line align-middle ms-1"></i></a>
                                                         </div>
                                                     </div>
@@ -247,9 +247,9 @@
                                                             </div>
                                                             <p class="text-muted fs-14 mb-4" id="insight-optimization">
                                                                 <%= insightOptimization %></p>
-                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>?status=Expired"
                                                                 class="btn btn-link text-success p-0 fw-medium">Review
-                                                                Inactive Partners <i
+                                                                Expired Partnerships <i
                                                                     class="ri-arrow-right-line align-middle ms-1"></i></a>
                                                         </div>
                                                     </div>
@@ -383,7 +383,7 @@
                                             <h4 class="card-title mb-0 flex-grow-1"><i
                                                     class="ri-checkbox-circle-line me-2 text-success"></i>Active
                                                 Partnerships</h4>
-                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>"
+                                            <a href="<%= isStaffRole ? '/staff/lifecycle' : '/lifecycle' %>?status=Active"
                                                 class="btn btn-soft-success btn-sm material-shadow-none">View
                                                 Lifecycle</a>
                                         </div>
@@ -471,6 +471,9 @@
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
         }).addTo(map);
+
+        // Markers live in their own layer so a live refresh can clear and redraw them.
+        const markerLayer = L.layerGroup().addTo(map);
 
         const STATUS_COLOR = { active: '#17c653', expiring: '#f7b84b', expired: '#f06548' };
         const STATUS_RING = { active: '#d1fae5', expiring: '#fef3c7', expired: '#fee2e2' };
@@ -575,6 +578,7 @@
             // Group by identical coordinates (exact and approximate kept apart) so several
             // partnerships in one place become ONE marker whose popup lists them all,
             // instead of markers stacked on top of each other.
+            markerLayer.clearLayers();
             const groups = new Map();
             let unmapped = 0, approxCount = 0, onMap = 0;
             partnerships.forEach(function (p) {
@@ -601,7 +605,7 @@
                     marker = L.marker([g.lat, g.lng], { icon: makeGroupIcon(g.items.length, worst, g.approx) })
                         .bindPopup(groupPopupHtml(g.items, g.approx), { maxWidth: 280 });
                 }
-                marker.addTo(map);
+                marker.addTo(markerLayer);
             });
 
             // Coverage note: what is on the map, what is approximate, and how many
@@ -685,7 +689,11 @@
             return isNaN(d) ? (s || '—') : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
+        // The charts are rebuilt on every live refresh, so the previous ones are destroyed first.
+        var dashCharts = [];
         function renderCharts(stats) {
+            dashCharts.forEach(function (c) { try { c.destroy(); } catch (_) { /* already gone */ } });
+            dashCharts = [];
             var typeChart = new ApexCharts(document.getElementById('type-status-chart'), {
                 chart: { type: 'bar', height: 300, toolbar: { show: false } },
                 plotOptions: { bar: { horizontal: false, columnWidth: '45%', borderRadius: 4 } },
@@ -703,6 +711,7 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             typeChart.render();
+            dashCharts.push(typeChart);
 
             // byCountry (unlike byInstitution) is never capped server-side —
             // see /api/partnerships/stats in cirl.js — so countryTotal here is
@@ -842,6 +851,7 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             countryChart.render();
+            dashCharts.push(countryChart);
 
             const unitEntries = Object.entries(stats.byUnit || {}).sort((a, b) => b[1] - a[1]);
             var collegeChart = new ApexCharts(document.getElementById('college-chart'), {
@@ -854,27 +864,28 @@
                 grid: { borderColor: '#f1f1f1' }
             });
             collegeChart.render();
+            dashCharts.push(collegeChart);
         }
 
         // ── DSS & Expiring table are server-side rendered — no loading state. ──
         // Only the charts, map, and top-countries list require client-side JS.
 
-        // 1. Stats API → charts only (counters already rendered by EJS)
-        function loadStats() {
-            return fetch('/api/partnerships/stats')
+        // Loads (and, on a live update, reloads) everything the page draws client-side: the charts, the map and the
+        // Top Partner Countries list. `no-store` so a stale cached copy can never be shown. Resolves false when a
+        // background refresh failed, so CIPRMS.live retries it later; a failed refresh never wipes what is on screen.
+        function loadDashboardData(live) {
+            // 1. Stats API → charts only (counters already rendered by EJS)
+            const statsDone = fetch('/api/partnerships/stats', { cache: 'no-store' })
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(stats => { renderCharts(stats); return true; })
                 .catch(err => {
                     console.error('Stats API failed:', err);
-                    renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
+                    if (!live) renderCharts({ active: 0, expiring: 0, expired: 0, total: 0, byType: {}, byRegion: {}, byUnit: {}, byInstitution: {}, byCountry: {} });
                     return false;
                 });
-        }
 
-        // 2. Partnerships list → map + top countries (this is the real, live source behind "Top Partner Countries" —
-        // recomputed from the actual registry every time this runs, never a fixed/static list).
-        function loadPartnershipsForDashboard() {
-            return fetch('/api/partnerships')
+            // 2. Partnerships list → map + top countries only
+            const listDone = fetch('/api/partnerships', { cache: 'no-store' })
                 .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                 .then(partnerships => {
                     const list = Array.isArray(partnerships) ? partnerships : [];
@@ -883,19 +894,14 @@
                     return true;
                 })
                 .catch(err => { console.error('Map data failed:', err); return false; });
+
+            return Promise.all([statsDone, listDone]).then(r => r.indexOf(false) === -1);
         }
+        loadDashboardData(false);
 
-        loadStats();
-        loadPartnershipsForDashboard();
-
-        // Live updates: a partnership was added/edited/renewed/deleted elsewhere (Registry, or an approved request
-        // converted into one) — re-read the real data so the charts, map and Top Partner Countries reflect it without
-        // a full page reload. Reuses the existing CIPRMS SSE/AJAX infrastructure already used across the app; no
-        // second realtime mechanism is introduced here.
+        // Live updates: a partnership was added, edited, renewed or deleted (Monitoring, Requests, another admin…).
         if (window.CIPRMS && CIPRMS.live) {
-            CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function () {
-                return Promise.all([loadStats(), loadPartnershipsForDashboard()]).then(r => r.every(Boolean));
-            }, { debounce: 400 });
+            CIPRMS.live(['partnership.updated', 'partnership.statusChanged'], function () { return loadDashboardData(true); }, { debounce: 250 });
         }
 
     </script>

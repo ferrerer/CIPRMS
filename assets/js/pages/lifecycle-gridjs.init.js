@@ -227,9 +227,17 @@ function renderDssAlerts() {
 
 // ── Modal Helpers ────────────────────────────────────────────────────────────
 
+// Independent modals (no swap/stacking between them) — each drops the breadcrumb back
+// to the page base the moment it's closed for good. Registered once, not per open-call.
+['viewPartnershipModal', 'editPartnershipModal', 'renewPartnershipModal', 'deleteRecordModal'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('hidden.bs.modal', function () { if (typeof resetBreadcrumb === 'function') resetBreadcrumb(); });
+});
+
 function openViewModal(id) {
     var p = partnerships.find(function(x) { return x.id === id; });
     if (!p) return;
+    if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst]));
     document.getElementById('view-title').textContent = p.inst;
     document.getElementById('view-body').innerHTML =
         '<div class="row g-3">'
@@ -258,6 +266,7 @@ function openEditModal(id) {
     document.getElementById('e-cat').value = p.cat;
     document.getElementById('e-expiry').value = toISO(p.end);
     document.getElementById('e-status').value = p.status;
+    if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Edit']));
     new bootstrap.Modal(document.getElementById('editPartnershipModal')).show();
 }
 
@@ -301,6 +310,7 @@ function openRenewModal(id) {
     document.getElementById('renew-prev-expiry').value = p.end;
     document.getElementById('renew-new-expiry').value = '';
     document.getElementById('renew-status').value = '';
+    if (typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Renew']));
     new bootstrap.Modal(document.getElementById('renewPartnershipModal')).show();
 }
 
@@ -332,7 +342,12 @@ function saveRenew() {
 }
 
 var deletingId = null;
-function openDeleteModal(id) { deletingId = id; new bootstrap.Modal(document.getElementById('deleteRecordModal')).show(); }
+function openDeleteModal(id) {
+    deletingId = id;
+    var p = partnerships.find(function(x) { return x.id === id; });
+    if (p && typeof setBreadcrumb === 'function') setBreadcrumb(BREADCRUMB_BASE.concat([p.inst, 'Delete']));
+    new bootstrap.Modal(document.getElementById('deleteRecordModal')).show();
+}
 function confirmDelete() {
     if (!deletingId) return;
     var idx = partnerships.findIndex(function(x) { return x.id === deletingId; });

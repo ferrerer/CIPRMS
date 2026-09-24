@@ -1,4 +1,4 @@
-// Where a notification click goes, for every role that has a bell: Administrator, CIRL Staff, College Staff
+// Where a notification click goes, for every role that has a bell: Administrator, CIRL Staff, College Dean
 // and Partner. The stored `link` is whatever was right for the recipient when the notification was created;
 // the API now also returns `href`, the destination re-resolved for the role that is actually reading it.
 // These tests pin that down against (a) links of every vintage found in the database — stale routes,
@@ -93,7 +93,7 @@ describe('href is resolved for the role that is reading the notification', () =>
     expect(await hrefOf('college', read)).toBe('/personnel/monitoring?type=dr&id=31');
   });
 
-  test('College Staff, CIRL Staff and Partner are never sent to a Dashboard; only Administrator and CIRL Staff keep theirs, and only when the notification is about it', async () => {
+  test('College Dean, CIRL Staff and Partner are never sent to a Dashboard; only Administrator and CIRL Staff keep theirs, and only when the notification is about it', async () => {
     for (const key of ['college', 'partnerA']) {
       for (const link of ['/dashboard', '/staff/dashboard', '/personnel/dashboard', '/partner/dashboard', '/partner/documents', '/partner/notifications', '/personnel/documents']) {
         const id = await seedNotification(key, { module: 'dashboard', tag: 'Dashboard', link });
@@ -147,7 +147,7 @@ describe('notifications produced by the real request flows route correctly', () 
     expect((await agents.partnerA.get(back.href)).status).toBe(200);
   });
 
-  test('Document Request from College Staff: reviewers and the requester each land on their own page for it', async () => {
+  test('Document Request from College Dean: reviewers and the requester each land on their own page for it', async () => {
     const created = await agents.college.post('/api/document-requests').send({ institution: 'CCS', documentTypes: ['jesttest doc'], notes: 'jesttest' });
     expect(created.status).toBe(200);
     const id = created.body.request.id;
@@ -175,7 +175,7 @@ describe('notifications produced by the real request flows route correctly', () 
     expect(page.text).toContain("get('tab') === 'dr'");
   });
 
-  test('a calendar notification created by an event opens that event page for College Staff and Partner', async () => {
+  test('a calendar notification created by an event opens that event page for College Dean and Partner', async () => {
     const res = await agents.admin.post('/api/calendarevents').send({ title: 'jesttest routing meeting', start: '2026-12-01T09:00', allDay: false, className: 'bg-primary-subtle', recipients: [users.college.email, users.partnerA.email] });
     expect(res.status).toBe(200);
     const eventId = res.body.event.id;

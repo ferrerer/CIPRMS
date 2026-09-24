@@ -1,4 +1,4 @@
-// College Staff (backend role "Auth. Personnel") has a deliberately
+// College Dean (backend role "Auth. Personnel") has a deliberately
 // reduced UI: Monitoring, Requests (Document Requests only), Calendar and
 // Settings/Profile, with the header Notifications bell and user menu but NO
 // Search bar. Dashboard, Document Library, the Notifications PAGE and
@@ -19,7 +19,7 @@ async function agentFor(role) {
   return agent;
 }
 
-describe('College Staff (Auth. Personnel) — closed pages bounce to Monitoring', () => {
+describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring', () => {
   let agent;
   beforeAll(async () => { agent = await agentFor('Auth. Personnel'); });
 
@@ -99,11 +99,11 @@ describe('College Staff (Auth. Personnel) — closed pages bounce to Monitoring'
     expect(menu).toContain('Logout');
   });
 
-  test('sidebar shows Monitoring, Requests, Calendar, Settings and Logout, plus the "College Staff" role label', async () => {
+  test('sidebar shows Monitoring, Requests, Calendar, Settings and Logout, plus the "College Dean" role label', async () => {
     const html = (await agent.get('/personnel/monitoring')).text;
     const navHrefs = [...html.matchAll(/<a class="nav-link menu-link[^"]*"\s+href="([^"]+)"/g)].map(m => m[1]);
     expect(navHrefs).toEqual(['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings', '#']); // '#' = Logout
-    expect(html).toContain('College Staff');
+    expect(html).toContain('College Dean');
     for (const gone of ['/personnel/dashboard', '/personnel/documents', '/personnel/notifications']) {
       expect(html).not.toContain('href="' + gone + '"');
     }
@@ -133,7 +133,7 @@ describe('College Staff (Auth. Personnel) — closed pages bounce to Monitoring'
   });
 });
 
-describe('College Staff restrictions are NOT inherited by other roles', () => {
+describe('College Dean restrictions are NOT inherited by other roles', () => {
   test('Administrator keeps the full header (search, notifications, user menu) and its own pages', async () => {
     const agent = await agentFor('Administrator');
     const dash = await agent.get('/dashboard');
@@ -155,13 +155,13 @@ describe('College Staff restrictions are NOT inherited by other roles', () => {
     }
   });
 
-  test('Potential Partner keeps My Partnership Requests on Monitoring (College Staff\' Monitoring change is not inherited) and its Requests / Calendar / Settings pages', async () => {
+  test('Potential Partner keeps My Partnership Requests on Monitoring (College Dean\' Monitoring change is not inherited) and its Requests / Calendar / Settings pages', async () => {
     const agent = await agentFor('potential_partner');
     const mon = await agent.get('/partner/monitoring');
     expect(mon.status).toBe(200);
     for (const marker of ['notificationDropdown', 'page-header-user-dropdown']) expect(mon.text).toContain(marker);
     expect(mon.text).not.toContain('dept-logout-btn');
-    // Partner keeps "My Partnership Requests" (College Staff's removal of it is not inherited). Its own
+    // Partner keeps "My Partnership Requests" (College Dean's removal of it is not inherited). Its own
     // "My Document Requests" section was removed separately — see partner-requests-cleanup.test.js.
     expect(mon.text).toContain('My Partnership Requests');
     expect(mon.text).not.toContain('My Document Requests');
@@ -172,7 +172,7 @@ describe('College Staff restrictions are NOT inherited by other roles', () => {
   });
 });
 
-describe('College Staff has NO Dashboard — /personnel/dashboard is a safe redirect, never a 500', () => {
+describe('College Dean has NO Dashboard — /personnel/dashboard is a safe redirect, never a 500', () => {
   test('Auth. Personnel is redirected to Monitoring, which then renders', async () => {
     const agent = await agentFor('Auth. Personnel');
     const res = await agent.get('/personnel/dashboard');
@@ -194,7 +194,7 @@ describe('College Staff has NO Dashboard — /personnel/dashboard is a safe redi
     expect(anon.headers.location).toBe('/');
   });
 
-  test('no College Staff page links to any Dashboard (sidebar, header logo, breadcrumbs)', async () => {
+  test('no College Dean page links to any Dashboard (sidebar, header logo, breadcrumbs)', async () => {
     const agent = await agentFor('Auth. Personnel');
     for (const path of ['/personnel/monitoring', '/personnel/requests', '/personnel/settings', '/personnel/calendar']) {
       const html = (await agent.get(path)).text;
@@ -211,5 +211,30 @@ describe('College Staff has NO Dashboard — /personnel/dashboard is a safe redi
     const agent = await agentFor('Administrator');
     const cal = (await agent.get('/calendar')).text;
     expect(cal).toContain('breadcrumb-item"><a href="/dashboard">CIPRMS</a>');
+  });
+});
+
+describe('College Dean can hide the sidebar to give the page the full width', () => {
+  test('every College Dean page carries the hide / show sidebar control, wired to Velzon\'s "hidden" sidebar mode', async () => {
+    const agent = await agentFor('Auth. Personnel');
+    for (const path of ['/personnel/monitoring', '/personnel/requests', '/personnel/settings', '/personnel/calendar', '/personnel/lifecycle']) {
+      const html = (await agent.get(path)).text;
+      expect(html).toContain('id="topnav-hamburger-icon"');
+      expect(html).toContain("root.setAttribute('data-sidebar-visibility', 'hidden')");
+      expect(html).toContain('e.stopImmediatePropagation()');                          // takes over the ☰ button on desktop widths
+      expect(html).toContain('DESKTOP_MIN = 768');                                    // phones keep Velzon's own slide-in menu
+      expect(html).toContain('sidebarHidden');                                        // remembered per user
+      expect(html).toContain('html[data-sidebar-visibility="hidden"] .horizontal-logo .logo-dark'); // wordmark stays readable
+    }
+  });
+
+  test('the other roles are untouched: Administrator, CIRL Staff and Partner keep the standard ☰ behaviour', async () => {
+    for (const [role, path] of [['Administrator', '/dashboard'], ['Staff', '/staff/dashboard'], ['potential_partner', '/partner/monitoring']]) {
+      const agent = await agentFor(role);
+      const html = (await agent.get(path)).text;
+      expect(html).toContain('id="topnav-hamburger-icon"');
+      expect(html).not.toContain('data-sidebar-visibility');
+      expect(html).not.toContain('sidebarHidden');
+    }
   });
 });

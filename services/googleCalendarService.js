@@ -9,6 +9,7 @@
 // of passport — passport's login flow discards its OAuth tokens, whereas
 // this needs to capture and persist a refresh token, so it talks to
 // googleapis's own OAuth2Client directly.
+const crypto = require('crypto');
 const { google } = require('googleapis');
 const { encrypt, decrypt } = require('./tokenCrypto');
 const { appTimeZone, parseEventInstant, eventDateOnly, addDaysToDateOnly, uniqueValidEmails, isValidEmail } = require('./meetingTime');
@@ -251,7 +252,28 @@ function buildGoogleEventBody(cirlEvent, recipientEmails, options) {
   // for the same CIPRMS event hits Google's "identifier already exists" (409)
   // instead of creating a second event.
   if (options && options.insert && cirlEvent.googleEventKey) body.id = cirlEvent.googleEventKey;
+  // Ask Google to attach a Google Meet room to the event. The requestId makes the request idempotent: a retry
+  // with the same id gets the same room instead of a second one. The caller must also pass
+  // conferenceDataVersion: 1 on the API call, or Google ignores this block.
+  if (options && options.meetRequestId) {
+    body.conferenceData = { createRequest: { requestId: options.meetRequestId, conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+  }
   return body;
+}
+
+// The Google Meet address of an event as Google returns it. Only a real meet.google.com link is ever accepted, so
+// nothing else can end up behind the Join button.
+const MEET_LINK_RE = /^https:\/\/meet\.google\.com\/[A-Za-z0-9-]+(?:\?[\w=&%-]*)?$/;
+function meetLinkOf(data) {
+  if (!data) return null;
+  const candidates = [data.hangoutLink];
+  const points = data.conferenceData && Array.isArray(data.conferenceData.entryPoints) ? data.conferenceData.entryPoints : [];
+  for (const p of points) if (p && p.entryPointType === 'video') candidates.push(p.uri);
+  return candidates.find((u) => typeof u === 'string' && MEET_LINK_RE.test(u)) || null;
+}
+
+function newMeetRequestId(cirlEvent) {
+  return cirlEvent.googleEventKey || ('ciprms' + crypto.randomBytes(12).toString('hex'));
 }
 
 function errorStatus(err) {
@@ -286,16 +308,17 @@ async function createGoogleEvent(db, cirlEvent, recipientEmails) {
   if (failure) return failure;
   const attendees = uniqueValidEmails(recipientEmails);
   if (!attendees.length) return { ok: false, error: 'no_recipients' };
-  const body = buildGoogleEventBody(cirlEvent, attendees, { insert: true });
+  const body = buildGoogleEventBody(cirlEvent, attendees, { insert: true, meetRequestId: newMeetRequestId(cirlEvent) });
   if (!body.start) return { ok: false, error: 'invalid_start' };
   try {
     const res = await client.calendar.events.insert({
       calendarId: client.calendarId,
       requestBody: body,
+      conferenceDataVersion: 1,
       sendUpdates: SEND_UPDATES
     });
     await recordSyncResult(db, true, null);
-    return { ok: true, googleEventId: res.data.id, organizerEmail: organizerOf(res.data), htmlLink: res.data.htmlLink || null };
+    return { ok: true, googleEventId: res.data.id, organizerEmail: organizerOf(res.data), htmlLink: res.data.htmlLink || null, meetLink: meetLinkOf(res.data) };
   } catch (err) {
     if (errorStatus(err) === 409 && body.id) {
       // The stable id already exists on Google — an earlier attempt for this
@@ -305,10 +328,10 @@ async function createGoogleEvent(db, cirlEvent, recipientEmails) {
         const patchBody = { ...body, status: 'confirmed' };
         delete patchBody.id;
         const res = await client.calendar.events.patch({
-          calendarId: client.calendarId, eventId: body.id, requestBody: patchBody, sendUpdates: SEND_UPDATES
+          calendarId: client.calendarId, eventId: body.id, requestBody: patchBody, conferenceDataVersion: 1, sendUpdates: SEND_UPDATES
         });
         await recordSyncResult(db, true, null);
-        return { ok: true, googleEventId: (res.data && res.data.id) || body.id, organizerEmail: organizerOf(res.data), htmlLink: (res.data && res.data.htmlLink) || null, recovered: true };
+        return { ok: true, googleEventId: (res.data && res.data.id) || body.id, organizerEmail: organizerOf(res.data), htmlLink: (res.data && res.data.htmlLink) || null, meetLink: meetLinkOf(res.data), recovered: true };
       } catch (recoverErr) {
         err = recoverErr;
       }
@@ -324,6 +347,8 @@ async function updateGoogleEvent(db, cirlEvent, recipientEmails) {
   if (!cirlEvent.googleEventId) return { ok: false, error: 'no_google_event' };
   const { client, failure } = await clientOrFailure(db);
   if (failure) return failure;
+  // An edit never asks Google for a Meet room: meetings created before Meet was added stay as they are (no link is
+  // added to them), and one that already has a room keeps the same link.
   try {
     const res = await client.calendar.events.patch({
       calendarId: client.calendarId,
@@ -337,7 +362,7 @@ async function updateGoogleEvent(db, cirlEvent, recipientEmails) {
       sendUpdates: SEND_UPDATES
     });
     await recordSyncResult(db, true, null);
-    return { ok: true, organizerEmail: organizerOf(res && res.data) };
+    return { ok: true, organizerEmail: organizerOf(res && res.data), meetLink: meetLinkOf(res && res.data) };
   } catch (err) {
     const message = describeGoogleError(err);
     console.error('Google Calendar: updateGoogleEvent failed:', message);
@@ -356,6 +381,21 @@ async function syncGoogleEvent(db, cirlEvent, recipientEmails) {
   if (cirlEvent.googleEventId) return updateGoogleEvent(db, cirlEvent, recipientEmails);
   if (cirlEvent.googleEventKey) return createGoogleEvent(db, cirlEvent, recipientEmails);
   return { ok: false, error: 'no_google_event' };
+}
+
+// Reads the Meet address of an existing Google event. Google sometimes attaches the room a moment after the event
+// is created, so the insert response may not carry it yet. Best-effort and quiet: a failure just means "no link
+// yet" — it must never fail a Join, and it is not a sign the connection is broken.
+async function getGoogleMeetLink(db, googleEventId) {
+  if (!googleEventId) return null;
+  try {
+    const { client } = await clientOrFailure(db);
+    if (!client) return null;
+    const res = await client.calendar.events.get({ calendarId: client.calendarId, eventId: googleEventId });
+    return meetLinkOf(res && res.data);
+  } catch (err) {
+    return null;
+  }
 }
 
 async function deleteGoogleEvent(db, googleEventId) {
@@ -392,6 +432,7 @@ module.exports = {
   updateGoogleEvent,
   syncGoogleEvent,
   deleteGoogleEvent,
+  getGoogleMeetLink,
   SEND_UPDATES,
   buildGoogleEventBody // exported for unit testing the mapping logic in isolation
 };

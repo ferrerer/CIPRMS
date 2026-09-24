@@ -9,7 +9,10 @@
 //   * the Administrator attendance view.
 // googleapis is mocked, so NO real Google call is made and no e-mail is sent;
 // see the final report for what that does and does not prove.
-const mockGoogle = { calls: [], failInsert: null, failPatch: null };
+const mockGoogle = { calls: [], failInsert: null, failPatch: null, lateMeetLink: 'https://meet.google.com/late-meet-room' };
+// Google answers with a Meet link only when the request asked for a conference AND said it understands conference data.
+const MOCK_MEET_LINK = 'https://meet.google.com/mock-meet-link';
+const mockMeetIfAsked = (args) => (args.conferenceDataVersion === 1 && args.requestBody && args.requestBody.conferenceData ? { hangoutLink: MOCK_MEET_LINK } : {});
 jest.mock('googleapis', () => ({
   google: {
     auth: {
@@ -22,12 +25,16 @@ jest.mock('googleapis', () => ({
         insert: jest.fn(async (args) => {
           mockGoogle.calls.push({ op: 'insert', args: JSON.parse(JSON.stringify(args)) });
           if (mockGoogle.failInsert) throw mockGoogle.failInsert;
-          return { data: { id: args.requestBody.id || 'mock-google-id', organizer: { email: 'organizer@example.org', self: true }, htmlLink: 'https://calendar.google.com/mock' } };
+          return { data: { id: args.requestBody.id || 'mock-google-id', organizer: { email: 'organizer@example.org', self: true }, htmlLink: 'https://calendar.google.com/mock', ...mockMeetIfAsked(args) } };
         }),
         patch: jest.fn(async (args) => {
           mockGoogle.calls.push({ op: 'patch', args: JSON.parse(JSON.stringify(args)) });
           if (mockGoogle.failPatch) throw mockGoogle.failPatch;
-          return { data: { id: args.eventId, organizer: { email: 'organizer@example.org' } } };
+          return { data: { id: args.eventId, organizer: { email: 'organizer@example.org' }, ...mockMeetIfAsked(args) } };
+        }),
+        get: jest.fn(async (args) => {
+          mockGoogle.calls.push({ op: 'get', args: JSON.parse(JSON.stringify(args)) });
+          return { data: { id: args.eventId, ...(mockGoogle.lateMeetLink ? { hangoutLink: mockGoogle.lateMeetLink } : {}) } };
         }),
         delete: jest.fn(async (args) => { mockGoogle.calls.push({ op: 'delete', args: JSON.parse(JSON.stringify(args)) }); return {}; })
       }
@@ -78,7 +85,7 @@ beforeAll(async () => {
     agents[key] = request.agent(app);
     await loginAs(agents[key], users[key]);
   }
-  // A College Staff account whose e-mail address Google Calendar would reject (non-ASCII local part).
+  // A College Dean account whose e-mail address Google Calendar would reject (non-ASCII local part).
   const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
   users.badEmail = { id: last[0].id + 1, email: `${TEST_TAG}.ñ.${Date.now()}@example.com`, role: 'Auth. Personnel' };
   await db.collection('users').insertOne({ ...users.badEmail, name: `${TEST_TAG} Bad Email`, unit: 'CCS', login: 'Never', status: 'Active', password: 'x', createdAt: TEST_TAG });
@@ -94,7 +101,7 @@ afterAll(async () => {
 beforeEach(resetGoogle);
 
 describe('Google Calendar invitation request', () => {
-  test('one event, College Staff + Partner attendees, sendUpdates "all", correct details, stable id, stored ids', async () => {
+  test('one event, College Dean + Partner attendees, sendUpdates "all", correct details, stable id, stored ids', async () => {
     const start = '2026-11-10T09:00', end = '2026-11-10T10:30';
     const res = await createEvent(agents.admin, {
       title: title('Partnership Renewal Discussion'), start, end, location: 'Conference Room 2', description: 'Agenda: renewal terms',
@@ -332,11 +339,54 @@ describe('No duplicate events', () => {
   });
 });
 
-describe('Join control — College Staff and Partner', () => {
-  let futureMeeting, startedMeeting, partnerOnly, collegeOnly, renewalWithGuests;
+describe('Google Meet room', () => {
+  test('a new meeting asks Google for a Meet room, the link is stored, and the feed never carries it', async () => {
+    const res = await createEvent(agents.admin, { title: title('Meet Room'), start: '2026-12-01T09:00', end: '2026-12-01T10:00', recipients: [users.collegeA.email] });
+    expect(res.status).toBe(200);
+    const { args } = callsOf('insert')[0];
+    expect(args.conferenceDataVersion).toBe(1); // without this Google ignores the conference request
+    expect(args.requestBody.conferenceData.createRequest.conferenceSolutionKey).toEqual({ type: 'hangoutsMeet' });
+    expect(args.requestBody.conferenceData.createRequest.requestId).toBe(args.requestBody.id); // idempotent on a retry
+    expect(args.sendUpdates).toBe('all');
+
+    const doc = await db.collection('calendarevents').findOne({ id: res.body.event.id });
+    expect(doc.googleMeetLink).toBe(MOCK_MEET_LINK);
+    // the link is released only by the Join request, while the meeting is on
+    expect(res.body.event.googleMeetLink).toBeUndefined();
+    expect(JSON.stringify((await agents.admin.get('/api/calendarevents')).body)).not.toContain(MOCK_MEET_LINK);
+    expect(JSON.stringify((await agents.collegeA.get('/api/calendarevents')).body)).not.toContain(MOCK_MEET_LINK);
+  });
+
+  test('editing a meeting that already has a Meet room does not ask for another (the link never changes under the attendees)', async () => {
+    const created = await createEvent(agents.admin, { title: title('Meet Stable'), start: '2026-12-02T09:00', end: '2026-12-02T10:00', recipients: [users.collegeA.email] });
+    resetGoogle();
+    expect((await agents.admin.patch('/api/calendarevents/' + created.body.event.id).send({ title: title('Meet Stable Renamed') })).status).toBe(200);
+    const { args } = callsOf('patch')[0];
+    expect(args.requestBody.conferenceData).toBeUndefined();
+    expect(args.conferenceDataVersion).toBeUndefined();
+  });
+
+  test('an older meeting with no Meet room is NOT given one when it is edited — previous meetings stay as they were', async () => {
+    const created = await createEvent(agents.admin, { title: title('Meet No Backfill'), start: '2026-12-03T09:00', end: '2026-12-03T10:00', recipients: [users.collegeA.email] });
+    await db.collection('calendarevents').updateOne({ id: created.body.event.id }, { $unset: { googleMeetLink: '' } });   // as a meeting from before Meet existed
+    resetGoogle();
+    expect((await agents.admin.patch('/api/calendarevents/' + created.body.event.id).send({ title: title('Meet No Backfill Renamed') })).status).toBe(200);
+    const { args } = callsOf('patch')[0];
+    expect(args.requestBody.conferenceData).toBeUndefined();
+    expect(args.conferenceDataVersion).toBeUndefined();
+    expect((await db.collection('calendarevents').findOne({ id: created.body.event.id })).googleMeetLink).toBeUndefined();
+  });
+});
+
+describe('Join control — College Dean and Partner', () => {
+  let futureMeeting, startedMeeting, partnerOnly, collegeOnly, renewalWithGuests, endedMeeting, noEndEnded, noEndLive;
 
   beforeAll(async () => {
     const now = Date.now();
+    endedMeeting = (await createEvent(agents.admin, { title: title('Ended Meeting'), start: manilaWall(now - 3 * HOUR), end: manilaWall(now - HOUR), recipients: [users.collegeA.email, users.partnerA.email] })).body.event;
+    // saved with no end time: the meeting lasts one hour (the same span Google Calendar is given)
+    noEndEnded = (await createEvent(agents.admin, { title: title('No End Ended'), start: manilaWall(now - 2 * HOUR), recipients: [users.collegeA.email] })).body.event;
+    noEndLive = (await createEvent(agents.admin, { title: title('No End Live'), start: manilaWall(now - 20 * 60 * 1000), recipients: [users.collegeA.email] })).body.event;
     futureMeeting = (await createEvent(agents.admin, { title: title('Future Meeting'), start: manilaWall(now + 24 * HOUR), end: manilaWall(now + 25 * HOUR), recipients: [users.collegeA.email, users.partnerA.email] })).body.event;
     startedMeeting = (await createEvent(agents.admin, { title: title('Started Meeting'), start: manilaWall(now - 30 * 60 * 1000), end: manilaWall(now + HOUR), recipients: [users.collegeA.email, users.partnerA.email, users.collegeB.email] })).body.event;
     partnerOnly = (await createEvent(agents.admin, { title: title('Partner Only'), start: manilaWall(now - HOUR), end: manilaWall(now + HOUR), recipients: [users.partnerA.email] })).body.event;
@@ -346,7 +396,7 @@ describe('Join control — College Staff and Partner', () => {
 
   const feedEvent = async (agent, id) => (await agent.get('/api/calendarevents')).body.find(e => e.id === id);
 
-  test.each([['collegeA', 'College Staff'], ['partnerA', 'Partner']])('%s (%s): before the start the meeting is visible with "invited" state, Join is not available, and joining is refused with no attendance recorded', async (who) => {
+  test.each([['collegeA', 'College Dean'], ['partnerA', 'Partner']])('%s (%s): before the start the meeting is visible with "invited" state, Join is not available, and joining is refused with no attendance recorded', async (who) => {
     const ev = await feedEvent(agents[who], futureMeeting.id);
     expect(ev).toBeTruthy();
     expect(ev.title).toBe(title('Future Meeting'));
@@ -367,7 +417,7 @@ describe('Join control — College Staff and Partner', () => {
     expect((await db.collection('calendarevents').findOne({ id: futureMeeting.id })).attendance || []).toHaveLength(0);
   });
 
-  test.each([['collegeA', 'College Staff'], ['partnerA', 'Partner']])('%s (%s): once the meeting has started Join is available, records the SERVER time and the real identity, and ignores anything the client sends', async (who) => {
+  test.each([['collegeA', 'College Dean'], ['partnerA', 'Partner']])('%s (%s): once the meeting has started Join is available, records the SERVER time and the real identity, and ignores anything the client sends', async (who) => {
     const ev = await feedEvent(agents[who], startedMeeting.id);
     expect(ev.myInvite).toMatchObject({ invited: true, joined: false, canJoinNow: true });
 
@@ -407,7 +457,85 @@ describe('Join control — College Staff and Partner', () => {
     expect((await agents.collegeA.post(`/api/calendarevents/${startedMeeting.id}/join`).send()).body.myInvite.joinedAt).toBe(new Date(firstJoin).toISOString()); // the original time is kept
   });
 
-  test('only invited users can join: a Partner cannot join a College-Staff-only meeting and vice versa; an uninvited user is refused', async () => {
+  test('Join is only "on" while the meeting is on: the server hands the page its start and end, and canJoinNow is false before the start and after the end', async () => {
+    const future = await feedEvent(agents.collegeA, futureMeeting.id);
+    const live = await feedEvent(agents.collegeA, startedMeeting.id);
+    const ended = await feedEvent(agents.collegeA, endedMeeting.id);
+    expect(future.myInvite).toMatchObject({ invited: true, canJoinNow: false });
+    expect(live.myInvite).toMatchObject({ invited: true, canJoinNow: true });
+    expect(ended.myInvite).toMatchObject({ invited: true, canJoinNow: false });
+    for (const ev of [future, live, ended]) {
+      expect(Date.parse(ev.myInvite.endsAt)).toBeGreaterThan(Date.parse(ev.myInvite.startsAt));
+      expect(JSON.stringify(ev.myInvite)).not.toContain('meet.google.com'); // no link in the feed, ever
+    }
+    // an event saved with no end lasts one hour
+    const noEndLiveInvite = (await feedEvent(agents.collegeA, noEndLive.id)).myInvite;
+    expect(Date.parse(noEndLiveInvite.endsAt) - Date.parse(noEndLiveInvite.startsAt)).toBe(HOUR);
+    expect(noEndLiveInvite.canJoinNow).toBe(true);
+    expect((await feedEvent(agents.collegeA, noEndEnded.id)).myInvite.canJoinNow).toBe(false);
+  });
+
+  test('joining a meeting that has ended is refused by the server — nothing is recorded and no Meet link is given', async () => {
+    for (const ev of [endedMeeting, noEndEnded]) {
+      const res = await agents.collegeA.post(`/api/calendarevents/${ev.id}/join`).send();
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('MEETING_ENDED');
+      expect(res.body.meetLink).toBeUndefined();
+      expect(Date.parse(res.body.endsAt)).toBeLessThan(Date.parse(res.body.serverNow));
+      expect((await db.collection('calendarevents').findOne({ id: ev.id })).attendance || []).toHaveLength(0);
+    }
+    // ...and a refusal before the start carries no link either
+    const early = await agents.partnerA.post(`/api/calendarevents/${futureMeeting.id}/join`).send();
+    expect(early.status).toBe(403);
+    expect(early.body.meetLink).toBeUndefined();
+  });
+
+  test('joining while the meeting is on records the attendance and returns the Google Meet link to open; an event with no end can be joined within its hour', async () => {
+    const res = await agents.partnerA.post(`/api/calendarevents/${startedMeeting.id}/join`).send();
+    expect(res.status).toBe(200);
+    expect(res.body.meetLink).toBe(MOCK_MEET_LINK);
+    // joining again (to get back into the room) hands out the same link and records nothing new
+    const again = await agents.partnerA.post(`/api/calendarevents/${startedMeeting.id}/join`).send();
+    expect(again.body).toMatchObject({ success: true, alreadyJoined: true, meetLink: MOCK_MEET_LINK });
+
+    const noEnd = await agents.collegeA.post(`/api/calendarevents/${noEndLive.id}/join`).send();
+    expect(noEnd.status).toBe(200);
+    expect(noEnd.body.meetLink).toBe(MOCK_MEET_LINK);
+  });
+
+  test('a meeting whose Meet room Google attached late: the link is read from the Google event at Join, and kept', async () => {
+    await db.collection('calendarevents').updateOne({ id: partnerOnly.id }, { $unset: { googleMeetLink: '' } });
+    resetGoogle();
+    const res = await agents.partnerA.post(`/api/calendarevents/${partnerOnly.id}/join`).send();
+    expect(res.status).toBe(200);
+    expect(res.body.meetLink).toBe(mockGoogle.lateMeetLink);
+    expect(callsOf('get')).toHaveLength(1);
+    expect((await db.collection('calendarevents').findOne({ id: partnerOnly.id })).googleMeetLink).toBe(mockGoogle.lateMeetLink);
+    await db.collection('calendarevents').updateOne({ id: partnerOnly.id }, { $set: { attendance: [] } }); // leave the fixture as it was for the tests below
+  });
+
+  test('a meeting with no Meet room at all still records the attendance, with no link (the page says so)', async () => {
+    const bare = (await createEvent(agents.admin, { title: title('Bare'), start: manilaWall(Date.now() - 10 * 60 * 1000), end: manilaWall(Date.now() + HOUR), recipients: [users.collegeB.email] })).body.event;
+    await db.collection('calendarevents').updateOne({ id: bare.id }, { $unset: { googleMeetLink: '', googleEventId: '' } });
+    const res = await agents.collegeB.post(`/api/calendarevents/${bare.id}/join`).send();
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, alreadyJoined: false, meetLink: null });
+    expect((await db.collection('calendarevents').findOne({ id: bare.id })).attendance).toHaveLength(1);
+  });
+
+  test('the Join control is hidden unless the meeting is on, and only ever opens a meet.google.com address', async () => {
+    const html = (await agents.collegeA.get('/personnel/calendar')).text;
+    expect(html).toContain('if (!isOn()) { setVisible(false); return; }');   // before the start and after the end: no button
+    expect(html).toContain('now >= state.startsMs && (state.endsMs === null || now < state.endsMs)');
+    expect(html).toContain('endsAt' /* the server's end time drives it */);
+    expect(html).toContain('meet\\.google\\.com');
+    expect(html).not.toContain('Joining opens when the meeting starts'); // the old disabled-with-countdown button is gone
+    const btn = html.match(/<button[^>]*id="mj-btn"[^>]*>/);
+    expect(btn).not.toBeNull();
+    expect(btn[0]).not.toContain('disabled');
+  });
+
+  test('only invited users can join: a Partner cannot join a College-Dean-only meeting and vice versa; an uninvited user is refused', async () => {
     const partnerOnCollege = await agents.partnerA.post(`/api/calendarevents/${collegeOnly.id}/join`).send();
     const collegeOnPartner = await agents.collegeA.post(`/api/calendarevents/${partnerOnly.id}/join`).send();
     const uninvited = await agents.collegeB.post(`/api/calendarevents/${collegeOnly.id}/join`).send();
@@ -419,9 +547,22 @@ describe('Join control — College Staff and Partner', () => {
     expect((await db.collection('calendarevents').findOne({ id: partnerOnly.id })).attendance || []).toHaveLength(0);
   });
 
-  test('a College-Staff-only meeting is not even visible to a Partner (existing visibility rule preserved)', async () => {
+  test('a College-Dean-only meeting is not even visible to a Partner (existing visibility rule preserved)', async () => {
     expect(await feedEvent(agents.partnerA, collegeOnly.id)).toBeUndefined();
     expect(await feedEvent(agents.partnerB, startedMeeting.id)).toBeUndefined();
+  });
+
+  test('College Dean and Partners only see events that name them or are for All Users — an event with no recipients is not for them', async () => {
+    const now = Date.now();
+    const noRecipients = (await createEvent(agents.admin, { title: title('No Recipients'), start: manilaWall(now + 2 * HOUR), recipients: [] })).body.event;
+    const forAll = (await createEvent(agents.admin, { title: title('For All Users'), start: manilaWall(now + 3 * HOUR), recipients: ['all'] })).body.event;
+    for (const who of ['collegeA', 'partnerA']) {
+      expect(await feedEvent(agents[who], noRecipients.id)).toBeUndefined();
+      expect(await feedEvent(agents[who], forAll.id)).toBeDefined();
+      expect(await feedEvent(agents[who], futureMeeting.id)).toBeDefined(); // invited by e-mail
+    }
+    // Administrator still sees everything, including the internal no-recipient event.
+    expect(await feedEvent(agents.admin, noRecipients.id)).toBeDefined();
   });
 
   test('joining requires a session, an existing event, and a Meeting-type event', async () => {
@@ -433,7 +574,7 @@ describe('Join control — College Staff and Partner', () => {
     expect((await feedEvent(agents.collegeA, renewalWithGuests.id)).myInvite).toBeNull();
   });
 
-  test('a Partner / College Staff feed never exposes other invitees\' e-mail addresses or the attendance list', async () => {
+  test('a Partner / College Dean feed never exposes other invitees\' e-mail addresses or the attendance list', async () => {
     for (const who of ['collegeA', 'partnerA']) {
       const ev = await feedEvent(agents[who], startedMeeting.id);
       for (const field of ['recipientEmails', 'googleAttendeeEmails', 'participantEmails', 'attendance', 'inviteSkipped', 'googleEventKey', 'clientRequestId', 'createdByEmail']) {
@@ -470,9 +611,9 @@ describe('Administrator attendance view', () => {
     expect(res.body.skipped.map(s => s.email)).toEqual([users.badEmail.email]);
 
     const by = Object.fromEntries(res.body.participants.map(p => [p.email, p]));
-    expect(by[users.collegeA.email]).toMatchObject({ name: `${TEST_TAG} Auth. Personnel`, role: 'College Staff', status: 'Joined', invitation: 'Emailed via Google Calendar' });
+    expect(by[users.collegeA.email]).toMatchObject({ name: `${TEST_TAG} Auth. Personnel`, role: 'College Dean', status: 'Joined', invitation: 'Emailed via Google Calendar' });
     expect(by[users.partnerA.email]).toMatchObject({ role: 'Partner', status: 'Joined' });
-    expect(by[users.collegeB.email]).toMatchObject({ role: 'College Staff', status: 'Not Joined', joinedAt: null, joinedAtDisplay: null, invitation: 'Emailed via Google Calendar' });
+    expect(by[users.collegeB.email]).toMatchObject({ role: 'College Dean', status: 'Not Joined', joinedAt: null, joinedAtDisplay: null, invitation: 'Emailed via Google Calendar' });
     expect(by[users.badEmail.email]).toMatchObject({ status: 'Not Joined', invitation: 'In-app only' });
 
     // the displayed time is the stored server time formatted in Manila time
@@ -482,7 +623,7 @@ describe('Administrator attendance view', () => {
     expect(by[users.collegeA.email].joinedAt).toBe(record.joinedAt.toISOString());
   });
 
-  test('is limited to Administrator / CIRL Staff; College Staff and Partner cannot read who attended', async () => {
+  test('is limited to Administrator / CIRL Staff; College Dean and Partner cannot read who attended', async () => {
     const id = createdEventIds[createdEventIds.length - 1];
     expect((await agents.staff.get(`/api/calendarevents/${id}/attendance`)).status).toBe(200);
     for (const who of ['collegeA', 'partnerA']) expect((await agents[who].get(`/api/calendarevents/${id}/attendance`)).status).toBe(302);
@@ -492,7 +633,7 @@ describe('Administrator attendance view', () => {
 });
 
 describe('Calendar pages render for every role that can reach them', () => {
-  test('Administrator, CIRL Staff, College Staff and Partner calendar pages load and include the Join control', async () => {
+  test('Administrator, CIRL Staff, College Dean and Partner calendar pages load and include the Join control', async () => {
     const pages = [['admin', '/calendar'], ['staff', '/staff/calendar'], ['collegeA', '/personnel/calendar'], ['partnerA', '/partner/calendar']];
     for (const [who, url] of pages) {
       const res = await agents[who].get(url);

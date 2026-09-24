@@ -121,9 +121,11 @@ describe('Audit Trail and User Management search bars are no longer thin', () =>
     expect(src).not.toContain('style="width:220px;"');
     expect(src).toContain('search-box');
   });
-  test('existing role labels (CIRL Staff / College Staff / Partner) are unchanged', () => {
+  test('existing role labels (CIRL Staff / College Dean / Partner) are unchanged', () => {
+    // "College Staff" was renamed to "College Dean" repo-wide after this test was first written
+    // (see test/role-display-name.test.js) — updated here to match, not a behavior change of its own.
     const src = read('views', 'users.ejs');
-    expect(src).toContain('>College Staff<');
+    expect(src).toContain('>College Dean<');
     expect(src).toContain('>CIRL Staff<');
   });
 });
@@ -132,7 +134,7 @@ describe('Dashboard: Top Partner Countries uses real data and live updates', () 
   const src = read('views', 'administrator', 'admin_dashboard.ejs');
   test('countries are counted from the real /api/partnerships response, not a static/fake list', () => {
     expect(src).toContain('function renderTopCountries(partnerships)');
-    expect(src).toContain("fetch('/api/partnerships')");
+    expect(src).toMatch(/fetch\('\/api\/partnerships'/);
     expect(src).not.toMatch(/const\s+top\s*=\s*\[\s*\{\s*country:/); // no hardcoded country array
   });
   test('a blank/missing country is skipped, never counted as a fake entry', () => {
@@ -143,6 +145,6 @@ describe('Dashboard: Top Partner Countries uses real data and live updates', () 
   });
   test('live partnership changes refresh the widget without a full page reload, reusing the existing CIPRMS.live infrastructure', () => {
     expect(src).toContain("CIPRMS.live(['partnership.updated', 'partnership.statusChanged']");
-    expect(src).toContain('loadPartnershipsForDashboard()');
+    expect(src).toContain('loadDashboardData(true)');
   });
 });

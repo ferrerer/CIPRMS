@@ -30,6 +30,35 @@
         .stat-box { padding: 12px; border: 1px solid #e9ebec; border-radius: 8px; text-center: center; }
         .tag-pills-container { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
         .tag-pill { margin-right: 8px; cursor: pointer; }
+
+        /* ── Dark mode ──────────────────────────────────────────────────────
+           The rules above hardcode light surfaces (folder hover/active fills,
+           card and stat borders) and leave text on Bootstrap's defaults, which
+           left folder names, document titles, table cells and the muted labels
+           dim or unreadable on dark cards. Text is lifted to light greys here. */
+        [data-bs-theme="dark"] .doc-card { border-color: rgba(255,255,255,.14) !important; }
+        [data-bs-theme="dark"] .doc-card:hover { border-color: #7094f5 !important; box-shadow: 0 5px 15px rgba(0,0,0,.4); }
+        [data-bs-theme="dark"] .stat-box { border-color: rgba(255,255,255,.14); }
+        [data-bs-theme="dark"] .stat-box h5,
+        [data-bs-theme="dark"] .doc-card h5,
+        [data-bs-theme="dark"] .card-title { color: #f1f3f5; }
+        [data-bs-theme="dark"] .folder-list .list-group-item { background-color: transparent; color: #dee2e6; }
+        [data-bs-theme="dark"] .folder-list .list-group-item:hover { background-color: rgba(255,255,255,.07); color: #ffffff; }
+        [data-bs-theme="dark"] .folder-list .list-group-item.active { background-color: rgba(112,148,245,.2); color: #a9c0ff; }
+        [data-bs-theme="dark"] .folder-actions i:hover { color: #a9c0ff; }
+        [data-bs-theme="dark"] .text-muted { color: #b4bccb !important; }
+        [data-bs-theme="dark"] .text-dark { color: #e9ecef !important; }
+        [data-bs-theme="dark"] .badge.bg-light { background-color: rgba(255,255,255,.12) !important; color: #e9ecef !important; }
+        [data-bs-theme="dark"] .avatar-title.bg-light { background-color: rgba(255,255,255,.1) !important; }
+        [data-bs-theme="dark"] .table > :not(caption) > * > * { color: #dee2e6; }
+        [data-bs-theme="dark"] .table-hover > tbody > tr:hover > * { color: #ffffff; }
+        [data-bs-theme="dark"] .table-light,
+        [data-bs-theme="dark"] .table-light th { color: #f1f3f5; }
+        [data-bs-theme="dark"] .form-control,
+        [data-bs-theme="dark"] .form-select { color: #e9ecef; }
+        [data-bs-theme="dark"] .form-control::placeholder { color: #9aa3b5; }
+        [data-bs-theme="dark"] .modal-title { color: #f1f3f5; }
+        [data-bs-theme="dark"] .form-control.bg-light { background-color: rgba(255,255,255,.06) !important; color: #e9ecef; }
     </style>
 </head>
 
@@ -50,7 +79,7 @@
                       <h4 class="mb-sm-0">Document Library (OCR)</h4>
                       <div class="page-title-right">
                         <ol class="breadcrumb m-0">
-                          <li class="breadcrumb-item"><a href="/dashboard">CIPRMS</a></li>
+                          <li class="breadcrumb-item"><a href="<%= typeof homeHref !== 'undefined' ? homeHref : '/dashboard' %>">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Document Library</li>
                         </ol>
                       </div>

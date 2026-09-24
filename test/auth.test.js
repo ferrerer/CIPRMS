@@ -59,7 +59,7 @@ describe('Login', () => {
     expect(res.headers.location).toBe('/staff/dashboard');
   });
 
-  test('redirects Administrator to /dashboard and Auth. Personnel (College Staff) to /personnel/monitoring', async () => {
+  test('redirects Administrator to /dashboard and Auth. Personnel (College Dean) to /personnel/monitoring', async () => {
     const admin = await createTestUser({ role: 'Administrator' });
     const personnel = await createTestUser({ role: 'Auth. Personnel' });
 

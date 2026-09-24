@@ -1,12 +1,14 @@
 // Covers the 2026-08-27 Document Request draft/document collaboration
 // workflow — the Document Request analog of
 // test/request-draft-collaboration.test.js. Reviewers (Administrator/Staff)
-// and the request's own submitter (Auth. Personnel/potential_partner) can
-// each add a new version to a Document Request's supportingDocuments
-// history via the same widened POST /api/document-requests/:id/documents
-// route, with a note, uploader identity, and role recorded — never
-// replacing a previous version. Also covers the ownership boundary and the
-// terminal-status upload guard.
+// and an owning potential_partner submitter can each add a new version to a
+// Document Request's supportingDocuments history via the same widened POST
+// /api/document-requests/:id/documents route, with a note, uploader
+// identity, and role recorded — never replacing a previous version.
+// 2026-09-22: College Dean (role "Auth. Personnel") lost upload rights on
+// its own Document Requests — it may only submit and track drafts, not add
+// new versions; that stays reviewer/potential_partner-only. Also covers the
+// ownership boundary and the terminal-status upload guard.
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
@@ -19,8 +21,8 @@ const { DOCUMENTS_DIR } = require('../services/documentLibraryService');
 // check (it only reads the first 8 bytes).
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
 
-let adminAgent, staffAgent, submitterAgent, otherAgent;
-let submitterUser, otherUser, staffUser, requestId;
+let adminAgent, staffAgent, submitterAgent, otherAgent, partnerAgent;
+let submitterUser, otherUser, staffUser, partnerUser, requestId, partnerRequestId;
 let v1FileLink, v2FileLink;
 
 beforeAll(async () => {
@@ -36,25 +38,34 @@ beforeAll(async () => {
   otherUser = await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' });
   otherAgent = request.agent(app);
   await loginAs(otherAgent, otherUser);
+  partnerUser = await createTestUser({ role: 'potential_partner' });
+  partnerAgent = request.agent(app);
+  await loginAs(partnerAgent, partnerUser);
 
   const res = await submitterAgent.post('/api/document-requests').send({
     institution: 'Jest Test DR Draft Collaboration Inst', documentType: 'MOA', notes: 'jesttest'
   });
   requestId = res.body.request.id;
+
+  const partnerRes = await partnerAgent.post('/api/document-requests').send({
+    institution: 'Jest Test DR Partner Draft Collaboration Inst', documentType: 'MOU', notes: 'jesttest partner'
+  });
+  partnerRequestId = partnerRes.body.request.id;
 });
 
 afterAll(async () => {
   const db = await connectDB();
-  if (requestId) {
-    // Physical files must be unlinked BEFORE the DB records are deleted —
-    // see the matching comment in request-draft-collaboration.test.js.
-    const linked = await db.collection('documents').find({ requestId, requestType: 'document' }).toArray();
+  // Physical files must be unlinked BEFORE the DB records are deleted — see
+  // the matching comment in request-draft-collaboration.test.js.
+  for (const id of [requestId, partnerRequestId]) {
+    if (!id) continue;
+    const linked = await db.collection('documents').find({ requestId: id, requestType: 'document' }).toArray();
     await Promise.all(linked.map((doc) => {
       if (!doc.fileLink || !doc.fileLink.startsWith('/uploads/documents/')) return null;
       return fs.promises.unlink(path.join(DOCUMENTS_DIR, path.basename(doc.fileLink))).catch(() => {});
     }));
-    await db.collection('documents').deleteMany({ requestId, requestType: 'document' });
-    await db.collection('documentrequests').deleteOne({ id: requestId });
+    await db.collection('documents').deleteMany({ requestId: id, requestType: 'document' });
+    await db.collection('documentrequests').deleteOne({ id });
   }
   await cleanupAll();
   await closeDB();
@@ -97,8 +108,25 @@ test('Document Library attribution: Staff\'s reviewer upload above appears in ST
   expect(staffLib.body.some(d => d.id === archived[0].id)).toBe(true);
 });
 
-test('The requester (owner) can upload their own revised draft — appended, not replacing the previous version', async () => {
+// 2026-09-22: College Dean can submit and track a Document Request but no
+// longer uploads new versions of its own draft — only a reviewer
+// (Administrator/Staff) or an owning potential_partner may.
+test('The requester (College Dean / Auth. Personnel) cannot upload a revised draft to their own request', async () => {
+  const db = await connectDB();
+  const before = await db.collection('documentrequests').findOne({ id: requestId });
+
   const res = await submitterAgent
+    .post(`/api/document-requests/${requestId}/documents`)
+    .field('note', 'Updated sections 2 and 4.')
+    .attach('document', PNG_HEADER, 'revised-document.png');
+
+  expect(res.status).toBe(403);
+  const after = await db.collection('documentrequests').findOne({ id: requestId });
+  expect(after.supportingDocuments.length).toBe(before.supportingDocuments.length);
+});
+
+test('A second reviewer (Administrator) can also add a version — versions accumulate across reviewers', async () => {
+  const res = await adminAgent
     .post(`/api/document-requests/${requestId}/documents`)
     .field('note', 'Updated sections 2 and 4.')
     .attach('document', PNG_HEADER, 'revised-document.png');
@@ -108,9 +136,22 @@ test('The requester (owner) can upload their own revised draft — appended, not
   expect(docs.length).toBe(2);
   expect(docs[0].originalFilename).toBe('reviewed-document.png');
   expect(docs[1].originalFilename).toBe('revised-document.png');
-  expect(docs[1].uploaderRole).toBe('Auth. Personnel');
+  expect(docs[1].uploaderRole).toBe('Administrator');
   expect(docs[1].note).toBe('Updated sections 2 and 4.');
   v2FileLink = docs[1].fileLink;
+});
+
+test('A potential_partner submitter CAN upload their own revised draft — the Dean-only restriction does not apply to Partner', async () => {
+  const res = await partnerAgent
+    .post(`/api/document-requests/${partnerRequestId}/documents`)
+    .field('note', 'Partner revision.')
+    .attach('document', PNG_HEADER, 'partner-revision.png');
+
+  expect(res.status).toBe(200);
+  const docs = res.body.request.supportingDocuments;
+  expect(docs.length).toBe(1);
+  expect(docs[0].uploaderRole).toBe('potential_partner');
+  expect(docs[0].note).toBe('Partner revision.');
 });
 
 describe('Preview + Download: every historical draft, not just the latest', () => {
@@ -121,7 +162,7 @@ describe('Preview + Download: every historical draft, not just the latest', () =
     expect(Buffer.compare(res.body, PNG_HEADER)).toBe(0); // byte-for-byte, not corrupted
   });
 
-  test('The original submitter can also download v2 (their own upload) — both versions remain independently accessible', async () => {
+  test('The original submitter can also download v2 (a reviewer\'s later upload) — both versions remain independently accessible', async () => {
     const res = await submitterAgent.get(v2FileLink);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('image/png');
@@ -164,7 +205,7 @@ test('A notes-only version (no file) is accepted and appended to the history', a
   expect(res.body.documentId).toBeNull();
   expect(res.body.fileLink).toBeNull();
   const docs = res.body.request.supportingDocuments;
-  expect(docs.length).toBe(3); // v1 (Staff), v2 (submitter), and this notes-only v3
+  expect(docs.length).toBe(3); // v1 (Staff), v2 (Administrator), and this notes-only v3
   const notesOnly = docs[2];
   expect(notesOnly.note).toBe('Updated the agreement details based on the latest review.');
   expect(notesOnly.uploaderRole).toBe('Staff');
@@ -194,14 +235,14 @@ test('A different user cannot upload to someone else\'s document request (owners
   expect(res.status).toBe(403);
 });
 
-test('Reviewer upload notifies the requester; requester upload notifies the reviewers', async () => {
+test('Reviewer upload notifies the requester; a partner\'s own upload notifies the reviewers', async () => {
   const db = await connectDB();
   const submitterNotifs = await db.collection('notifications').find({ targetEmail: submitterUser.email }).toArray();
   expect(submitterNotifs.some(n => n.title && n.title.includes('New draft uploaded'))).toBe(true);
 
   const reviewerNotifs = await db.collection('notifications').find({
     title: { $regex: 'Revised draft uploaded' },
-    desc: { $regex: 'Jest Test DR Draft Collaboration Inst' }
+    desc: { $regex: 'Jest Test DR Partner Draft Collaboration Inst' }
   }).toArray();
   expect(reviewerNotifs.length).toBeGreaterThan(0);
 });

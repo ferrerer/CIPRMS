@@ -26,7 +26,7 @@
                     <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
                       <h4 class="mb-sm-0"><i class="ri-refresh-line me-2 text-primary"></i>Monitoring</h4>
                       <div class="page-title-right">
-                        <ol class="breadcrumb m-0">
+                        <ol class="breadcrumb m-0" id="page-breadcrumb">
                           <li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>
                           <li class="breadcrumb-item active">Monitoring</li>
                         </ol>
@@ -124,6 +124,34 @@
                                             </tr>
                                         </thead>
                                         <tbody id="pr-monitor-body">
+                                            <tr><td colspan="8" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- My MOA/MOU Submissions — the record of everything sent through "Submission Of MOA/MOU" -->
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-header d-flex align-items-center">
+                                <h4 class="card-title mb-0 flex-grow-1"><i class="ri-file-upload-line me-2"></i>My MOA/MOU Submissions</h4>
+                                <a href="/partner/requests?tab=dr" class="btn btn-soft-success btn-sm"><i class="ri-add-line me-1"></i>New Submission</a>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Institution</th><th>Notes</th><th>Files</th><th>Status</th>
+                                                <th>Date Submitted</th><th>Last Updated</th><th>Administrator</th>
+                                                <th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="moa-monitor-body">
                                             <tr><td colspan="8" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
                                         </tbody>
                                     </table>
@@ -281,6 +309,23 @@
         });
     }
 
+    // ── Breadcrumb — reflects whichever record's Draft/Renewal modal is currently open,
+    // e.g. CIPRMS > Monitoring > Partnership Request > <institution — #id>. ──
+    function setBreadcrumb(labels) {
+        var ol = document.getElementById('page-breadcrumb');
+        if (!ol) return;
+        var html = '<li class="breadcrumb-item"><a href="/partner/monitoring">CIPRMS</a></li>';
+        labels.forEach(function (label, i) {
+            var isLast = i === labels.length - 1;
+            html += isLast
+                ? '<li class="breadcrumb-item active">' + escapeHtml(label) + '</li>'
+                : '<li class="breadcrumb-item"><a href="/partner/monitoring">' + escapeHtml(label) + '</a></li>';
+        });
+        ol.innerHTML = html;
+    }
+    function resetBreadcrumb() { setBreadcrumb(['Monitoring']); }
+    function prRequestLabel(r) { return (r.institution || ('Request #' + r.id)) + ' — #' + r.id; }
+
     // 2026-09-06 security hardening: escapeHtml() alone does NOT neutralize a
     // dangerous URL scheme (javascript:/data:/vbscript:) in an href/src —
     // item.link can be a submitter's free-text attachmentLink. Only allow
@@ -330,7 +375,7 @@
        reach another user's request id from this page). ─── */
     var ROLE_LABEL = {
         'Administrator': 'Administrator', 'Staff': 'CIRL Staff',
-        'Auth. Personnel': 'College Staff', 'potential_partner': 'Partner',
+        'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner',
         'Requester': 'You'
     };
 
@@ -365,6 +410,13 @@
             if (returnEl) bootstrap.Modal.getOrCreateInstance(returnEl).show();
         }
     });
+    // A real close of pr-draft-modal (not a swap-hide for the preview above, which sets
+    // draftPreviewReturnTo to this same id right before hiding it) drops the breadcrumb.
+    document.getElementById('pr-draft-modal').addEventListener('hidden.bs.modal', function () {
+        if (draftPreviewReturnTo === 'pr-draft-modal') return;
+        resetBreadcrumb();
+    });
+    document.getElementById('renewal-request-modal').addEventListener('hidden.bs.modal', resetBreadcrumb);
 
     function openDraftPreviewModal(prefix, idx) {
         var item = (DRAFT_TIMELINE_ITEMS[prefix] || [])[idx];
@@ -469,6 +521,7 @@
         document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
         document.getElementById('pr-draft-file').value = '';
         document.getElementById('pr-draft-note').value = '';
+        setBreadcrumb(['Monitoring', r.isSubmission ? 'MOA/MOU Submission' : 'Partnership Request', prRequestLabel(r), 'Draft Collaboration']);
         bootstrap.Modal.getOrCreateInstance(document.getElementById('pr-draft-modal')).show();
     }
 
@@ -491,6 +544,7 @@
                 if (idx !== -1 && result.data.request) myRequests[idx] = result.data.request;
                 renderDraftTimeline(myRequests.find(function (x) { return x.id === currentDraftPRId; }));
                 renderPRTable();
+                renderMoaTable();
                 fileInput.value = '';
                 noteInput.value = '';
                 showToast('New draft version uploaded.', '#0ab39c');
@@ -502,13 +556,19 @@
     var myRequests = [];
     var flashPRIds = new Set();   // rows a live update just changed
 
+    // MOA/MOU submissions are Partnership Requests underneath (isSubmission) but have their own record below, so the
+    // Partnership Requests table, its counters and Approval Progress only cover real partnership / renewal requests.
+    function partnershipOnly(list) { return list.filter(function (r) { return !r.isSubmission; }); }
+    function submissionsOnly(list) { return list.filter(function (r) { return r.isSubmission; }); }
+
     function renderPRTable() {
         var body = document.getElementById('pr-monitor-body');
-        if (!myRequests.length) {
+        var prs = partnershipOnly(myRequests);
+        if (!prs.length) {
             body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
             return;
         }
-        body.innerHTML = myRequests.map(function (r) {
+        body.innerHTML = prs.map(function (r) {
             var actions = '';
             if (r.status === 'Draft') {
                 actions = '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>';
@@ -533,8 +593,70 @@
         }).join('');
     }
 
+    // ── My MOA/MOU Submissions ─────────────────────────────────────────────────────────────────────────────────────
+    // New submissions are Partnership Requests flagged isSubmission (already in myRequests). Submissions sent before that
+    // change were saved as Document Requests of type "MOA/MOU Submission"; they are read-only history here.
+    var MOA_MOU_LABEL = 'MOA/MOU Submission';
+    var legacySubmissions = [];
+
+    function loadLegacySubmissions() {
+        return CIPRMS.api('/api/document-requests/mine', { quiet: true }).then(function (res) {
+            if (!res.ok || !Array.isArray(res.data)) return false;
+            legacySubmissions = res.data.filter(function (d) {
+                return String(d.documentType || '').indexOf(MOA_MOU_LABEL) !== -1
+                    || (Array.isArray(d.documentTypes) && d.documentTypes.indexOf(MOA_MOU_LABEL) !== -1);
+            });
+            renderMoaTable();
+        });
+    }
+
+    function moaNotesCell(notes) {
+        var t = String(notes || '').trim();
+        if (!t) return '<span class="text-muted">—</span>';
+        var short = t.length > 80 ? t.slice(0, 80) + '…' : t;
+        return '<span title="' + escapeHtml(t) + '">' + escapeHtml(short) + '</span>';
+    }
+
+    function renderMoaTable() {
+        var body = document.getElementById('moa-monitor-body');
+        var current = submissionsOnly(myRequests).filter(function (r) { return r.status !== 'Draft'; });
+        if (!current.length && !legacySubmissions.length) {
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No MOA/MOU submissions yet. Use <strong>New Submission</strong> to send CIRL your MOA/MOU files or notes.</td></tr>';
+            return;
+        }
+        var rows = current.map(function (r) {
+            var files = (r.attachmentLink ? 1 : 0) + (r.supportingDocuments || []).length;
+            var actions = '<button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View files"><i class="ri-file-list-3-line me-1"></i>View</button>';
+            if (r.status === 'Pending' || r.status === 'Under Review') {
+                actions += ' <button class="btn btn-sm btn-soft-danger" onclick="withdrawRequest(' + r.id + ', this)" title="Withdraw"><i class="ri-close-circle-line me-1"></i>Withdraw</button>';
+            }
+            return '<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
+                '<td>' + escapeHtml(r.institution || '—') + '</td>' +
+                '<td style="max-width:260px;">' + moaNotesCell(r.notes) + '</td>' +
+                '<td>' + files + '</td>' +
+                '<td><span class="badge ' + statusBadgeClass(r.status) + '">' + escapeHtml(r.status) + '</span></td>' +
+                '<td>' + (r.date || '—') + '</td>' +
+                '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
+                '<td>' + escapeHtml(r.decidedBy || '—') + '</td>' +
+                '<td class="text-end text-nowrap">' + actions + '</td></tr>';
+        });
+        legacySubmissions.forEach(function (d) {
+            var cs = d.canonicalStatus || d.status;
+            rows.push('<tr>' +
+                '<td>' + escapeHtml(d.institution || '—') + '</td>' +
+                '<td style="max-width:260px;">' + moaNotesCell(d.notes) + '</td>' +
+                '<td>' + (d.supportingDocuments || []).length + '</td>' +
+                '<td><span class="badge ' + statusBadgeClass(cs) + '">' + escapeHtml(cs) + '</span></td>' +
+                '<td>' + (d.date || '—') + '</td>' +
+                '<td>' + fmtWhen(d.updatedAt, d.date) + '</td>' +
+                '<td>' + escapeHtml(d.decidedBy || '—') + '</td>' +
+                '<td class="text-end"><span class="text-muted fs-12">Earlier submission</span></td></tr>');
+        });
+        body.innerHTML = rows.join('');
+    }
+
     function withdrawRequest(id, btn) {
-        if (!confirm('Withdraw this partnership request?')) return;
+        if (!confirm('Withdraw this request?')) return;
         return CIPRMS.busy(btn, function () {
             return CIPRMS.api('/api/requests/' + id + '/withdraw', { method: 'POST', quiet: true }).then(function (res) {
                 showToast(res.ok ? 'Request withdrawn.' : res.error, res.ok ? '#15803d' : '#f06548');
@@ -563,6 +685,7 @@
             if (!res.ok || !Array.isArray(res.data)) {
                 if (live) return false;   // a background refresh never wipes what is on screen (false = try again later)
                 document.getElementById('pr-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
+                document.getElementById('moa-monitor-body').innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load submissions.</td></tr>';
                 document.getElementById('approval-progress-body').innerHTML = '';
                 return;
             }
@@ -571,7 +694,7 @@
             myRequests.forEach(function (r) { previous[r.id] = JSON.stringify(r); });
             flashPRIds = new Set(live ? requests.filter(function (r) { return previous[r.id] !== JSON.stringify(r); }).map(function (r) { return r.id; }) : []);
             myRequests = requests;
-            var real = myRequests.filter(function (r) { return r.status !== 'Draft'; });
+            var real = partnershipOnly(myRequests).filter(function (r) { return r.status !== 'Draft'; });
 
             // Every non-draft request falls in exactly ONE bucket, so Pending + In Progress + Approved + Closed
             // always equals Total. (In Progress used to lump Pending in with Under Review, the tiles showed
@@ -582,6 +705,7 @@
             setCount('cnt-approved', b.approved);
 
             renderPRTable();
+            renderMoaTable();
             flashPRIds = new Set();
             refreshOpenDraft();
 
@@ -623,7 +747,7 @@
         var params = new URLSearchParams(window.location.search);
         var id = params.get('id');
         if (!id || params.get('type') !== 'pr') return;
-        var row = document.querySelector('#pr-monitor-body tr[data-pr-id="' + id + '"]');
+        var row = document.querySelector('#pr-monitor-body tr[data-pr-id="' + id + '"], #moa-monitor-body tr[data-pr-id="' + id + '"]');
         if (!row) return;
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         row.classList.add('table-warning');
@@ -695,6 +819,7 @@
         document.getElementById('rr-end-date').value = '';
         document.getElementById('rr-notes').value = '';
         document.getElementById('rr-error').classList.add('d-none');
+        setBreadcrumb(['Monitoring', p.inst || p.institution || ('Partnership #' + id), 'Request Renewal']);
         if (!renewalModal) renewalModal = new bootstrap.Modal(document.getElementById('renewal-request-modal'));
         renewalModal.show();
     }
@@ -730,12 +855,13 @@
     }
 
     loadPRRequests();
-    // Live updates: CIRL reviewed / approved / rejected one of my requests, or the registry record behind one changed.
-    // The server is asked again for the real data (counters, Approval Progress, table rows and the renewal card are all
-    // recomputed from it) — nothing here is calculated from the event itself.
+    loadLegacySubmissions();
+    // Live updates: CIRL reviewed / approved / rejected one of my requests or submissions, or the registry record behind
+    // one changed. The server is asked again for the real data (counters, Approval Progress, table rows and the renewal
+    // card are all recomputed from it) — nothing here is calculated from the event itself.
     if (window.CIPRMS && CIPRMS.live) {
-        CIPRMS.live(['request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
-            return Promise.all([loadPRRequests({ live: true }), loadRenewalStatus({ live: true }), refreshDocCount()]).then(function (r) { return r.indexOf(false) === -1; });
+        CIPRMS.live(['request.updated', 'request.statusChanged', 'documentRequest.updated', 'documentRequest.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
+            return Promise.all([loadPRRequests({ live: true }), loadLegacySubmissions(), loadRenewalStatus({ live: true }), refreshDocCount()]).then(function (r) { return r.indexOf(false) === -1; });
         }, { debounce: 250 });
     }
 </script>
