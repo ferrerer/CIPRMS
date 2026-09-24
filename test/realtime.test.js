@@ -241,11 +241,20 @@ describe('Partnership registry changes', () => {
 });
 
 describe('Calendar', () => {
-  test('a public event reaches everyone; a scoped one only Administrator, its creator and the people it names; deleting reaches the same people', async () => {
+  test('an "All Users" event reaches everyone; one with no recipient list only Administrator and CIRL Staff; a scoped one only Administrator, its creator and the people it names; deleting reaches the same people', async () => {
+    // Since the team's "College Dean and Partners only see events meant for them" change, an event with no recipient list
+    // is no longer public to every role — only one created for "All Users" (recipients: ['all'] -> forEveryone) is.
     let m = mark();
+    const everyone = await agents.admin.post('/api/calendarevents').send({ title: 'jesttest all-users ' + Date.now(), start: '2031-03-03T10:00', end: '2031-03-03T11:00', allDay: false, recipients: ['all'] });
+    expect(everyone.status).toBe(200); eventIds.push(everyone.body.event.id);
+    for (const k of Object.keys(streams)) expect(await waitFor(after(k, m), e => e.type === 'calendar.updated' && e.data.id === everyone.body.event.id)).toBeTruthy();
+
+    m = mark();
     const pub = await agents.admin.post('/api/calendarevents').send({ title: 'jesttest public ' + Date.now(), start: '2031-03-04T10:00', end: '2031-03-04T11:00', allDay: false });
     expect(pub.status).toBe(200); eventIds.push(pub.body.event.id);
-    for (const k of Object.keys(streams)) expect(await waitFor(after(k, m), e => e.type === 'calendar.updated' && e.data.id === pub.body.event.id)).toBeTruthy();
+    for (const k of ['admin', 'staff']) expect(await waitFor(after(k, m), e => e.type === 'calendar.updated' && e.data.id === pub.body.event.id)).toBeTruthy();
+    await sleep(500);
+    for (const k of ['partnerA', 'partnerB', 'college']) expect(since(m, k, 'calendar.updated')).toEqual([]);
 
     m = mark();
     const scoped = await agents.admin.post('/api/calendarevents').send({ title: 'jesttest scoped ' + Date.now(), start: '2031-03-05T10:00', end: '2031-03-05T11:00', allDay: false, recipients: [users.partnerA.email] });

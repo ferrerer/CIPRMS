@@ -72,6 +72,22 @@ async function createEvent(agent, body) {
   return res;
 }
 
+// Seeds a meeting whose time is ALREADY over/in progress, as the Join-control tests need. POST /api/calendarevents
+// deliberately refuses to create such an event (isNewEventInThePast in cirl.js) and that rule is not bypassed: the event
+// is created through the normal endpoint with a future time — so its invitations, notifications and Meet room are all
+// made by the real code path — and only then are its stored start/end rewritten to the historical wall-clock times,
+// the same way a meeting from before "now" would already sit in the database.
+async function seedHistoricalEvent(agent, body, { start, end }) {
+  const futureBody = { ...body, start: manilaWall(Date.now() + 48 * HOUR) };
+  if (end) futureBody.end = manilaWall(Date.now() + 49 * HOUR);
+  const res = await createEvent(agent, futureBody);
+  const ev = res.body && res.body.event;
+  if (!ev) throw new Error('seedHistoricalEvent: create failed: ' + JSON.stringify(res.body));
+  const set = end ? { start, end } : { start };
+  await db.collection('calendarevents').updateOne({ id: ev.id }, end ? { $set: set } : { $set: set, $unset: { end: '' } });
+  return { ...ev, ...set };
+}
+
 beforeAll(async () => {
   db = await connectDB();
   await integration().deleteMany({});
@@ -383,15 +399,15 @@ describe('Join control — College Dean and Partner', () => {
 
   beforeAll(async () => {
     const now = Date.now();
-    endedMeeting = (await createEvent(agents.admin, { title: title('Ended Meeting'), start: manilaWall(now - 3 * HOUR), end: manilaWall(now - HOUR), recipients: [users.collegeA.email, users.partnerA.email] })).body.event;
+    endedMeeting = await seedHistoricalEvent(agents.admin, { title: title('Ended Meeting'), recipients: [users.collegeA.email, users.partnerA.email] }, { start: manilaWall(now - 3 * HOUR), end: manilaWall(now - HOUR) });
     // saved with no end time: the meeting lasts one hour (the same span Google Calendar is given)
-    noEndEnded = (await createEvent(agents.admin, { title: title('No End Ended'), start: manilaWall(now - 2 * HOUR), recipients: [users.collegeA.email] })).body.event;
-    noEndLive = (await createEvent(agents.admin, { title: title('No End Live'), start: manilaWall(now - 20 * 60 * 1000), recipients: [users.collegeA.email] })).body.event;
+    noEndEnded = await seedHistoricalEvent(agents.admin, { title: title('No End Ended'), recipients: [users.collegeA.email] }, { start: manilaWall(now - 2 * HOUR) });
+    noEndLive = await seedHistoricalEvent(agents.admin, { title: title('No End Live'), recipients: [users.collegeA.email] }, { start: manilaWall(now - 20 * 60 * 1000) });
     futureMeeting = (await createEvent(agents.admin, { title: title('Future Meeting'), start: manilaWall(now + 24 * HOUR), end: manilaWall(now + 25 * HOUR), recipients: [users.collegeA.email, users.partnerA.email] })).body.event;
     startedMeeting = (await createEvent(agents.admin, { title: title('Started Meeting'), start: manilaWall(now - 30 * 60 * 1000), end: manilaWall(now + HOUR), recipients: [users.collegeA.email, users.partnerA.email, users.collegeB.email] })).body.event;
     partnerOnly = (await createEvent(agents.admin, { title: title('Partner Only'), start: manilaWall(now - HOUR), end: manilaWall(now + HOUR), recipients: [users.partnerA.email] })).body.event;
     collegeOnly = (await createEvent(agents.admin, { title: title('College Only'), start: manilaWall(now - HOUR), end: manilaWall(now + HOUR), recipients: [users.collegeA.email] })).body.event;
-    renewalWithGuests = (await createEvent(agents.admin, { title: title('Renewal Reminder'), className: 'bg-success-subtle', start: manilaWall(now + HOUR), recipients: [users.collegeA.email] })).body.event;
+    renewalWithGuests = await seedHistoricalEvent(agents.admin, { title: title('Renewal Reminder'), className: 'bg-success-subtle', recipients: [users.collegeA.email] }, { start: manilaWall(now - HOUR) });
   });
 
   const feedEvent = async (agent, id) => (await agent.get('/api/calendarevents')).body.find(e => e.id === id);
