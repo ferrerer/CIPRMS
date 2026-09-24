@@ -114,7 +114,7 @@ describe('Global header search — existing search behavior/markup is unchanged 
   });
 
   test('ciprms-search.js is still loaded, still deferred (must run after #search-page-results, when present, is in the DOM)', () => {
-    expect(view).toContain('<script src="/js/ciprms-search.js?v=1" defer></script>');
+    expect(view).toContain('<script src="/js/ciprms-search.js?v=2" defer></script>');
   });
 });
 
