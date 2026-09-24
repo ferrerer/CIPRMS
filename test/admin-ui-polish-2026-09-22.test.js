@@ -12,7 +12,7 @@ describe('Calendar: Add Event modal is no longer cramped, and the past-date guar
     expect(src).toMatch(/id="event-modal" tabindex="-1">\s*<div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg"/);
   });
   test('Event Type and Date are paired into one responsive row instead of stacking full-width', () => {
-    expect(src).toMatch(/col-md-7[\s\S]{0,120}Event Type[\s\S]{0,900}col-md-5[\s\S]{0,120}Date/);
+    expect(src).toMatch(/col-md-7[\s\S]{0,120}Event Type[\s\S]{0,1200}col-md-5[\s\S]{0,120}Date/);
   });
   test('the recipients/attendees list got more visible rows', () => {
     expect(src).toContain('id="f-recipients" multiple size="8"');

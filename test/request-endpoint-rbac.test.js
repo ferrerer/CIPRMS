@@ -137,7 +137,7 @@ describe('College Dean cannot use the Partnership Request API', () => {
 });
 
 describe('Partner keeps its Partnership Request workflow', () => {
-  test('create, save a draft, edit it, submit it, delete a draft, withdraw a pending one', async () => {
+  test('create, save a draft, edit it, submit it, delete a draft; withdrawing a pending one is refused', async () => {
     const created = await agents.partner.post('/api/requests').send(body('partner'));
     expect(created.status).toBe(200); expect(created.body.request.status).toBe('Pending'); requestIds.push(created.body.request.id);
 
@@ -153,7 +153,7 @@ describe('Partner keeps its Partnership Request workflow', () => {
     expect((await agents.partner.delete(`/api/requests/${draft2.body.request.id}`)).status).toBe(200);
 
     const withdrawn = await agents.partner.post(`/api/requests/${created.body.request.id}/withdraw`);
-    expect(withdrawn.status).toBe(200); expect(withdrawn.body.request.status).toBe('Withdrawn');
+    expect(withdrawn.status).toBe(403);
     expect((await agents.partner.get('/api/requests/mine')).body.map(r => r.id)).toEqual(expect.arrayContaining([created.body.request.id, draft.body.request.id]));
   });
 });

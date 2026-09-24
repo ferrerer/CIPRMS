@@ -191,7 +191,7 @@
                 <div class="dropdown ms-sm-3 header-item topbar-user">
                     <button type="button" class="btn material-shadow-none" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                         <span class="d-flex align-items-center">
-                            <img class="rounded-circle header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+                            <img class="rounded-circle header-profile-user js-user-avatar" src="<%= typeof userAvatarUrl !== 'undefined' ? userAvatarUrl : '/images/default-avatar.jpg' %>" alt="Profile picture" style="object-fit:cover;">
                             <span class="text-start ms-xl-2">
                                 <span class="d-none d-xl-inline-block ms-1 fw-medium user-name-text"><%= typeof user !== 'undefined' && user ? user.name || 'User' : 'User' %></span>
                                 <span class="d-none d-xl-block ms-1 fs-12 user-name-sub-text"><%= typeof user !== 'undefined' && user ? (user.role === 'potential_partner' ? 'Partner' : user.role === 'Auth. Personnel' ? 'College Dean' : user.role === 'Staff' ? 'CIRL Staff' : (user.role || '')) : '' %></span>

@@ -32,7 +32,7 @@
         <button type="button" class="btn material-shadow-none" id="sidebar-user-dropdown" data-bs-toggle="dropdown"
             aria-haspopup="true" aria-expanded="false">
             <span class="d-flex align-items-center gap-2">
-                <img class="rounded header-profile-user" src="/images/cirl-logo.jpg" alt="User Avatar">
+                <img class="rounded header-profile-user js-user-avatar" src="<%= typeof userAvatarUrl !== 'undefined' ? userAvatarUrl : '/images/default-avatar.jpg' %>" alt="Profile picture" style="object-fit:cover;">
                 <span class="text-start">
                     <span class="d-block fw-medium sidebar-user-name-text">
                         <%= typeof user !=='undefined' && user ? user.name || 'Guest' : 'Guest' %>

@@ -52,7 +52,7 @@
                     <i class="ri-camera-fill fs-11"></i>
                   </span>
                 </div>
-                <input id="photo-input" type="file" accept="image/*" class="d-none" onchange="handlePhotoChange(event)">
+                <input id="photo-input" type="file" accept=".jpg,.jpeg,.png" class="d-none" onchange="handlePhotoChange(event)">
                 <h5 class="mb-1" id="hero-name">Administrator</h5>
                 <p class="text-muted mb-3" id="hero-role">System Administrator</p>
                 <div class="border-top pt-3 text-start">
@@ -231,7 +231,9 @@
 <div id="s-toast" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;color:#fff;padding:.65rem 1.1rem;border-radius:.5rem;font-size:.8125rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .3s;display:flex;align-items:center;gap:.4rem;"></div>
 
 <script>
-  const PHOTO_KEY = 'ciprms_admin_photo';
+  // The profile picture lives on the account now (it used to be kept in this browser only under this key).
+  try { localStorage.removeItem('ciprms_admin_photo'); } catch (_) {}
+  const INITIAL_AVATAR = <%- JSON.stringify(typeof userAvatarUrl !== 'undefined' ? userAvatarUrl : '/images/default-avatar.jpg').replace(/</g, '\\u003c') %>;
 
   function togglePwd(id, btn) {
     const inp = document.getElementById(id);
@@ -272,21 +274,35 @@
     }
   }
 
+  // Uploads to the account (every page's header/sidebar picture comes from there) and swaps the new picture in right away.
   function handlePhotoChange(e) {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try { localStorage.setItem(PHOTO_KEY, ev.target.result); } catch(_) {}
-      applyPhoto(ev.target.result);
-      showToast('<i class="ri-image-line me-1"></i>Photo updated!', '#0ab39c');
-    };
-    reader.readAsDataURL(file);
+    const form = new FormData();
+    form.append('avatar', file);
+    fetch('/api/profile/avatar', { method: 'POST', body: form, headers: { 'X-Requested-With': 'ciprms' } })
+      .then(r => r.json().catch(() => ({})))
+      .then(data => {
+        if (!data.success) {
+          showToast('<i class="ri-error-warning-line me-1"></i>' + escapeText(data.error || 'Unable to upload the photo.'), '#f06548');
+          return;
+        }
+        applyPhoto(data.avatarUrl);
+        document.querySelectorAll('.js-user-avatar').forEach(img => { img.src = data.avatarUrl; });
+        showToast('<i class="ri-image-line me-1"></i>Profile picture updated!', '#0ab39c');
+      })
+      .catch(() => showToast('<i class="ri-error-warning-line me-1"></i>Unable to upload the photo. Please try again.', '#f06548'));
+  }
+
+  function escapeText(s) {
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
   }
 
   async function loadProfile() {
-    const savedPhoto = localStorage.getItem(PHOTO_KEY);
-    if (savedPhoto) applyPhoto(savedPhoto);
+    applyPhoto(INITIAL_AVATAR);
     try {
       const data = await fetch('/api/admin/profile').then(r => r.json());
       if (data.name)        document.getElementById('s-name').value        = data.name;

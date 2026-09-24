@@ -269,16 +269,24 @@
     }
 
     function uploadAvatar() {
-        var file = document.getElementById('avatar-input').files[0];
+        var input = document.getElementById('avatar-input');
+        var file = input.files[0];
+        input.value = '';
         if (!file) return;
         var formData = new FormData();
         formData.append('avatar', file);
-        fetch('/api/partner/avatar', { method: 'POST', body: formData })
-            .then(function (r) { return r.json(); })
+        fetch('/api/profile/avatar', { method: 'POST', body: formData, headers: { 'X-Requested-With': 'ciprms' } })
+            .then(function (r) { return r.json().catch(function () { return {}; }); })
             .then(function (data) {
-                if (data.success) { applyAvatar(data.avatarUrl); showToast('Profile picture updated.', '#0ab39c'); }
+                if (data.success) {
+                    applyAvatar(data.avatarUrl);
+                    // the header / sidebar picture changes right away, not only on the next page load
+                    document.querySelectorAll('.js-user-avatar').forEach(function (img) { img.src = data.avatarUrl; });
+                    showToast('Profile picture updated.', '#0ab39c');
+                }
                 else showToast(data.error || 'Failed to upload image.', '#f06548');
-            });
+            })
+            .catch(function () { showToast('Failed to upload image. Please try again.', '#f06548'); });
     }
 
     document.addEventListener('DOMContentLoaded', loadProfile);

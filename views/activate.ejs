@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
+<head>
+    <meta charset="utf-8" />
+    <%- include('partials/ui-state-init') %>
+    <title>Complete Your Account Setup | CIPRMS - CSPC-CIRL</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="/images/cirl-logo.jpg">
+    <!-- Layout config Js -->
+    <script src="/velzon/assets/js/layout.js"></script>
+    <!-- Bootstrap Css -->
+    <link href="/velzon/assets/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <!-- Icons Css -->
+    <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <!-- App Css -->
+    <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <!-- Custom Css -->
+    <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        .auth-one-bg {
+            background-image: url('/images/login-bg-new.jpg') !important;
+            background-position: center;
+            background-size: cover;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Same backdrop as the sign-in page: nothing of the system is shown until the account is activated. -->
+    <div class="auth-page-wrapper pt-5">
+        <div class="auth-one-bg-position auth-one-bg" id="auth-particles">
+            <div class="bg-overlay"></div>
+            <div class="shape">
+                <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1440 120">
+                    <path d="M 0,36 C 144,53.6 432,123.2 720,124 C 1008,124.8 1296,56.8 1440,40L1440 140L0 140z"></path>
+                </svg>
+            </div>
+        </div>
+        <div class="auth-page-content">
+            <div class="container">
+                <div class="text-center mt-sm-5 mb-4 text-white-50">
+                    <img src="/images/cirl-logo.jpg" alt="CIRL" height="40" style="border-radius:50%;object-fit:cover;">
+                    <p class="mt-3 fs-15 fw-medium">CSPC Center for International Relations and Linkages</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activation form — cannot be dismissed; the only ways out are Continue or Log out. -->
+    <div class="modal fade" id="activate-modal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="activate-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-light p-3">
+                    <h5 class="modal-title" id="activate-modal-title"><i class="ri-shield-user-line me-2 text-primary"></i>Complete Your Account Setup</h5>
+                </div>
+                <form id="activate-form" novalidate>
+                    <div class="modal-body">
+                        <p class="text-muted mb-3">
+                            Welcome, <strong><%= account.name %></strong> (<%= account.email %> · <%= account.roleLabel %>).
+                            Fill up the form below to activate your account and start using CIPRMS.
+                        </p>
+                        <div class="alert alert-danger py-2 mb-3" id="activate-error" role="alert" style="display:none"></div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="a-unit">Department / College <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="a-unit" maxlength="120" value="<%= profile.dept %>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="a-institution">Institution / School <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="a-institution" maxlength="200" value="<%= profile.institution %>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="a-position">Designation / Position <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="a-position" maxlength="120" value="<%= profile.position %>" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="a-contact">Contact Number <span class="text-danger">*</span></label>
+                                <input type="tel" inputmode="numeric" class="form-control" id="a-contact" maxlength="25" autocomplete="tel" value="<%= profile.contactNumber %>" required>
+                                <div class="form-text text-danger" id="a-contact-warn" style="display:none"><i class="ri-error-warning-line me-1"></i>Numbers only — letters aren't allowed.</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-text mt-0">Once your account is activated these details can only be changed by the CIRL Administrator.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="hstack gap-2 justify-content-end w-100">
+                            <button type="button" class="btn btn-light me-auto" id="activate-logout"><i class="ri-logout-box-r-line me-1"></i>Log out</button>
+                            <button type="submit" class="btn btn-success" id="activate-submit"><i class="ri-checkbox-circle-line me-1"></i>Continue</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (function () {
+      const modal = new bootstrap.Modal(document.getElementById('activate-modal'));
+      modal.show();
+
+      const form = document.getElementById('activate-form');
+      const errorBox = document.getElementById('activate-error');
+      const submitBtn = document.getElementById('activate-submit');
+      const contactEl = document.getElementById('a-contact');
+
+      // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
+      contactEl.addEventListener('input', function () {
+        const cleaned = contactEl.value.replace(/[^0-9+()\-\s]/g, '');
+        document.getElementById('a-contact-warn').style.display = cleaned !== contactEl.value ? '' : 'none';
+        contactEl.value = cleaned;
+      });
+
+      function showError(msg) {
+        errorBox.innerHTML = '<i class="ri-error-warning-line me-1"></i>';
+        errorBox.appendChild(document.createTextNode(msg));
+        errorBox.style.display = '';
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        errorBox.style.display = 'none';
+        const payload = {
+          unit: document.getElementById('a-unit').value.trim(),
+          institution: document.getElementById('a-institution').value.trim(),
+          position: document.getElementById('a-position').value.trim(),
+          contactNumber: contactEl.value.trim()
+        };
+
+        let valid = true;
+        [['a-unit', payload.unit], ['a-institution', payload.institution], ['a-position', payload.position], ['a-contact', payload.contactNumber]]
+          .forEach(function ([id, val]) {
+            const el = document.getElementById(id);
+            if (!val) { el.classList.add('is-invalid'); valid = false; } else el.classList.remove('is-invalid');
+          });
+        if (!valid) return showError('Please fill in all required fields.');
+        if (payload.contactNumber.replace(/\D/g, '').length < 7) {
+          contactEl.classList.add('is-invalid');
+          return showError('Enter a valid contact number (at least 7 digits).');
+        }
+
+        submitBtn.disabled = true;
+        fetch('/api/activate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'ciprms' },
+          body: JSON.stringify(payload)
+        })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { return { ok: r.ok, status: r.status, data: data }; }); })
+          .then(function (res) {
+            if (res.status === 401) { window.location.href = '/'; return; }
+            if (res.ok && res.data.success) { window.location.href = res.data.redirect || '/'; return; }
+            submitBtn.disabled = false;
+            showError(res.data.error || 'Unable to activate your account. Please try again.');
+          })
+          .catch(function () {
+            submitBtn.disabled = false;
+            showError('Unable to activate your account. Please check your connection and try again.');
+          });
+      });
+
+      document.getElementById('activate-logout').addEventListener('click', function () {
+        fetch('/logout', { method: 'POST' }).finally(function () { window.location.href = '/'; });
+      });
+    })();
+    </script>
+</body>
+</html>

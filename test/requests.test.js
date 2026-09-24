@@ -72,15 +72,11 @@ test('A non-admin cannot approve/reject a request (PATCH is Administrator-only)'
   expect(res.status).toBe(302); // requireAdmin redirects non-admins
 });
 
-test('The original submitter can withdraw their own pending request', async () => {
+test('Withdrawing is disabled: even the original submitter cannot withdraw their own pending request', async () => {
   const res = await submitterAgent.post(`/api/requests/${requestId}/withdraw`);
-  expect(res.status).toBe(200);
-  expect(res.body.request.status).toBe('Withdrawn');
-});
-
-test('Withdrawing an already-withdrawn request is rejected', async () => {
-  const res = await submitterAgent.post(`/api/requests/${requestId}/withdraw`);
-  expect(res.status).toBe(400);
+  expect(res.status).toBe(403);
+  const mine = await submitterAgent.get('/api/requests/mine');
+  expect(mine.body.find(r => r.id === requestId).status).toBe('Pending');
 });
 
 // 2026-08-27 full-parity revision: Staff shares Administrator's exact

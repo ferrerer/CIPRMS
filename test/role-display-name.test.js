@@ -181,7 +181,9 @@ describe('The stored role values, sessions and RBAC are UNCHANGED', () => {
     const agent = request.agent(app);
     const login = await agent.post('/login').type('form').send({ username: email, password: 'TestPass123' });
     expect(login.status).toBe(302);
-    expect(login.headers.location).toBe(home);
+    expect(login.headers.location).toBe('/activate'); // a new account fills up the activation form first
+    const activated = await agent.post('/api/activate').send({ unit: 'CCS', institution: 'CSPC', position: 'Faculty', contactNumber: '0917-123-4567' });
+    expect(activated.body).toMatchObject({ success: true, redirect: home });
     expect((await agent.get('/api/me')).body.user.role).toBe(role);
   });
 
