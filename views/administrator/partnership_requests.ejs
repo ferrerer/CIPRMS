@@ -441,6 +441,55 @@
     #pr-draft-modal .modal-body,
     #dr-draft-modal .modal-body { overflow-wrap: anywhere; }
     #draft-preview-modal .modal-body img { max-width: 100%; height: auto; }
+
+    /* ── Document Requests: inline Status dropdown (Status column) ──
+       Coloured with the same classes as the status badges (statusClasses), so it reads as the same status, with a
+       visible caret and a hover ring so it is obvious it can be changed. Compact: a long name such as "Awaiting for
+       Approval" is cut with an ellipsis inside the control instead of stretching the table. */
+    .dr-status-select {
+      width: 100%; min-width: 150px; max-width: 200px; padding: .2rem 1.6rem .2rem .6rem;
+      font-size: .75rem; font-weight: 600; line-height: 1.4; cursor: pointer;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border: 1px solid rgba(0, 0, 0, .14); background-position: right .5rem center; background-size: 12px 10px;
+    }
+    .dr-status-select:not(:disabled):hover { box-shadow: 0 0 0 .18rem rgba(64, 81, 137, .18); }
+    .dr-status-select:disabled { cursor: default; opacity: .8; }
+    .dr-status-select.is-busy { cursor: progress; opacity: .6; }
+    .dr-status-select option { color: #212529; background: #fff; font-weight: 500; }
+    .dr-status-select option:disabled { color: #98a2b3; }
+    [data-bs-theme="dark"] .dr-status-select { border-color: rgba(255, 255, 255, .18); }
+    [data-bs-theme="dark"] .dr-status-select option { color: #e9ecef; background: #212529; }
+    [data-bs-theme="dark"] .dr-status-select option:disabled { color: #6c757d; }
+
+    /* ── Requests modals: a little more room ──
+       Partnership Request details + View Draft, and Document Request details + Drafts. All four were a plain
+       Bootstrap modal-lg (800px) — wide enough for the fields but tight for tables, filenames, notes and the footer
+       buttons. Widened on desktop only (never full-screen; below 992px Bootstrap's own responsive width applies),
+       with a little more padding, and the body scrolls INSIDE the modal (capped to the viewport height) instead of
+       the whole page scrolling behind it. Sizing/spacing only — the markup, classes and behaviour are unchanged. */
+    @media (min-width: 992px) {
+      #pr-modal .modal-dialog, #pr-draft-modal .modal-dialog, #dr-modal .modal-dialog, #dr-draft-modal .modal-dialog { --vz-modal-width: 960px; }
+    }
+    @media (min-width: 1400px) {
+      #pr-modal .modal-dialog, #pr-draft-modal .modal-dialog, #dr-modal .modal-dialog, #dr-draft-modal .modal-dialog { --vz-modal-width: 1040px; }
+    }
+    #pr-modal .modal-content, #pr-draft-modal .modal-content, #dr-modal .modal-content, #dr-draft-modal .modal-content { max-height: calc(100vh - 2rem); }
+    #pr-modal .modal-body, #pr-draft-modal .modal-body, #dr-modal .modal-body, #dr-draft-modal .modal-body {
+      padding: 1.5rem 1.75rem; overflow-y: auto; overflow-wrap: anywhere; min-width: 0;
+    }
+    #pr-modal .modal-footer, #pr-draft-modal .modal-footer, #dr-modal .modal-footer, #dr-draft-modal .modal-footer {
+      flex-wrap: wrap; gap: .5rem; padding: 1rem 1.75rem;
+    }
+    /* The header title can carry a long, unbroken institution name. As a flex child it would not shrink below that
+       name's width, stretching the header past the screen and pushing the close (X) button out of view. */
+    #pr-modal .modal-title, #pr-draft-modal .modal-title, #dr-modal .modal-title, #dr-draft-modal .modal-title { min-width: 0; overflow-wrap: anywhere; }
+    #pr-modal .btn-close, #pr-draft-modal .btn-close, #dr-modal .btn-close, #dr-draft-modal .btn-close { flex-shrink: 0; }
+    @media (max-width: 575.98px) {
+      #pr-modal .modal-body, #pr-draft-modal .modal-body, #dr-modal .modal-body, #dr-draft-modal .modal-body { padding: 1rem; }
+      #pr-modal .modal-footer, #pr-draft-modal .modal-footer, #dr-modal .modal-footer, #dr-draft-modal .modal-footer { padding: .75rem 1rem; }
+      /* Document Request details laid its fields out as fixed half-width columns even on a phone: one per row there. */
+      #dr-modal .modal-body .row > .col-6 { flex: 0 0 100%; max-width: 100%; }
+    }
 </style>
 </head>
 
@@ -785,12 +834,6 @@
               <p class="detail-label">Status</p>
               <div id="dr-v-status">—</div>
             </div>
-            <div class="col-12" id="dr-status-update-wrap">
-              <label class="form-label detail-label" for="dr-status-update">Update Status</label>
-              <select class="form-select form-select-sm" id="dr-status-update" style="max-width:280px;" onchange="updateDrStatus(currentDRId, this.value)">
-              </select>
-              <small class="text-muted d-block mt-1">Only the next step in the workflow can be selected here.</small>
-            </div>
             <div class="col-12">
               <p class="detail-label">Notes</p>
               <div class="detail-box">
@@ -966,7 +1009,7 @@
     // Approval/Release/Completed, 2026-09-04) share this map with Partnership
     // Request statuses — safe since each table only ever renders its own
     // vocabulary, so there's no collision in practice.
-    function statusBadge(s) {
+    function statusClasses(s) {
       const m = {
         'Pending': 'bg-warning-subtle text-warning',
         'Under Review': 'bg-info-subtle text-info',
@@ -981,7 +1024,10 @@
         'Release': 'bg-dark-subtle text-dark',
         'Completed': 'bg-success-subtle text-success'
       };
-      return `<span class="badge ${m[s] || 'bg-secondary-subtle text-secondary'}">${s}</span>`;
+      return m[s] || 'bg-secondary-subtle text-secondary';
+    }
+    function statusBadge(s) {
+      return `<span class="badge ${statusClasses(s)}">${s}</span>`;
     }
 
     // Document Request "Document(s) Requested" is a free-form multi-item
@@ -1746,7 +1792,7 @@
           <td>${drDocTypeBadges(r)}</td>
           <td class="fw-medium fs-13">${escapeHtml(r.requestedBy || '—')}</td>
           <td class="text-muted fs-13">${r.date || '—'}</td>
-          <td>${statusBadge(cs || 'Received')}</td>
+          <td class="dr-status-cell">${drStatusSelectHtml(r)}</td>
           <td>
             <div class="hstack gap-1">
               <button class="btn btn-sm btn-soft-secondary" onclick="openDRDetail(${r.id})">
@@ -1777,21 +1823,21 @@
       ).join('') + '</ol>';
     }
 
-    // Populates the Update Status dropdown so ONLY the current stage and the
-    // one legitimate next stage are selectable — every other option is
-    // rendered (for context) but disabled, which is what actually prevents
-    // an invalid skip/backward pick in the UI (the PATCH endpoint enforces
-    // the same rule server-side regardless).
-    function populateDrStatusSelect(cs) {
-      const sel = document.getElementById('dr-status-update');
+    // The status control lives in the Document Requests TABLE (Status column), not in the details modal. Only the
+    // current stage and the one legitimate next stage are selectable — every other option is rendered (for context)
+    // but disabled, which is what prevents an invalid skip/backward pick in the UI (the PATCH endpoint enforces the
+    // same rule server-side regardless). A closed request (Completed / Rejected) shows its status, not editable.
+    function drStatusSelectHtml(r) {
+      const cs = r.canonicalStatus || r.status || 'Received';
+      if (!IS_ADMIN) return statusBadge(cs);
       const next = drNextStatus(cs);
       const terminal = DR_TERMINAL_STATUSES.includes(cs);
-      sel.innerHTML = DR_WORKFLOW_STATUSES.map(s => {
-        const isCurrent = s === cs;
-        const disabled = !isCurrent && s !== next;
-        return `<option value="${s}" ${isCurrent ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${s}${isCurrent ? ' (current)' : ''}</option>`;
-      }).join('');
-      sel.disabled = terminal || !next;
+      const busy = drStatusInFlight.has(r.id);
+      const opts = (DR_WORKFLOW_STATUSES.includes(cs) ? DR_WORKFLOW_STATUSES : [cs]).map(s =>
+        `<option value="${escapeHtml(s)}"${s === cs ? ' selected' : ''}${s !== cs && s !== next ? ' disabled' : ''}>${escapeHtml(s)}</option>`).join('');
+      const hint = terminal ? 'This request is closed — its status can no longer be changed.' : 'Change status — only the next step in the workflow can be selected.';
+      return `<select class="form-select form-select-sm dr-status-select ${statusClasses(cs)}${busy ? ' is-busy' : ''}" data-id="${r.id}" data-current="${escapeHtml(cs)}"` +
+        ` aria-label="Status of ${escapeHtml(r.institution || 'request')}" title="${hint}"${terminal || !next || busy ? ' disabled' : ''}${busy ? ' aria-busy="true"' : ''}>${opts}</select>`;
     }
 
     function openDRDetail(id) {
@@ -1812,8 +1858,6 @@
 
       const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
       document.getElementById('dr-remark-wrap').style.display = canAct ? '' : 'none';
-      document.getElementById('dr-status-update-wrap').style.display = IS_ADMIN ? '' : 'none';
-      if (IS_ADMIN) populateDrStatusSelect(cs);
 
       const signoffWrap = document.getElementById('dr-signoff-wrap');
       if (r.decidedBy) {
@@ -1839,34 +1883,33 @@
       modalInstance('dr-modal').show();
     }
 
-    // Backs the Update Status dropdown (any workflow stage) — a single PATCH
-    // call, the same server-side transition/RBAC validation for every stage.
-    var drStatusInFlight = new Set();     // one status change per request at a time (a double click / rapid re-pick is ignored)
+    // Backs the Status dropdown in the Document Requests table (any workflow stage) — a single PATCH call, the same
+    // server-side transition/RBAC validation for every stage. The row's dropdown is disabled while the request is in
+    // flight (a double click / rapid re-pick sends nothing extra) and is rebuilt from the real data afterwards, so on a
+    // failure it goes back to the previous status by itself.
+    var drStatusInFlight = new Set();     // one status change per request at a time
     async function submitDrStatusChange(id, newStatus) {
       const r = drData.find(x => x.id === id);
       if (!r || drStatusInFlight.has(id)) return;
       const body = { status: newStatus };
-      if (newStatus === 'Completed') {
+      if (newStatus === 'Completed' && currentDRId === id && document.getElementById('dr-modal').classList.contains('show')) {
+        // Only the details modal of THIS request may supply a Received By name; otherwise the server uses the requester.
         const receivedByEl = document.getElementById('dr-received-by');
         if (receivedByEl && receivedByEl.value.trim()) body.receivedBy = receivedByEl.value.trim();
       }
-      const sel = document.getElementById('dr-status-update');
       drStatusInFlight.add(id);
-      if (sel) sel.disabled = true;
+      renderDR();                       // shows this row's dropdown disabled/busy
       try {
         const res = await CIPRMS.api('/api/document-requests/' + id, { method: 'PATCH', json: body, quiet: true });
         if (!res.ok) {
           showToast('<i class="ri-error-warning-line me-1"></i>' + res.error, '#f06548');
-          // reset the dropdown to the real current value (and re-read the list when the server says it has moved on)
+          // when the server says the request has moved on / is gone, re-read the list; the row is rebuilt below either way
           if (res.status === 400 || res.status === 404 || res.status === 409) { await refreshLive(); refreshOpenModals(); }
-          else if (r.canonicalStatus) populateDrStatusSelect(r.canonicalStatus);
           return;
         }
-        // Refresh the in-memory row from the server's own response — the
-        // PATCH handler computes canonicalStatus/releasedBy/receivedBy/
-        // statusHistory server-side, so trust that over reconstructing it.
+        // Refresh the in-memory row from the server's own response — the PATCH handler computes canonicalStatus/
+        // releasedBy/receivedBy/statusHistory server-side, so trust that over reconstructing it.
         Object.assign(r, res.data.request, { canonicalStatus: newStatus === 'Rejected' ? 'Rejected' : newStatus });
-        renderDR();
         updateStats();
         if (document.getElementById('dr-modal').classList.contains('show')) openDRDetail(id);
         const verbLabel = newStatus === 'Rejected' ? 'rejected' : `moved to "${newStatus}"`;
@@ -1877,12 +1920,23 @@
         );
       } finally {
         drStatusInFlight.delete(id);
-        if (sel && document.getElementById('dr-modal').classList.contains('show')) { const cur = drData.find(x => x.id === id); if (cur) populateDrStatusSelect(cur.canonicalStatus || cur.status); }
+        renderDR();                     // re-enables the control and shows the real (new, or restored previous) status
       }
     }
-    function updateDrStatus(id, newStatus) {
-      if (!newStatus) return;
-      submitDrStatusChange(id, newStatus);
+    // One delegated listener for every row's dropdown (the tbody is re-rendered, so per-row handlers would pile up).
+    function bindDrStatusSelects() {
+      const tbody = document.getElementById('dr-tbody');
+      if (tbody.dataset.statusBound) return;
+      tbody.dataset.statusBound = '1';
+      tbody.addEventListener('change', function (e) {
+        const sel = e.target.closest && e.target.closest('.dr-status-select');
+        if (!sel) return;
+        const id = parseInt(sel.dataset.id, 10);
+        const previous = sel.dataset.current;
+        if (!sel.value || sel.value === previous) return;
+        if (drStatusInFlight.has(id)) { sel.value = previous; return; }
+        submitDrStatusChange(id, sel.value);
+      });
     }
 
     /* ─── INIT ─── */
@@ -1957,6 +2011,7 @@
     }
 
     async function init() {
+      bindDrStatusSelects();
       await Promise.all([loadPR(), loadDR()]);
       updateStats();
       openFromQuery();

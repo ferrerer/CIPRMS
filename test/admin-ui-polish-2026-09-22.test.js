@@ -60,7 +60,7 @@ describe('Document Request Details modal (Requests page) is wider and text wraps
   });
   test('existing draft/review/status functionality is untouched', () => {
     expect(src).toContain('openDRDraftModal()');
-    expect(src).toContain('dr-status-update');
+    expect(src).toContain('dr-status-select');   // the status control now lives in the table row (was the modal's dr-status-update)
     expect(src).toContain('dr-modal-footer');
   });
 });
