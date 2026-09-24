@@ -6032,13 +6032,23 @@ function attendanceRecordFor(ev, email) {
 // re-checks both bounds on the actual Join request, so a wrong device clock can
 // neither unlock nor block a join. The Meet link itself is never in here — it
 // is only handed out by the Join request, and only while the meeting is on.
+// Administrator and CIRL Staff facilitate the meetings, so they can join any Meeting event even when they were not
+// invited to it; everyone else must be an invited participant. `facilitator` marks a join allowed only by role.
+function meetingJoinAccess(ev, user) {
+  if (eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { allowed: true, facilitator: false };
+  if (canManageCalendarRole(user)) return { allowed: true, facilitator: true };
+  return { allowed: false, facilitator: false };
+}
+
 function buildMyInvite(ev, user, now) {
   if (!isMeetingEvent(ev)) return null;
-  if (!eventParticipantKeys(ev).has(meetingTime.emailKey(user.email))) return { invited: false };
+  const access = meetingJoinAccess(ev, user);
+  if (!access.allowed) return { invited: false };
   const win = meetingTime.eventJoinWindow(ev);
   const record = attendanceRecordFor(ev, user.email);
   return {
     invited: true,
+    facilitator: access.facilitator,
     joined: !!record,
     joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
     joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
@@ -6066,7 +6076,9 @@ function calendarEventView(ev, user, now) {
   delete view.googleMeetLink;
   if (canManageCalendarRole(user)) {
     view.participantCount = eventParticipantKeys(ev).size;
-    view.joinedCount = Array.isArray(ev.attendance) ? ev.attendance.length : 0;
+    // Invited people who joined — a facilitator who joined without an invitation is not counted against the invite list.
+    const invitedKeys = eventParticipantKeys(ev);
+    view.joinedCount = (Array.isArray(ev.attendance) ? ev.attendance : []).filter(a => invitedKeys.has(a.emailKey)).length;
     delete view.attendance;
     delete view.clientRequestId;
   } else {
@@ -6100,7 +6112,12 @@ function calendarFeedFilter(user) {
   // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
   // meeting they scope to other people, so without this their own event vanished from their calendar the
   // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
-  return { $or: [{ recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email }] };
+  // ...plus every Meeting event (isMeetingEvent: no type, or the Meeting type): CIRL Staff facilitate the meetings
+  // and can join any of them, invited or not, so they must be able to see them to click Join.
+  return { $or: [
+    { recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email },
+    { className: { $in: [null, ''] } }, { className: { $regex: 'bg-primary-subtle' } }
+  ] };
 }
 app.get('/api/calendarevents', requireAuth, async (req, res) => {
   try {
@@ -6510,7 +6527,7 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
     if (!ev || !isMeetingEvent(ev)) return res.status(404).json({ error: 'Meeting not found.' });
 
     const key = meetingTime.emailKey(user.email);
-    if (!eventParticipantKeys(ev).has(key)) {
+    if (!meetingJoinAccess(ev, user).allowed) {  // invited participants, plus Administrator / CIRL Staff as facilitators
       return res.status(403).json({ error: 'You are not an invited participant of this meeting.' });
     }
     const win = meetingTime.eventJoinWindow(ev);
@@ -6594,6 +6611,26 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       };
     }).sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
 
+    // Administrator / CIRL Staff who joined as facilitators without being invited: listed after the invitees, and
+    // not counted in the invited/joined summary.
+    const invitedKeys = new Set(invited.map(meetingTime.emailKey));
+    const facilitators = (Array.isArray(ev.attendance) ? ev.attendance : [])
+      .filter(a => !invitedKeys.has(a.emailKey))
+      .map(a => {
+        const joinedAt = new Date(a.joinedAt);
+        return {
+          name: a.name || a.email,
+          role: displayRoleName(a.role) || '—',
+          email: a.email,
+          invitation: 'Facilitator (not invited)',
+          status: 'Joined',
+          facilitator: true,
+          joinedAt: joinedAt.toISOString(),
+          joinedAtDisplay: meetingTime.formatTimeInTz(joinedAt),
+          joinedDateDisplay: meetingTime.formatDateTimeInTz(joinedAt)
+        };
+      });
+
     const start = meetingTime.eventStartInstant(ev);
     res.json({
       event: {
@@ -6606,7 +6643,7 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       summary: { invited: participants.length, joined: participants.filter(p => p.status === 'Joined').length },
       google: { status: ev.googleSyncStatus || (ev.googleEventId ? 'sent' : 'not_attempted'), error: ev.googleSyncError || null, organizerEmail: ev.googleOrganizerEmail || null },
       skipped: Array.isArray(ev.inviteSkipped) ? ev.inviteSkipped : [],
-      participants
+      participants: participants.concat(facilitators)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
