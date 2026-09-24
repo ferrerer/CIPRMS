@@ -591,8 +591,7 @@
                       <!-- Partnership Requests Panel -->
                       <div id="panel-pr">
                         <div class="filter-row">
-                          <input class="form-control form-control-sm" id="pr-search" style="width:210px;"
-                            placeholder="Search ID, requestor, institution…" oninput="renderPR()">
+                          <input class="form-control form-control-sm" id="pr-search" style="width:210px;" oninput="renderPR()">
                           <select class="form-select form-select-sm" id="pr-status" style="width:145px;"
                             onchange="renderPR()">
                             <option value="">All Status</option>
@@ -643,8 +642,7 @@
                       <!-- Document Requests Panel -->
                       <div id="panel-dr" style="display:none;">
                         <div class="filter-row">
-                          <input class="form-control form-control-sm" id="dr-search" style="width:210px;"
-                            placeholder="Search institution, requestor…" oninput="renderDR()">
+                          <input class="form-control form-control-sm" id="dr-search" style="width:210px;" oninput="renderDR()">
                           <select class="form-select form-select-sm" id="dr-status" style="width:170px;"
                             onchange="renderDR()">
                             <option value="">All Status</option>
@@ -735,7 +733,7 @@
               <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
             </div>
             <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2" placeholder="Add a note about this version…"></textarea>
+              <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2"></textarea>
             </div>
             <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
               <i class="ri-upload-2-line me-1"></i>Upload
@@ -816,7 +814,7 @@
                 </div>
                 <div class="col-6">
                   <label class="form-label detail-label">Received By</label>
-                  <input type="text" class="form-control form-control-sm" id="dr-received-by" placeholder="Requester's name">
+                  <input type="text" class="form-control form-control-sm" id="dr-received-by">
                 </div>
               </div>
             </div>
@@ -856,7 +854,7 @@
               <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
             </div>
             <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2" placeholder="Add a note about this version…"></textarea>
+              <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2"></textarea>
             </div>
             <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
               <i class="ri-upload-2-line me-1"></i>Upload
@@ -1251,7 +1249,7 @@
       document.getElementById('pr-modal-footer').innerHTML = `
         <div id="pr-moreinfo-wrap" class="w-100 d-none mb-1">
           <label class="form-label fs-13 mb-1" for="pr-moreinfo-note">What information or documents are needed?</label>
-          <textarea id="pr-moreinfo-note" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Tell the requester what to provide…"></textarea>
+          <textarea id="pr-moreinfo-note" class="form-control form-control-sm" rows="2" maxlength="500"></textarea>
         </div>
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">
           <i class="ri-close-line me-1"></i>Close</button>

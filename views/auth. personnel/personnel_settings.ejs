@@ -103,27 +103,27 @@
                       <div class="row g-3">
                         <div class="col-md-6">
                           <label class="form-label" for="s-name">Full Name <span class="text-danger">*</span></label>
-                          <input type="text" class="form-control" id="s-name" placeholder="e.g. Juan dela Cruz" oninput="onNameInput()">
+                          <input type="text" class="form-control" id="s-name" oninput="onNameInput()">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-email">Email Address</label>
-                          <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" placeholder="e.g. personnel@cspc.edu.ph" disabled title="Email is tied to your login and cannot be changed here.">
+                          <input type="email" class="form-control" id="s-email" value="<%= userEmail %>" disabled title="Email is tied to your login and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-contact">Contact Number</label>
-                          <input type="text" class="form-control" id="s-contact" placeholder="—" disabled title="Set when your account was registered and cannot be changed here.">
+                          <input type="text" class="form-control" id="s-contact" disabled title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-dept">Department / College</label>
-                          <input type="text" class="form-control" id="s-dept" placeholder="—" disabled title="Set when your account was registered and cannot be changed here.">
+                          <input type="text" class="form-control" id="s-dept" disabled title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-position">Designation / Position</label>
-                          <input type="text" class="form-control" id="s-position" placeholder="—" disabled title="Set when your account was registered and cannot be changed here.">
+                          <input type="text" class="form-control" id="s-position" disabled title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-md-6">
                           <label class="form-label" for="s-institution">Institution / School</label>
-                          <input type="text" class="form-control" id="s-institution" placeholder="—" disabled title="Set when your account was registered and cannot be changed here.">
+                          <input type="text" class="form-control" id="s-institution" disabled title="Set when your account was registered and cannot be changed here.">
                         </div>
                         <div class="col-12">
                           <div class="form-text"><i class="ri-lock-line me-1"></i>Department, position, institution and contact number are set when your account is registered and cannot be changed here. Contact the CIRL Administrator if they need updating.</div>
@@ -148,7 +148,7 @@
                         <div class="col-12">
                           <label class="form-label" for="oldpasswordInput">Current Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
-                            <input type="password" class="form-control pe-5" id="oldpasswordInput" placeholder="Enter current password">
+                            <input type="password" class="form-control pe-5" id="oldpasswordInput">
                             <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('oldpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>
@@ -157,7 +157,7 @@
                         <div class="col-md-6">
                           <label class="form-label" for="newpasswordInput">New Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
-                            <input type="password" class="form-control pe-5" id="newpasswordInput" placeholder="Min. 8 characters, with upper/lowercase and a number">
+                            <input type="password" class="form-control pe-5" id="newpasswordInput">
                             <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('newpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>
@@ -166,7 +166,7 @@
                         <div class="col-md-6">
                           <label class="form-label" for="confirmpasswordInput">Confirm New Password <span class="text-danger">*</span></label>
                           <div class="position-relative">
-                            <input type="password" class="form-control pe-5" id="confirmpasswordInput" placeholder="Repeat new password">
+                            <input type="password" class="form-control pe-5" id="confirmpasswordInput">
                             <button type="button" class="btn btn-link position-absolute end-0 top-50 translate-middle-y text-muted px-3" onclick="togglePwd('confirmpasswordInput',this)" aria-label="Show or hide password">
                               <i class="ri-eye-line"></i>
                             </button>

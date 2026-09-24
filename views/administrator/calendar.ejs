@@ -204,7 +204,7 @@
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Event Name <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="f-title" placeholder="e.g. MOA Renewal – Osaka University">
+                                                <input type="text" class="form-control" id="f-title">
                                                 <div class="invalid-feedback">Please provide an event name.</div>
                                             </div>
                                             <div class="row g-3 mb-3">
@@ -221,12 +221,12 @@
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Institution / Location <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="f-location" placeholder="e.g. Osaka University">
+                                                <input type="text" class="form-control" id="f-location">
                                                 <div class="invalid-feedback">Please enter the institution or location.</div>
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label">Notes</label>
-                                                <textarea class="form-control" id="f-desc" rows="3" placeholder="Additional notes..."></textarea>
+                                                <textarea class="form-control" id="f-desc" rows="3"></textarea>
                                             </div>
                                             <div class="mb-2" id="f-recipients-wrap">
                                                 <label class="form-label" id="f-recipients-label">Notify Recipients <span class="text-muted fw-normal">(Optional)</span></label>
@@ -247,7 +247,7 @@
                                         <div id="step-recipients" class="d-none">
                                             <label class="form-label" for="rcp-search">Search recipients by email address <span class="text-muted fw-normal">(Optional)</span></label>
                                             <div class="position-relative mb-2">
-                                                <input type="text" class="form-control" id="rcp-search" autocomplete="off" placeholder="Start typing an email address…" aria-controls="rcp-results">
+                                                <input type="text" class="form-control" id="rcp-search" autocomplete="off" aria-controls="rcp-results">
                                             </div>
                                             <div id="rcp-results" role="listbox" aria-label="Matching users" aria-multiselectable="true"></div>
                                             <div class="form-text mb-3" id="rcp-hint">Click a person to add or remove them. Only the people selected here are notified and e-mailed a Google Calendar invitation.</div>

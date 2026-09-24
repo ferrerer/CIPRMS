@@ -306,7 +306,7 @@
           <div class="col-md-5">
             <label class="form-label fs-12 mb-1">Search</label>
             <div class="search-box">
-              <input type="text" class="form-control" id="reg-search" placeholder="Search by institution or country…" oninput="applyFilter()">
+              <input type="text" class="form-control" id="reg-search" oninput="applyFilter()">
               <i class="ri-search-line search-icon"></i>
             </div>
           </div>
@@ -523,7 +523,7 @@
                   </label>
                   <div class="input-group">
                     <span class="input-group-text"><i class="ri-building-line"></i></span>
-                    <input type="text" class="form-control" id="f-inst" placeholder="Type to search worldwide universities…" autocomplete="off" oninput="instSearch(this.value)" onkeydown="instKeyNav(event)">
+                    <input type="text" class="form-control" id="f-inst" autocomplete="off" oninput="instSearch(this.value)" onkeydown="instKeyNav(event)">
                     <i class="fa-solid fa-circle-notch ac-spinner" id="ac-spinner" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%)"></i>
                   </div>
                   <div id="ac-dropdown" class="list-group mt-1" style="position:absolute;z-index:9999;width:calc(100% - 2rem)"></div>
@@ -533,7 +533,7 @@
                   <label class="form-label" for="f-country-input">Country <span class="text-danger">*</span></label>
                   <div class="unit-combo" id="f-country-combo">
                     <div class="unit-combo-input-wrap">
-                      <input type="text" class="form-control country-combo-input" id="f-country-input" placeholder="Type to search countries…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                      <input type="text" class="form-control country-combo-input" id="f-country-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                       <i class="ri-arrow-down-s-line country-combo-caret"></i>
                       <div class="unit-combo-dropdown" id="f-country-dropdown" role="listbox" style="display:none"></div>
                     </div>
@@ -560,7 +560,7 @@
                 </div>
                 <div class="col-lg-6 mb-3">
                   <label class="form-label" for="f-partner-email">Partner Contact Email</label>
-                  <input type="email" class="form-control" id="f-partner-email" placeholder="contact@institution.edu">
+                  <input type="email" class="form-control" id="f-partner-email">
                 </div>
               </div>
               <div class="d-flex align-items-start gap-3 mt-4">
@@ -591,7 +591,7 @@
                   <div class="unit-combo" id="f-nature-combo">
                     <div class="unit-combo-chips" id="f-nature-chips"></div>
                     <div class="unit-combo-input-wrap">
-                      <input type="text" class="form-control" id="f-nature-input" placeholder="Type or search nature…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                      <input type="text" class="form-control" id="f-nature-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                       <div class="unit-combo-dropdown" id="f-nature-dropdown" role="listbox" style="display:none"></div>
                     </div>
                   </div>
@@ -613,7 +613,7 @@
                 </div>
                 <div class="col-lg-4 mb-3">
                   <label class="form-label" for="f-status">Status <span class="text-muted">(Auto-computed)</span></label>
-                  <input type="text" class="form-control bg-light" id="f-status" readonly placeholder="Set end date…">
+                  <input type="text" class="form-control bg-light" id="f-status" readonly>
                 </div>
               </div>
               <div class="d-flex align-items-start gap-3 mt-4">
@@ -638,25 +638,25 @@
                   <div class="unit-combo" id="f-unit-combo">
                     <div class="unit-combo-chips" id="f-unit-chips"></div>
                     <div class="unit-combo-input-wrap">
-                      <input type="text" class="form-control" id="f-unit-input" placeholder="Type or search unit…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                      <input type="text" class="form-control" id="f-unit-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                       <div class="unit-combo-dropdown" id="f-unit-dropdown" role="listbox" style="display:none"></div>
                     </div>
                   </div>
                 </div>
                 <div class="col-lg-6 mb-3">
                   <label class="form-label" for="f-coordinator">CIRL Coordinator / Contact Person</label>
-                  <input type="text" class="form-control" id="f-coordinator" placeholder="e.g. Dr. Santos">
+                  <input type="text" class="form-control" id="f-coordinator">
                 </div>
                 <div class="col-lg-12 mb-3">
                   <label class="form-label" for="f-doc-link">Google Drive Link to Scanned Document</label>
                   <div class="input-group">
                     <span class="input-group-text"><i class="ri-links-line"></i></span>
-                    <input type="url" class="form-control" id="f-doc-link" placeholder="https://drive.google.com/…">
+                    <input type="url" class="form-control" id="f-doc-link">
                   </div>
                 </div>
                 <div class="col-lg-12 mb-3">
                   <label class="form-label" for="f-remarks">Remarks</label>
-                  <textarea class="form-control" id="f-remarks" rows="3" placeholder="e.g. Renewed in 2024, pending 2nd extension…"></textarea>
+                  <textarea class="form-control" id="f-remarks" rows="3"></textarea>
                 </div>
               </div>
               <div class="d-flex align-items-start gap-3 mt-4">
@@ -722,7 +722,7 @@
             <label class="form-label" for="e-country-input">Country <span class="text-danger">*</span></label>
             <div class="unit-combo" id="e-country-combo">
               <div class="unit-combo-input-wrap">
-                <input type="text" class="form-control country-combo-input" id="e-country-input" placeholder="Type to search countries…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <input type="text" class="form-control country-combo-input" id="e-country-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                 <i class="ri-arrow-down-s-line country-combo-caret"></i>
                 <div class="unit-combo-dropdown" id="e-country-dropdown" role="listbox" style="display:none"></div>
               </div>
@@ -756,7 +756,7 @@
             <div class="unit-combo" id="e-nature-combo">
               <div class="unit-combo-chips" id="e-nature-chips"></div>
               <div class="unit-combo-input-wrap">
-                <input type="text" class="form-control" id="e-nature-input" placeholder="Type or search nature…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <input type="text" class="form-control" id="e-nature-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                 <div class="unit-combo-dropdown" id="e-nature-dropdown" role="listbox" style="display:none"></div>
               </div>
             </div>
@@ -772,7 +772,7 @@
             <div class="unit-combo" id="e-unit-combo">
               <div class="unit-combo-chips" id="e-unit-chips"></div>
               <div class="unit-combo-input-wrap">
-                <input type="text" class="form-control" id="e-unit-input" placeholder="Type or search unit…" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                <input type="text" class="form-control" id="e-unit-input" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
                 <div class="unit-combo-dropdown" id="e-unit-dropdown" role="listbox" style="display:none"></div>
               </div>
             </div>
@@ -848,7 +848,7 @@
           </div>
           <div class="col-12 mb-3">
             <label class="form-label">Renewal Remarks</label>
-            <textarea class="form-control" id="renew-remarks" rows="2" placeholder="e.g. Extended for 3 years — signed Apr 2026…"></textarea>
+            <textarea class="form-control" id="renew-remarks" rows="2"></textarea>
           </div>
         </div>
         <div class="alert alert-warning py-2 mb-0">

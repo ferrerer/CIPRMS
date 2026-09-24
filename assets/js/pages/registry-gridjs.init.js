@@ -887,7 +887,7 @@ function buildGrid() {
     ],
     data:data, search:true, pagination:{limit:6}, sort:true,
     className:{table:'table table-hover align-middle mb-0',thead:'table-light',search:'mb-3'},
-    language:{search:{placeholder:'Search partnerships\u2026'},pagination:{previous:'\u2190',next:'\u2192',showing:'Showing',results:function(){return 'partnerships';}}}
+    language:{search:{placeholder:''},pagination:{previous:'\u2190',next:'\u2192',showing:'Showing',results:function(){return 'partnerships';}}}
   }).render(document.getElementById('reg-grid')));
 }
 

@@ -89,7 +89,7 @@
                                                     <label for="reg-username" class="form-label">Full Name <span
                                                             class="text-danger">*</span></label>
                                                     <input type="text" class="form-control" id="reg-username"
-                                                        name="username" placeholder="Enter your full name"
+                                                        name="username"
                                                         value="<%= (typeof formData !== 'undefined' && formData.name) ? formData.name : '' %>" required>
                                                     <div class="invalid-feedback">Please enter your full name</div>
                                                 </div>
@@ -98,7 +98,6 @@
                                                     <label for="reg-email" class="form-label">Email <span
                                                             class="text-danger">*</span></label>
                                                     <input type="email" class="form-control" id="reg-email" name="email"
-                                                        placeholder="Enter email address"
                                                         value="<%= (typeof formData !== 'undefined' && formData.email) ? formData.email : '' %>" required>
                                                     <div class="invalid-feedback">Please enter a valid email</div>
                                                 </div>
@@ -107,7 +106,7 @@
                                                     <label class="form-label" for="reg-password">Password</label>
                                                     <div class="position-relative auth-pass-inputgroup">
                                                         <input type="password" class="form-control pe-5 password-input"
-                                                            onpaste="return false" placeholder="Enter password"
+                                                            onpaste="return false"
                                                             id="reg-password" name="password"
                                                             pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{8,}" required>
                                                         <button
@@ -123,8 +122,7 @@
                                                     <label class="form-label" for="reg-confirm-password">Confirm
                                                         Password</label>
                                                     <div class="position-relative auth-pass-inputgroup">
-                                                        <input type="password" class="form-control pe-5 password-input"
-                                                            placeholder="Confirm password" id="reg-confirm-password"
+                                                        <input type="password" class="form-control pe-5 password-input" id="reg-confirm-password"
                                                             name="confirmPassword" required>
                                                         <button
                                                             class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted password-addon material-shadow-none"
