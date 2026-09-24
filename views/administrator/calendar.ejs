@@ -14,6 +14,36 @@
     <link href="/velzon/assets/css/ciprms-bridge.css?v=20260924" rel="stylesheet"/>
     <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
     <%- include('../partials/calendar_layout') %>
+    <style>
+        /* Add Event is a two-step flow (details, then recipients): a slightly wider dialog on desktop so both fit
+           comfortably; on small screens Bootstrap's own full-width behaviour applies and the body scrolls inside the
+           modal (modal-dialog-scrollable), never outside it. */
+        @media (min-width: 992px) { #event-modal .modal-dialog { --vz-modal-width: 920px; } }
+        .cal-steps { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+        .cal-step { flex: 1 1 200px; display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; min-width: 0;
+                    border: 1px solid var(--vz-border-color); border-radius: .5rem; font-size: .8125rem; font-weight: 600;
+                    color: var(--vz-secondary-color, #878a99); }
+        .cal-step-num { flex: none; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center;
+                        justify-content: center; font-size: .75rem; background: var(--vz-tertiary-bg, #f3f6f9); }
+        .cal-step.active { border-color: var(--vz-primary); color: var(--vz-primary); background: var(--vz-primary-bg-subtle, #e7ebfa); }
+        .cal-step.active .cal-step-num { background: var(--vz-primary); color: #fff; }
+        .cal-step.done .cal-step-num { background: var(--vz-success, #0ab39c); color: #fff; }
+        #rcp-results { max-height: 240px; overflow-y: auto; border: 1px solid var(--vz-border-color); border-radius: .5rem; }
+        .rcp-row { display: flex; align-items: center; gap: .75rem; padding: .5rem .75rem; min-width: 0; cursor: pointer;
+                   border-bottom: 1px solid var(--vz-border-color); }
+        .rcp-row:last-child { border-bottom: 0; }
+        .rcp-row:hover, .rcp-row:focus-visible { background: var(--vz-tertiary-bg, #f3f6f9); outline: none; }
+        .rcp-row.selected { background: var(--vz-primary-bg-subtle, #e7ebfa); }
+        .rcp-text { flex: 1 1 auto; min-width: 0; }
+        .rcp-name, .rcp-email { overflow-wrap: anywhere; }
+        .rcp-email { font-size: .75rem; color: var(--vz-secondary-color, #878a99); }
+        #rcp-selected { display: flex; flex-wrap: wrap; gap: .4rem; max-height: 160px; overflow-y: auto; }
+        .rcp-chip { display: inline-flex; align-items: center; gap: .4rem; max-width: 100%; padding: .25rem .3rem .25rem .65rem;
+                    border-radius: 2rem; font-size: .8rem; background: var(--vz-primary-bg-subtle, #e7ebfa); color: var(--vz-primary); }
+        .rcp-chip > span { min-width: 0; overflow-wrap: anywhere; }
+        .rcp-chip button { flex: none; width: 20px; height: 20px; border: 0; border-radius: 50%; line-height: 1; padding: 0;
+                           background: rgba(64, 81, 137, .18); color: inherit; cursor: pointer; }
+    </style>
 </head>
 <body>
 <div id="layout-wrapper">
@@ -115,6 +145,11 @@
                                     </div>
                                     <div class="modal-body p-4">
                                         <!-- View mode -->
+                                        <!-- Add Event only: where the person is in the two-step flow -->
+                                        <div class="cal-steps d-none" id="cal-steps" aria-label="Add event steps">
+                                            <div class="cal-step active" id="cal-step-1"><span class="cal-step-num">1</span><span>Step 1: Event Details</span></div>
+                                            <div class="cal-step" id="cal-step-2"><span class="cal-step-num">2</span><span>Step 2: Recipients</span></div>
+                                        </div>
                                         <div id="view-mode">
                                             <div class="d-flex mb-2">
                                                 <div class="flex-shrink-0 me-3"><i class="ri-calendar-event-line text-muted fs-16"></i></div>
@@ -164,7 +199,7 @@
                                                 <div class="col-md-5">
                                                     <label class="form-label">Date <span class="text-danger">*</span></label>
                                                     <input type="date" class="form-control" id="f-date">
-                                                    <div class="invalid-feedback">Please choose the date.</div>
+                                                    <div class="invalid-feedback" id="f-date-error">Please choose the date.</div>
                                                 </div>
                                             </div>
                                             <div class="mb-3">
@@ -208,10 +243,29 @@
                                                 <div class="form-text" id="f-recipients-help">Ctrl/Cmd-click to select multiple. Only the users selected here will be notified and e-mailed a Google Calendar invitation. Leave blank to create the event without notifying anyone.</div>
                                             </div>
                                         </div>
+                                        <!-- Add Event, step 2: who to notify. Search runs on the user list already loaded from /api/users. -->
+                                        <div id="step-recipients" class="d-none">
+                                            <label class="form-label" for="rcp-search">Search recipients by email address <span class="text-muted fw-normal">(Optional)</span></label>
+                                            <div class="position-relative mb-2">
+                                                <input type="text" class="form-control" id="rcp-search" autocomplete="off" placeholder="Start typing an email address…" aria-controls="rcp-results">
+                                            </div>
+                                            <div id="rcp-results" role="listbox" aria-label="Matching users" aria-multiselectable="true"></div>
+                                            <div class="form-text mb-3" id="rcp-hint">Click a person to add or remove them. Only the people selected here are notified and e-mailed a Google Calendar invitation.</div>
+                                            <div class="mb-3">
+                                                <div class="fs-13 fw-semibold mb-1">Or notify a whole group</div>
+                                                <div class="d-flex flex-wrap gap-2" id="rcp-groups"></div>
+                                            </div>
+                                            <div>
+                                                <div class="fs-13 fw-semibold mb-1">Selected recipients <span class="badge bg-primary-subtle text-primary ms-1" id="rcp-count">0</span></div>
+                                                <div id="rcp-selected" aria-live="polite"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-soft-danger d-none" id="btn-delete"><i class="ri-close-line"></i> Delete</button>
                                         <button type="button" class="btn btn-soft-primary d-none" id="btn-edit-toggle"><i class="ri-edit-line"></i> Edit</button>
+                                        <button type="button" class="btn btn-light d-none" id="btn-back"><i class="ri-arrow-left-line align-bottom me-1"></i>Back</button>
+                                        <button type="button" class="btn btn-primary d-none" id="btn-next">Next<i class="ri-arrow-right-line align-bottom ms-1"></i></button>
                                         <button type="button" class="btn btn-success d-none" id="btn-save"><i class="ri-save-line"></i> Save</button>
                                     </div>
                                 </div>
@@ -305,6 +359,118 @@ function fc_wall(dt, allDay){
   return allDay ? date : date + 'T' + str_tm_input(dt);
 }
 function esc(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// Today's calendar date (YYYY-MM-DD) on the browser's clock — the earliest date a NEW event may be given.
+function todayDateStr(){ return str_date_input(new Date()); }
+// New events only: the date picker greys out every day before today (the native `min`), and a past date typed in by
+// hand is flagged inline. Editing an existing event removes the limit again — a historical event stays editable.
+function setDateMin(limitToToday){
+  var el = document.getElementById('f-date');
+  if(limitToToday) el.min = todayDateStr(); else el.removeAttribute('min');
+  el.classList.remove('is-invalid');
+}
+function validateNewEventDate(){
+  var el = document.getElementById('f-date');
+  var bad = isAdding && !!el.value && el.value < todayDateStr();
+  if(bad) document.getElementById('f-date-error').textContent = 'Past dates cannot be selected. Please choose today or a future date.';
+  el.classList.toggle('is-invalid', bad);
+  return !bad;
+}
+// ── Add Event is two steps: 1) event details, 2) recipients ─────────────────────────────────────────────────────
+// Next validates the details and only switches panels — nothing is sent. Save (step 2) is the one and only create
+// request, with the same clientRequestId de-duplication and in-flight guard as before. Editing an existing event is
+// NOT part of this flow: it keeps its single form and Save.
+var addStep = 1, allUsers = [], selectedRecipients = [];
+var RECIPIENT_GROUPS = [['all', 'All Users'], ['Administrator', 'Administrators'], ['Auth. Personnel', 'College Dean'], ['potential_partner', 'Partner'], ['Staff', 'CIRL Staff']];
+var ROLE_LABELS = { 'Administrator': 'Administrator', 'Auth. Personnel': 'College Dean', 'potential_partner': 'Partner', 'Staff': 'CIRL Staff' };
+
+function toggleRecipient(value, label){
+  var i = selectedRecipients.findIndex(function(r){ return r.value === value; });
+  if(i >= 0) selectedRecipients.splice(i, 1); else selectedRecipients.push({ value: value, label: label });
+  renderRecipients();
+}
+function renderRecipients(){
+  var q = document.getElementById('rcp-search').value.trim().toLowerCase();
+  var chosen = {}; selectedRecipients.forEach(function(r){ chosen[r.value] = true; });
+  var matches = allUsers.filter(function(u){
+    return u.email && (!q || u.email.toLowerCase().indexOf(q) >= 0 || String(u.name || '').toLowerCase().indexOf(q) >= 0);
+  });
+  var shown = matches.slice(0, 50);
+  var html = shown.map(function(u){
+    var on = !!chosen[u.email], role = ROLE_LABELS[u.role] || u.role || '';
+    return '<div class="rcp-row' + (on ? ' selected' : '') + '" role="option" tabindex="0" aria-selected="' + on + '" data-email="' + esc(u.email) + '">' +
+      '<div class="rcp-text"><div class="rcp-name fw-medium fs-13">' + esc(u.name || u.email) + '</div><div class="rcp-email">' + esc(u.email) + '</div></div>' +
+      (role ? '<span class="badge bg-light text-body flex-shrink-0">' + esc(role) + '</span>' : '') +
+      '<i class="ri-' + (on ? 'checkbox-circle-fill text-primary' : 'add-circle-line text-muted') + ' fs-18 flex-shrink-0"></i></div>';
+  }).join('');
+  if(!shown.length) html = '<div class="text-muted fs-13 p-3">' + (allUsers.length ? 'No users match “' + esc(q) + '”.' : 'No users are available to select.') + '</div>';
+  else if(matches.length > shown.length) html += '<div class="text-muted fs-12 p-2 text-center">Showing the first ' + shown.length + ' of ' + matches.length + ' — keep typing to narrow the list.</div>';
+  document.getElementById('rcp-results').innerHTML = html;
+
+  document.getElementById('rcp-groups').innerHTML = RECIPIENT_GROUPS.map(function(g){
+    var on = !!chosen[g[0]];
+    return '<button type="button" class="btn btn-sm ' + (on ? 'btn-primary' : 'btn-outline-primary') + '" aria-pressed="' + on + '" data-group="' + esc(g[0]) + '">' + esc(g[1]) + '</button>';
+  }).join('');
+
+  document.getElementById('rcp-count').textContent = selectedRecipients.length;
+  document.getElementById('rcp-selected').innerHTML = selectedRecipients.length
+    ? selectedRecipients.map(function(r){
+        return '<span class="rcp-chip"><span>' + esc(r.label) + '</span><button type="button" data-remove="' + esc(r.value) + '" aria-label="Remove ' + esc(r.label) + '">&times;</button></span>';
+      }).join('')
+    : '<span class="text-muted fs-13">No recipients selected — the event will be created without notifying anyone.</span>';
+}
+function showStep(n){
+  addStep = n;
+  var two = n === 2;
+  document.getElementById('edit-mode').classList.toggle('d-none', two);
+  document.getElementById('step-recipients').classList.toggle('d-none', !two);
+  document.getElementById('btn-next').classList.toggle('d-none', two);
+  document.getElementById('btn-back').classList.toggle('d-none', !two);
+  document.getElementById('btn-save').classList.toggle('d-none', !two);
+  var s1 = document.getElementById('cal-step-1'), s2 = document.getElementById('cal-step-2');
+  s1.classList.toggle('active', !two); s1.classList.toggle('done', two);
+  s2.classList.toggle('active', two);
+  setBreadcrumb(two ? ['Calendar', 'New Event', 'Recipients'] : ['Calendar', 'New Event']);
+  if(two){ renderRecipients(); document.getElementById('rcp-search').focus(); }
+}
+// Leaves the Add wizard chrome behind (view / edit use the modal as before).
+function leaveWizard(){
+  ['cal-steps', 'step-recipients', 'btn-next', 'btn-back'].forEach(function(id){ document.getElementById(id).classList.add('d-none'); });
+}
+// Reads and checks the event details (step 1's fields). Returns them, or null after telling the person what is wrong.
+// Used by Next (add) and by Save (edit, and the final Save of add) — the same checks in one place.
+function readEventDetails(){
+  var title  = document.getElementById('f-title').value.trim();
+  var date   = document.getElementById('f-date').value;
+  var tinput = document.getElementById('f-title');
+  // A new event needs every field except Notes and Recipients (highlighted + listed in the warning); editing an
+  // existing event keeps the lighter name + date check, since older events may lack some fields.
+  if(isAdding){
+    if(!checkRequiredNewEventFields()){ showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields to create the event.', '#f06548'); return null; }
+  } else {
+    if(!title || !date){ tinput.classList.add('is-invalid'); if(!title) tinput.focus(); else document.getElementById('f-date').focus(); return null; }
+    tinput.classList.remove('is-invalid');
+  }
+  // A brand-new event's date must be today or later — flagged inline on the date field (a date typed by hand is
+  // not stopped by the picker's `min`), and nothing is sent.
+  if(isAdding && !validateNewEventDate()){ document.getElementById('f-date').focus(); showToast('Past dates cannot be selected. Please choose today or a future date.', '#f06548'); return null; }
+  var st = document.getElementById('f-start').value, et = document.getElementById('f-end').value;
+  if(st && et && et <= st){
+    var endEl = document.getElementById('f-end');
+    document.getElementById('f-end-feedback').textContent = 'The end time must be after the start time.';
+    endEl.classList.add('is-invalid'); endEl.focus();
+    showToast('The end time must be after the start time.', '#f06548');
+    return null;
+  }
+  // Only a brand-new event is checked — editing/dragging an existing (possibly now-historical) event is unaffected.
+  if(isAdding && isPastNewEvent(date, st)){ showToast('This date/time has already passed. Please choose a future date and time.', '#f06548'); return null; }
+  return {
+    title: title, st: st, allDay: !st,
+    start: st ? date + 'T' + st : date, end: et ? date + 'T' + et : null,
+    cls: document.getElementById('f-type').value,
+    loc: document.getElementById('f-location').value.trim(),
+    desc: document.getElementById('f-desc').value.trim()
+  };
+}
 // Client-side approximation only (compares against the BROWSER's local clock, not APP_TIMEZONE) — a quick, friendly
 // "that's already passed" before ever hitting the network. The server (isNewEventInThePast in cirl.js, Asia/Manila /
 // APP_TIMEZONE) is the authoritative check and cannot be bypassed by skipping this one. An all-day event compares by
@@ -494,6 +660,7 @@ function reconcileOpenEvent(){
 // â”€â”€ Modal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function showView(ev){
   currentEv = ev; isAdding = false;
+  leaveWizard();
   document.getElementById('modal-title').textContent = ev.title;
   document.getElementById('view-mode').classList.remove('d-none');
   document.getElementById('edit-mode').classList.add('d-none');
@@ -545,6 +712,7 @@ function checkRequiredNewEventFields(){
     var el = document.getElementById(f[0]);
     var empty = !String(el.value || '').trim();
     el.classList.toggle('is-invalid', empty);
+    if(empty && f[0] === 'f-date') document.getElementById('f-date-error').textContent = 'Please choose the date.';
     if(empty) missing.push(f[1]);
   });
   showMissingAlert(missing);
@@ -562,6 +730,7 @@ REQUIRED_NEW_EVENT_FIELDS.forEach(function(f){
     el.addEventListener(evt, function(){
       if(!el.classList.contains('is-invalid') || !String(el.value || '').trim()) return;
       el.classList.remove('is-invalid');
+      if(f[0] === 'f-date') validateNewEventDate();
       var stillMissing = REQUIRED_NEW_EVENT_FIELDS.filter(function(r){ return document.getElementById(r[0]).classList.contains('is-invalid'); }).map(function(r){ return r[1]; });
       showMissingAlert(stillMissing);
     });
@@ -579,29 +748,35 @@ function showAdd(dateStr, prefill){
   document.getElementById('edit-mode').classList.remove('d-none');
   document.getElementById('f-title').value    = prefill.title || '';
   document.getElementById('f-date').value     = dateStr || '';
+  setDateMin(true);
   document.getElementById('f-start').value    = '';
   document.getElementById('f-end').value      = '';
   document.getElementById('f-location').value = '';
   document.getElementById('f-desc').value     = '';
   document.getElementById('f-type').value     = prefill.className || ''; // no default: the event type must be chosen
   document.getElementById('v-gcal-badge').classList.add('d-none');
-  document.getElementById('f-recipients-wrap').classList.remove('d-none');
+  // Step 1 holds only the event details: recipients are chosen on step 2.
+  document.getElementById('f-recipients-wrap').classList.add('d-none');
   Array.from(document.getElementById('f-recipients').options).forEach(function(o){ o.selected = false; });
+  selectedRecipients = [];
+  document.getElementById('rcp-search').value = '';
   document.getElementById('btn-delete').classList.add('d-none');
   document.getElementById('btn-edit-toggle').classList.add('d-none');
-  document.getElementById('btn-save').classList.remove('d-none');
-  setBreadcrumb(['Calendar', 'New Event']);
+  document.getElementById('cal-steps').classList.remove('d-none');
+  showStep(1);
   bsModal.show();
 }
 
 function showEdit(){
   if(!currentEv) return;
   clearFormErrors();
+  leaveWizard();
   document.getElementById('modal-title').textContent = 'Edit Event';
   document.getElementById('view-mode').classList.add('d-none');
   document.getElementById('edit-mode').classList.remove('d-none');
   document.getElementById('f-title').value    = currentEv.title;
   document.getElementById('f-date').value     = str_date_input(currentEv.start);
+  setDateMin(false);   // editing an existing (possibly historical) event is never limited to today-or-later
   document.getElementById('f-start').value    = currentEv.allDay ? '' : str_tm_input(currentEv.start);
   document.getElementById('f-end').value      = currentEv.end && !currentEv.allDay ? str_tm_input(currentEv.end) : '';
   document.getElementById('f-location').value = currentEv.extendedProps.location    || '';
@@ -656,6 +831,34 @@ document.addEventListener('DOMContentLoaded', function(){
     resetBreadcrumb();   // nothing brings event-modal back when Attendance closes — same as today's UX
   });
   document.getElementById('btn-attendance').addEventListener('click', openAttendance);
+
+  // Add Event wizard. Next only validates and switches panels (no request); Back only switches back, and every
+  // entered value stays in the step-1 fields because that panel is hidden, not rebuilt.
+  document.getElementById('btn-next').addEventListener('click', function(){ if(readEventDetails()) showStep(2); });
+  document.getElementById('btn-back').addEventListener('click', function(){ if(!saving) showStep(1); });
+  document.getElementById('rcp-search').addEventListener('input', renderRecipients);
+  document.getElementById('rcp-search').addEventListener('keydown', function(e){ if(e.key === 'Enter') e.preventDefault(); });
+  function pickRow(row){
+    var email = row.getAttribute('data-email');
+    var u = allUsers.find(function(x){ return x.email === email; });
+    if(u) toggleRecipient(u.email, u.email);
+  }
+  document.getElementById('rcp-results').addEventListener('click', function(e){ var row = e.target.closest('.rcp-row'); if(row) pickRow(row); });
+  document.getElementById('rcp-results').addEventListener('keydown', function(e){
+    var row = e.target.closest('.rcp-row');
+    if(row && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); pickRow(row); }
+  });
+  document.getElementById('rcp-groups').addEventListener('click', function(e){
+    var b = e.target.closest('[data-group]'); if(!b) return;
+    var g = RECIPIENT_GROUPS.find(function(x){ return x[0] === b.getAttribute('data-group'); });
+    if(g) toggleRecipient(g[0], 'Group: ' + g[1]);
+  });
+  document.getElementById('rcp-selected').addEventListener('click', function(e){
+    var b = e.target.closest('[data-remove]'); if(!b) return;
+    var v = b.getAttribute('data-remove');
+    selectedRecipients = selectedRecipients.filter(function(r){ return r.value !== v; });
+    renderRecipients();
+  });
   // If this user joins from the modal, keep the calendar's copy of the event current.
   MeetingJoin.onJoined(function(invite){ if(currentEv) currentEv.setExtendedProp('myInvite', invite); });
   var calEl = document.getElementById('calendar');
@@ -678,8 +881,9 @@ document.addEventListener('DOMContentLoaded', function(){
   // still work for them.
   function escapeHtml(str){ return String(str==null?'':str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   fetch('/api/users').then(function(r){ return r.ok ? r.json() : []; }).then(function(users){
+    allUsers = Array.isArray(users) ? users : [];   // also feeds the Add Event step-2 search
     var group = document.getElementById('f-recipients-individuals');
-    group.innerHTML = users.map(function(u){ return '<option value="'+escapeHtml(u.email)+'">'+escapeHtml(u.name)+' ('+escapeHtml(u.email)+')</option>'; }).join('');
+    group.innerHTML =users.map(function(u){ return '<option value="'+escapeHtml(u.email)+'">'+escapeHtml(u.name)+' ('+escapeHtml(u.email)+')</option>'; }).join('');
   }).catch(function(){ /* Auth. Personnel: no individual-user list, role options still work */ });
 
   cal = new FullCalendar.Calendar(calEl, {
@@ -702,6 +906,10 @@ document.addEventListener('DOMContentLoaded', function(){
       cal.setOption('aspectRatio', calendarAspect(w));
       cal.changeView(w < 768 ? 'listMonth' : w < 1200 ? 'timeGridWeek' : 'dayGridMonth');
     },
+    // Creating from a calendar cell: days before today are not selectable (the cell just tells the person why).
+    // Viewing or navigating to earlier months, and clicking an existing event there, are untouched.
+    selectAllow: function(span){ return str_date_input(span.start) >= todayDateStr(); },
+    dateClick:   function(info){ if(CAN_MANAGE && info.dateStr.slice(0,10) < todayDateStr()) showToast('Past dates are not available for new events.', '#f06548'); },
     select:      function(info){ showAdd(info.startStr.slice(0,10)); },
     eventClick:  function(info){ showView(info.event); },
 
@@ -726,6 +934,7 @@ document.addEventListener('DOMContentLoaded', function(){
     // Event form with the tile's type, name and the dropped-on date filled in,
     // so the same required fields (times, location) must be completed first.
     drop: function(info){
+      if(info.dateStr.slice(0,10) < todayDateStr()){ showToast('Past dates are not available for new events.', '#f06548'); return; }
       var cls   = info.draggedEl.dataset.class || '';
       var title = info.draggedEl.innerText.trim();
       showAdd(String(info.dateStr).slice(0, 10), { title: title, className: cls });
@@ -752,6 +961,9 @@ document.addEventListener('DOMContentLoaded', function(){
     });
   }
 
+  // Re-check a date as it is typed/picked (new events only): shows the inline message straight away.
+  ['input', 'change'].forEach(function(t){ document.getElementById('f-date').addEventListener(t, validateNewEventDate); });
+
   var btnNewEvent = document.getElementById('btn-new-event');
   if (btnNewEvent) btnNewEvent.addEventListener('click', function(){ showAdd(''); });
   document.getElementById('btn-edit-toggle').addEventListener('click', showEdit);
@@ -759,36 +971,15 @@ document.addEventListener('DOMContentLoaded', function(){
   // â”€â”€ Save (add or edit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   document.getElementById('btn-save').addEventListener('click', function(){
     if(saving) return; // a second click while the first request is in flight would be a second Save
-    var title  = document.getElementById('f-title').value.trim();
-    var date   = document.getElementById('f-date').value;
-    var tinput = document.getElementById('f-title');
-    if(isAdding){
-      if(!checkRequiredNewEventFields()){
-        showToast('<i class="ri-error-warning-line me-1"></i>Please fill in all required fields to create the event.', '#f06548');
-        return;
-      }
-    } else {
-      if(!title || !date){ tinput.classList.add('is-invalid'); return; }
-      tinput.classList.remove('is-invalid');
-    }
-
-    var st    = document.getElementById('f-start').value;
-    var et    = document.getElementById('f-end').value;
-    var start = st ? date + 'T' + st : date;
-    var end   = et ? date + 'T' + et : null;
-    if(st && et && et <= st){
-      var endEl = document.getElementById('f-end');
-      document.getElementById('f-end-feedback').textContent = 'The end time must be after the start time.';
-      endEl.classList.add('is-invalid'); endEl.focus();
-      showToast('The end time must be after the start time.', '#f06548');
-      return;
-    }
-    // Only a brand-new event is checked — editing/dragging an existing (possibly now-historical) event is unaffected.
-    if(isAdding && isPastNewEvent(date, st)){ showToast('This date/time has already passed. Please choose a future date and time.', '#f06548'); return; }
-    var cls   = document.getElementById('f-type').value;
-    var loc   = document.getElementById('f-location').value.trim();
-    var desc  = document.getElementById('f-desc').value.trim();
-    var recipients = Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
+    // Same checks as Next. If something is wrong at the final Save of a new event (e.g. the time has passed while
+    // the recipients were being chosen), go back to the details so the problem is visible.
+    var d = readEventDetails();
+    if(!d){ if(isAdding) showStep(1); return; }
+    var title = d.title, st = d.st, start = d.start, end = d.end, cls = d.cls, loc = d.loc, desc = d.desc;
+    // Add: the recipients picked on step 2. Edit: the attendee list on the edit form, as before.
+    var recipients = isAdding
+      ? selectedRecipients.map(function(r){ return r.value; })
+      : Array.from(document.getElementById('f-recipients').selectedOptions).map(function(o){ return o.value; });
     var saveBtn = document.getElementById('btn-save');
     function finish(){ saving = false; saveBtn.disabled = false; }
     saving = true; saveBtn.disabled = true;
