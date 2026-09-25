@@ -437,12 +437,16 @@ a:focus-visible {
 }
 
 /* ── Filter inputs ── */
+/* input:not([type]) — search boxes written without a type attribute (e.g. the Requests page's #pr-search / #dr-search)
+   are text inputs too; without it they kept the near-invisible default background while the Status dropdown next to
+   them got this brighter style. */
 [data-bs-theme="dark"] .filter-row input[type="text"],
 [data-bs-theme="dark"] .filter-row input[type="search"],
+[data-bs-theme="dark"] .filter-row input:not([type]),
 [data-bs-theme="dark"] .filter-row select {
     border-color: rgba(255,255,255,.12);
     background: #262d3d;
-    color: #ced4da;
+    color: var(--vz-body-color);
 }
 [data-bs-theme="dark"] .filter-row input:focus,
 [data-bs-theme="dark"] .filter-row select:focus {
@@ -511,7 +515,7 @@ a:focus-visible {
     width: 100%;
     max-width: 360px;
     height: calc(1.5em + 0.94rem + 2px); /* matches Bootstrap 5's default .form-control height */
-    padding: .47rem .9rem;
+    padding: .47rem .9rem .47rem 2.25rem; /* left room for the search icon (Velzon's .gridjs-search::before) */
     font-size: .875rem;
     border-radius: .25rem;
     border-color: #ced4da;
@@ -523,6 +527,9 @@ a:focus-visible {
 @media (max-width: 575.98px) {
     .gridjs-search-input.gridjs-input { max-width: 100%; }
 }
+/* Placeholders were removed system-wide. Grid.js falls back to its own "Type a keyword..." when a table's search
+   placeholder is empty, so that built-in text is hidden here instead (the search icon marks the box). */
+.gridjs-search-input.gridjs-input::placeholder { color: transparent; }
 
 /* ── Grid.js tables (vendor theme, assets/libs/gridjs/theme/mermaid.min.css) ──
    That vendor stylesheet hardcodes #fff/light-gray backgrounds and dark text

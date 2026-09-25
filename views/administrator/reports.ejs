@@ -15,7 +15,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925c" rel="stylesheet" />
     <!-- Shared Country option list (same one the Registry Add/Edit Partnership Country combobox uses) — backs
          the Custom Report Builder's Country filter below, so there is one country list in the app, not two. -->
     <script src="/velzon/assets/js/shared/country-options.js"></script>
@@ -23,6 +23,9 @@
          shadow, bounded/scrollable results, hover highlight, dark-mode variant) as the Registry page's Country
          combobox, defined independently here since this is a separate template with its own CSS. -->
     <style>
+      /* Audit Trail filters: same size as the audit table's search bar (normal-size controls + its 14px text). */
+      #audit-filter-action, #audit-filter-role, #audit-filter-from, #audit-filter-to,
+      button[onclick="resetAuditFilters()"] { font-size: .875rem; }
       .cr-country-wrap { position: relative; }
       .cr-country-dropdown {
         position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
@@ -587,7 +590,7 @@
                                                 <!-- Filters -->
                                                 <div class="row g-2 mb-3">
                                                     <div class="col-md-3">
-                                                        <select id="audit-filter-action" class="form-select form-select-sm" onchange="applyAuditFilters()">
+                                                        <select id="audit-filter-action" class="form-select" onchange="applyAuditFilters()">
                                                             <option value="">All Actions</option>
                                                             <option value="ADD">ADD</option>
                                                             <option value="EDIT">EDIT</option>
@@ -598,7 +601,7 @@
                                                         </select>
                                                     </div>
                                                     <div class="col-md-3">
-                                                        <select id="audit-filter-role" class="form-select form-select-sm" onchange="applyAuditFilters()">
+                                                        <select id="audit-filter-role" class="form-select" onchange="applyAuditFilters()">
                                                             <option value="">All Roles</option>
                                                             <option value="Administrator">Administrator</option>
                                                             <option value="Auth. Personnel">College Dean</option>
@@ -607,13 +610,13 @@
                                                         </select>
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <input type="date" id="audit-filter-from" class="form-control form-control-sm" onchange="applyAuditFilters()">
+                                                        <input type="date" id="audit-filter-from" class="form-control" onchange="applyAuditFilters()">
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <input type="date" id="audit-filter-to" class="form-control form-control-sm" onchange="applyAuditFilters()">
+                                                        <input type="date" id="audit-filter-to" class="form-control" onchange="applyAuditFilters()">
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <button class="btn btn-sm btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset</button>
+                                                        <button class="btn btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset</button>
                                                     </div>
                                                 </div>
                                                 <div id="audit-grid"></div>
