@@ -463,10 +463,23 @@ function isActivated(userDoc) {
   return !!userDoc && userDoc.activated !== false;
 }
 // ── HELPER: profile picture ───────────────────────────────────────────────────
-// Every account starts with this picture until its owner uploads their own (Settings → click the photo).
+// Which picture an account shows, in order: the photo its owner uploaded here (Settings → click the photo), else the
+// profile photo of their Google account (googleAvatarUrl — saved at every "Continue with Google" sign-in, so it also
+// shows after later email/password logins), else the default picture.
 const DEFAULT_AVATAR_URL = '/images/default-avatar.jpg';
 function avatarUrlFor(userDoc) {
-  return (userDoc && userDoc.avatarUrl) || DEFAULT_AVATAR_URL;
+  return (userDoc && (userDoc.avatarUrl || userDoc.googleAvatarUrl)) || DEFAULT_AVATAR_URL;
+}
+// The profile photo URL from a Google sign-in, or null when the account has none. Only an https URL on Google's own
+// photo host is accepted, since it is written into <img src> on every page. Google hands out a 96px thumbnail
+// ("…=s96-c"); a 256px one is requested instead so it stays sharp on the Settings page.
+function googlePhotoUrlFrom(googleProfile) {
+  const raw = googleProfile && Array.isArray(googleProfile.photos) && googleProfile.photos[0] && googleProfile.photos[0].value;
+  if (typeof raw !== 'string') return null;
+  let url;
+  try { url = new URL(raw); } catch (e) { return null; }
+  if (url.protocol !== 'https:' || !/(^|\.)googleusercontent\.com$/i.test(url.hostname)) return null;
+  return url.toString().replace(/=s\d+(-c)?$/, '=s256-c');
 }
 // Where a freshly signed-in user lands: the activation form until the account is activated, their home after.
 function landingFor(userDoc) {
@@ -587,9 +600,14 @@ app.get('/auth/google/callback', (req, res, next) => {
         return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
       }
 
-      // Update last login
+      // Update last login, and keep the Google profile photo current: saved when the Google account has one,
+      // removed when it no longer does (so the account falls back to the default picture).
       const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      await db.collection('users').updateOne({ email: googleEmail }, { $set: { login: today } });
+      const googleAvatarUrl = googlePhotoUrlFrom(googleUser);
+      await db.collection('users').updateOne({ email: googleEmail }, googleAvatarUrl
+        ? { $set: { login: today, googleAvatarUrl } }
+        : { $set: { login: today }, $unset: { googleAvatarUrl: '' } });
+      if (googleAvatarUrl) dbUser.googleAvatarUrl = googleAvatarUrl; else delete dbUser.googleAvatarUrl;
       console.log(`✓ Google login: ${dbUser.name} (${dbUser.role})`);
 
       // Regenerate session to prevent fixation, then store user data
@@ -5222,7 +5240,7 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // caller could override the server-computed id and collide with (or hijack
     // the identity of) an existing user, which every edit/delete/password
     // route looks up by that same id.
-    const { id: _clientId, _id: _clientMongoId, avatarUrl: _avatarUrl, ...safeBody } = req.body; // avatarUrl: only via POST /api/profile/avatar
+    const { id: _clientId, _id: _clientMongoId, avatarUrl: _avatarUrl, googleAvatarUrl: _googleAvatarUrl, ...safeBody } = req.body; // avatarUrl: only via POST /api/profile/avatar; googleAvatarUrl: only via Google sign-in
     const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? last[0].id + 1 : 1;
     // Unit/Department, Institution, Position and Contact Number are no longer asked for on Add User — the account
@@ -5259,7 +5277,7 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     // this record's identity mid-edit, breaking every route that looks it up
     // by id (delete, password change, this same edit endpoint next time).
     // activated/activatedAt are likewise dropped: only the owner's own activation form (POST /api/activate) sets them, and avatarUrl only the owner's upload.
-    const { id: _clientId, _id: _clientMongoId, activated: _activated, activatedAt: _activatedAt, avatarUrl: _avatarUrl, ...updateData } = req.body;
+    const { id: _clientId, _id: _clientMongoId, activated: _activated, activatedAt: _activatedAt, avatarUrl: _avatarUrl, googleAvatarUrl: _googleAvatarUrl, ...updateData } = req.body;
 
     // Privilege-escalation boundary: Staff can manage every other account,
     // but never an Administrator's (regardless of which fields are being
@@ -7748,7 +7766,7 @@ app.get('/api/partner/profile', requirePartner, async (req, res) => {
   try {
     const db = getDb();
     const doc = await db.collection('profiles').findOne({ email: req.session.user.email });
-    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { avatarUrl: 1 } });
+    const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { avatarUrl: 1, googleAvatarUrl: 1 } });
     res.json({ ...(doc ? doc.profile : {}), avatarUrl: avatarUrlFor(userDoc) });
   } catch (err) {
     res.status(500).json({ error: err.message });

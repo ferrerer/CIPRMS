@@ -27,10 +27,12 @@ jest.mock('passport', () => ({
       if (!callback) return res.redirect('/'); // /auth/google itself — unused by these tests
       const testEmail = req.headers['x-test-google-email'];
       if (!testEmail) return callback(null, false, { message: 'no test identity supplied' });
+      const testPhoto = req.headers['x-test-google-photo'];
       return callback(null, {
         id: 'test-google-id-' + testEmail,
         displayName: req.headers['x-test-google-name'] || 'Test Google User',
-        emails: [{ value: testEmail }]
+        emails: [{ value: testEmail }],
+        ...(testPhoto ? { photos: [{ value: testPhoto }] } : {})
       }, null);
     };
   }
@@ -151,6 +153,68 @@ describe('Google OAuth allowlist — /auth/google/callback', () => {
 
     const created = await db.collection('users').findOne({ email });
     expect(created).toBeNull();
+  });
+});
+
+describe('Google sign-in — profile photo', () => {
+  const PHOTO = 'https://lh3.googleusercontent.com/a/jesttest-photo=s96-c';
+  const PHOTO_256 = 'https://lh3.googleusercontent.com/a/jesttest-photo=s256-c';
+  const DEFAULT_AVATAR = '/images/default-avatar.jpg';
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.alloc(64)]);
+  const headerAvatar = html => (html.match(/header-profile-user js-user-avatar" src="([^"]+)"/) || [])[1];
+
+  test('a Google account photo becomes the profile picture, and is still shown after a later email/password login', async () => {
+    const user = await createTestUser({ role: 'Staff' });
+    const agent = request.agent(app);
+    await agent.get('/auth/google/callback').set('x-test-google-email', user.email).set('x-test-google-photo', PHOTO);
+
+    expect((await db.collection('users').findOne({ id: user.id })).googleAvatarUrl).toBe(PHOTO_256);
+    expect(headerAvatar((await agent.get('/staff/dashboard')).text)).toBe(PHOTO_256);
+
+    const passwordAgent = request.agent(app);
+    await passwordAgent.post('/login').type('form').send({ username: user.email, password: user.password });
+    expect(headerAvatar((await passwordAgent.get('/staff/dashboard')).text)).toBe(PHOTO_256);
+  });
+
+  test('a Google account with no photo gets the default picture, and a photo it no longer has is dropped', async () => {
+    const user = await createTestUser({ role: 'Staff' });
+    const agent = request.agent(app);
+    await agent.get('/auth/google/callback').set('x-test-google-email', user.email);
+    expect(headerAvatar((await agent.get('/staff/dashboard')).text)).toBe(DEFAULT_AVATAR);
+
+    await db.collection('users').updateOne({ id: user.id }, { $set: { googleAvatarUrl: PHOTO_256 } });
+    const again = request.agent(app);
+    await again.get('/auth/google/callback').set('x-test-google-email', user.email);
+    expect((await db.collection('users').findOne({ id: user.id })).googleAvatarUrl).toBeUndefined();
+    expect(headerAvatar((await again.get('/staff/dashboard')).text)).toBe(DEFAULT_AVATAR);
+  });
+
+  test('a photo URL that is not https on Google\'s photo host is ignored', async () => {
+    const user = await createTestUser({ role: 'Staff' });
+    for (const bad of ['http://lh3.googleusercontent.com/a/x=s96-c', 'https://evil.example.com/a.png', 'javascript:alert(1)']) {
+      const agent = request.agent(app);
+      await agent.get('/auth/google/callback').set('x-test-google-email', user.email).set('x-test-google-photo', bad);
+      expect(headerAvatar((await agent.get('/staff/dashboard')).text)).toBe(DEFAULT_AVATAR);
+    }
+  });
+
+  test('a photo uploaded in CIPRMS takes priority over the Google photo; User Management cannot set the Google photo', async () => {
+    const user = await createTestUser({ role: 'Staff' });
+    const agent = request.agent(app);
+    await agent.get('/auth/google/callback').set('x-test-google-email', user.email).set('x-test-google-photo', PHOTO);
+    const up = await agent.post('/api/profile/avatar').attach('avatar', PNG, { filename: 'me.png', contentType: 'image/png' });
+    expect(up.status).toBe(200);
+    try {
+      expect(headerAvatar((await agent.get('/staff/dashboard')).text)).toBe(up.body.avatarUrl);
+    } finally {
+      require('fs').rmSync(require('path').join(__dirname, '..', up.body.avatarUrl), { force: true });
+    }
+
+    const admin = await createTestUser({ role: 'Administrator' });
+    const adminAgent = request.agent(app);
+    await adminAgent.get('/auth/google/callback').set('x-test-google-email', admin.email);
+    await adminAgent.patch('/api/users/' + user.id).send({ googleAvatarUrl: 'https://evil.example.com/a.png' });
+    expect((await db.collection('users').findOne({ id: user.id })).googleAvatarUrl).toBe(PHOTO_256);
   });
 });
 
