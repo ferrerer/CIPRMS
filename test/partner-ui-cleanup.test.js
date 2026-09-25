@@ -226,10 +226,12 @@ describe('Nothing leaks into Administrator, Staff or College Dean', () => {
   });
 });
 
-describe('The header bell has no "Alerts" tab for College Dean and Partner', () => {
+describe('The header bell has no "Alerts" tab for any role', () => {
   test.each([
     ['Partner', 'potential_partner', '/partner/monitoring'],
-    ['College Dean', 'Auth. Personnel', '/personnel/monitoring']
+    ['College Dean', 'Auth. Personnel', '/personnel/monitoring'],
+    ['Administrator', 'Administrator', '/dashboard'],
+    ['CIRL Staff', 'Staff', '/staff/dashboard']
   ])('%s: just the notification list — no Alerts tab, no unread-only pane', async (_label, role, path) => {
     const { agent } = await agentFor(role);
     const html = (await agent.get(path)).text;
@@ -239,12 +241,5 @@ describe('The header bell has no "Alerts" tab for College Dean and Partner', () 
     expect(html).not.toContain('alerts-tab');
     expect(html).not.toContain('id="notif-alerts-list"');   // (the header script still names it, and skips it when absent)
     expect(html).not.toContain('id="notificationItemsTab"');
-  });
-
-  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps the All / Alerts tabs', async (role, path) => {
-    const { agent } = await agentFor(role);
-    const html = (await agent.get(path)).text;
-    expect(html).toContain('>Alerts<');
-    expect(html).toContain('id="notif-alerts-list"');
   });
 });
