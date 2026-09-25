@@ -138,7 +138,7 @@ describe('Dashboard: Top Partner Countries uses real data and live updates', () 
     expect(src).not.toMatch(/const\s+top\s*=\s*\[\s*\{\s*country:/); // no hardcoded country array
   });
   test('a blank/missing country is skipped, never counted as a fake entry', () => {
-    expect(src).toContain("if (!c) return;");
+    expect(src).toContain("if (!raw) return;");
   });
   test('a long country name is truncated with a full-name tooltip instead of breaking the row layout', () => {
     expect(src).toContain('text-truncate" title="${esc(country)}"');

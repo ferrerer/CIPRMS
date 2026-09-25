@@ -14,7 +14,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925b" rel="stylesheet" />
     <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
 </head>
 
@@ -644,37 +644,72 @@
             'Taiwan': 'tw', 'Hong Kong': 'hk', 'Brazil': 'br', 'Mexico': 'mx'
         };
 
+        // Lookups derived from COUNTRY_CODE. The FIRST name listed for a code is the one shown for it ("United Kingdom",
+        // not "UK"), and names are matched case-insensitively, so "philippines", " Philippines " and a bare "ph" all
+        // resolve to the same country. Anything not in the table keeps its own (trimmed) spelling — never a guess.
+        const CODE_DISPLAY = {}, NAME_TO_CODE = {};
+        Object.keys(COUNTRY_CODE).forEach(name => {
+            const code = COUNTRY_CODE[name];
+            if (!CODE_DISPLAY[code]) CODE_DISPLAY[code] = name;
+            NAME_TO_CODE[name.toLowerCase()] = code;
+        });
+
+        // The ISO2 code for a country as typed in a record, or null when it is not one we can identify.
+        function countryCodeOf(raw) {
+            const t = String(raw || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (!t) return null;
+            if (/^[a-z]{2}$/.test(t)) return CODE_DISPLAY[t] ? t : null;
+            return NAME_TO_CODE[t] || null;
+        }
+
         function countryToFlagEmoji(country) {
-            const trimmed = (country || '').trim();
-            if (!trimmed) return null;
-            const code = /^[A-Za-z]{2}$/.test(trimmed) ? trimmed.toLowerCase() : COUNTRY_CODE[trimmed];
+            const code = countryCodeOf(country);
             if (!code) return null;
             return String.fromCodePoint(...[...code.toUpperCase()].map(c => 127397 + c.charCodeAt(0)));
         }
 
-        function renderTopCountries(partnerships) {
-            const counts = {};
+        // Ranks the countries named on the REAL partnership records (never a fixed list). Records whose country differs
+        // only by case/spacing, or is a bare ISO code, count as one country; the records themselves are not changed.
+        function aggregateCountries(partnerships) {
+            const groups = new Map();
             partnerships.forEach(p => {
-                const c = (p.country || '').trim();
-                if (!c) return;
-                counts[c] = (counts[c] || 0) + 1;
+                const raw = String((p && p.country) || '').replace(/\s+/g, ' ').trim();
+                if (!raw) return;                                   // a blank country is skipped, never a fake bucket
+                const code = countryCodeOf(raw);
+                const key = code ? 'code:' + code : 'name:' + raw.toLowerCase();
+                let g = groups.get(key);
+                if (!g) { g = { code, count: 0, spellings: new Map() }; groups.set(key, g); }
+                g.count++;
+                g.spellings.set(raw, (g.spellings.get(raw) || 0) + 1);
             });
-            const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 7);
+            return [...groups.values()].map(g => {
+                // shown name: the canonical one for a known code, else the spelling used most often on the records
+                const common = [...g.spellings.entries()].sort((x, y) => y[1] - x[1] || (/^[A-Z]/.test(y[0]) - /^[A-Z]/.test(x[0])) || x[0].localeCompare(y[0]))[0][0];
+                return { country: g.code ? CODE_DISPLAY[g.code] : common, code: g.code, count: g.count };
+            }).sort((x, y) => y.count - x.count || x.country.localeCompare(y.country));
+        }
+
+        function renderTopCountries(partnerships) {
             const el = document.getElementById('top-countries-list');
-            if (!top.length) { el.innerHTML = '<p class="text-muted fs-13 mb-0">No partnership records yet.</p>'; return; }
-            const max = top[0][1];
-            el.innerHTML = top.map(([country, count]) => {
-                const flagEmoji = countryToFlagEmoji(country);
+            const list = Array.isArray(partnerships) ? partnerships : [];
+            const top = aggregateCountries(list).slice(0, 7);
+            if (!top.length) {
+                el.innerHTML = '<p class="text-muted fs-13 mb-0">' + (list.length ? 'No partnership has a country recorded yet.' : 'No partnership records yet.') + '</p>';
+                return;
+            }
+            const max = top[0].count;
+            el.innerHTML = top.map(({ country, code, count }) => {
+                const flagEmoji = code ? String.fromCodePoint(...[...code.toUpperCase()].map(c => 127397 + c.charCodeAt(0))) : null;
                 const flag = flagEmoji
                     ? `<span class="fs-3" style="line-height:1;" role="img" aria-label="${esc(country)} flag">${flagEmoji}</span>`
                     : `<span class="fs-3" style="line-height:1;" role="img" aria-label="Unknown country">🌍</span>`;
                 const pct = Math.round((count / max) * 100);
-                return `<div class="d-flex align-items-center mb-3">
+                return `<div class="top-country-row d-flex align-items-center mb-3">
         <div class="flex-shrink-0 me-3">${flag}</div>
         <div class="flex-grow-1" style="min-width:0;">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
                 <span class="fs-13 fw-medium text-truncate" title="${esc(country)}" style="min-width:0;">${esc(country)}</span>
-                <span class="fs-12 text-muted flex-shrink-0">${count}</span>
+                <span class="fs-12 fw-semibold flex-shrink-0">${count}</span>
             </div>
             <div class="progress" style="height:4px;">
                 <div class="progress-bar bg-primary" style="width:${pct}%"></div>

@@ -13,11 +13,19 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925b" rel="stylesheet" />
     <style>
         #search-page-results mark { background: #fff3a3; padding: 0 1px; border-radius: 2px; }
         #search-page-results .search-result-item { border-radius: 6px; }
         #search-page-results .dropdown-header { padding-left: .25rem; }
+        /* Dark mode: the highlight is a fixed pale yellow, which put the (light) dark-mode text on a pale background and
+           made every matched word almost unreadable. Same amber tint the header search dropdown already uses, with
+           light text; long titles wrap instead of pushing the row wider. */
+        [data-bs-theme="dark"] #search-page-results mark { background: rgba(247, 184, 75, .32); color: #ffe6b0; }
+        [data-bs-theme="dark"] #search-page-results .search-result-item { border-color: rgba(255, 255, 255, .1) !important; }
+        [data-bs-theme="dark"] #search-page-results .search-result-item:hover,
+        [data-bs-theme="dark"] #search-page-results .search-result-item:focus-visible { background-color: rgba(255, 255, 255, .06); }
+        [data-bs-theme="dark"] #search-page-results .badge.bg-light { background-color: rgba(255, 255, 255, .12) !important; color: #dee2e6 !important; }
     </style>
 </head>
 

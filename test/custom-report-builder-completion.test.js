@@ -20,7 +20,7 @@ describe('Custom Report Builder — Audit Preview no longer shows a misleading p
   const view = read('views', 'administrator', 'reports.ejs');
 
   test('previewCustomReport() short-circuits for reportType=Audit before ever calling /api/reports/custom/preview', () => {
-    const block = view.slice(view.indexOf('function previewCustomReport'), view.indexOf('function previewCustomReport') + 1200);
+    const block = view.slice(view.indexOf('function previewCustomReport'), view.indexOf('function previewCustomReport') + 1800);
     expect(block).toMatch(/document\.getElementById\('cr-type'\)\.value === 'Audit'/);
     // The guard must come BEFORE the fetch call, not after.
     const guardPos = block.indexOf("=== 'Audit'");
@@ -30,7 +30,7 @@ describe('Custom Report Builder — Audit Preview no longer shows a misleading p
   });
 
   test('the Audit guard shows an explanatory error state pointing to Generate PDF/Excel, not a fabricated report', () => {
-    const block = view.slice(view.indexOf('function previewCustomReport'), view.indexOf('function previewCustomReport') + 1200);
+    const block = view.slice(view.indexOf('function previewCustomReport'), view.indexOf('function previewCustomReport') + 1800);
     expect(block).toMatch(/showRpmError\(/);
     expect(block).toMatch(/Generate PDF/);
     expect(block).toMatch(/Generate Excel/);

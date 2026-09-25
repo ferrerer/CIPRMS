@@ -688,3 +688,11 @@ a:focus-visible {
     overflow-wrap: anywhere;
     word-break: break-word;
 }
+
+/* Grid.js search placeholder (the Audit Trail's "Search action, record, performed by or date…"). Vendor default is a
+   faint grey that nearly vanishes on the dark surface; given a readable tone in each theme, and cut with an ellipsis
+   rather than clipped mid-letter when the box is narrow (phones). Every other Grid.js table sets an empty
+   placeholder, so this only affects the ones that ask for text. */
+.gridjs-search-input.gridjs-input { text-overflow: ellipsis; }
+.gridjs-search-input.gridjs-input::placeholder { color: #74788d; opacity: 1; }
+[data-bs-theme="dark"] .gridjs-search-input.gridjs-input::placeholder { color: #a5adbd; opacity: 1; }

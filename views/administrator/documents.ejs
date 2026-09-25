@@ -59,6 +59,27 @@
         [data-bs-theme="dark"] .form-control::placeholder { color: #9aa3b5; }
         [data-bs-theme="dark"] .modal-title { color: #f1f3f5; }
         [data-bs-theme="dark"] .form-control.bg-light { background-color: rgba(255,255,255,.06) !important; color: #e9ecef; }
+
+        /* Dark-mode contrast pass (same palette as above: #a9c0ff / #7094f5 accents on translucent white surfaces).
+           - the nature filter pills carry a count in `badge bg-white text-dark`; the `.text-dark` rule above turns that
+             text light, so the count became light-on-white (a blank white box) — now a translucent chip with light text;
+           - the Type filter buttons, Preview and soft-blue/-info buttons used the light-theme blues, which sit
+             dim against dark cards; lifted to the accent colours so labels are readable and states are distinct. */
+        [data-bs-theme="dark"] .badge.bg-white { background-color: rgba(255,255,255,.18) !important; color: #f1f3f5 !important; }
+        [data-bs-theme="dark"] .btn-outline-primary { color: #a9c0ff; border-color: rgba(112,148,245,.55); }
+        [data-bs-theme="dark"] .btn-outline-primary:hover,
+        [data-bs-theme="dark"] .btn-outline-primary:focus-visible { background-color: rgba(112,148,245,.22); color: #ffffff; border-color: #7094f5; }
+        [data-bs-theme="dark"] .btn-outline-primary.active,
+        [data-bs-theme="dark"] .btn-check:checked + .btn-outline-primary { background-color: #405189; color: #ffffff; border-color: #7094f5; }
+        [data-bs-theme="dark"] .btn-soft-primary { background-color: rgba(112,148,245,.18); color: #b9ccff; }
+        [data-bs-theme="dark"] .btn-soft-primary:hover,
+        [data-bs-theme="dark"] .btn-soft-primary:focus-visible,
+        [data-bs-theme="dark"] .btn-soft-primary.active { background-color: #5b7bd9; color: #ffffff; }
+        [data-bs-theme="dark"] .btn-soft-info { background-color: rgba(41,156,219,.2); color: #8fd8f5; }
+        [data-bs-theme="dark"] .btn-soft-info:hover,
+        [data-bs-theme="dark"] .btn-soft-info:focus-visible { background-color: #299cdb; color: #ffffff; }
+        [data-bs-theme="dark"] .btn-soft-secondary { background-color: rgba(255,255,255,.1); color: #dee2e6; }
+        [data-bs-theme="dark"] .btn-soft-secondary:hover { background-color: rgba(255,255,255,.2); color: #ffffff; }
     </style>
 </head>
 

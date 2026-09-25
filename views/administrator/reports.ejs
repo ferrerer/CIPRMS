@@ -15,7 +15,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925" rel="stylesheet" />
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925b" rel="stylesheet" />
     <!-- Shared Country option list (same one the Registry Add/Edit Partnership Country combobox uses) — backs
          the Custom Report Builder's Country filter below, so there is one country list in the app, not two. -->
     <script src="/velzon/assets/js/shared/country-options.js"></script>
@@ -393,8 +393,10 @@
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">Date To</label>
                                                         <input type="date" class="form-control" id="cr-date-to">
+                                                        <div class="invalid-feedback" id="cr-date-error">Date To cannot be earlier than Date From.</div>
                                                     </div>
                                                 </div>
+                                                <div class="form-text mt-2" id="cr-date-help">Includes every partnership whose agreement period (start to end) overlaps the dates you choose, so an agreement that began earlier but is still running in that window is included. Leave a date empty for no limit on that side; the same date in both fields shows the agreements running on that day.</div>
 
                                                 <div class="mt-4 d-flex gap-2 flex-wrap">
                                                     <button class="btn btn-primary" id="btn-cr-preview" onclick="previewCustomReport()"><i
@@ -816,7 +818,7 @@
                 search: true,
                 pagination: { limit: 15 },
                 sort: true,
-                language: { search: { placeholder: '' } },
+                language: { search: { placeholder: 'Search action, record, performed by or date…' } },
                 style: {
                     table: { border: 'none' },
                     // 2026-09-18: background/color used to be set here as
@@ -892,6 +894,23 @@
             if (implied) document.getElementById('cr-status').value = implied;
         }
 
+        // From later than To can never match anything, and used to come back as an unexplained empty report. Flagged on the
+        // fields instead, and nothing is requested. Empty dates never filter, and one bound alone is fine.
+        function validateCustomReportDates(quiet) {
+            var from = document.getElementById('cr-date-from'), to = document.getElementById('cr-date-to');
+            var bad = !!(from.value && to.value && from.value > to.value);   // "YYYY-MM-DD" strings compare correctly as text
+            from.classList.toggle('is-invalid', bad); to.classList.toggle('is-invalid', bad);
+            if (bad && !quiet) to.focus();
+            return !bad;
+        }
+        // Once the message is showing, it follows the fields as they are corrected (no focus stealing while typing).
+        document.addEventListener('DOMContentLoaded', function () {
+            ['cr-date-from', 'cr-date-to'].forEach(function (id) {
+                var el = document.getElementById(id);
+                if (el) el.addEventListener('input', function () { if (el.classList.contains('is-invalid')) validateCustomReportDates(true); });
+            });
+        });
+
         function buildReportQueryParams() {
             var reportType = document.getElementById('cr-type').value;
             var customTitle = document.getElementById('cr-title').value.trim();
@@ -933,6 +952,8 @@
             document.getElementById('cr-groupby').value = '';
             document.getElementById('cr-date-from').value = '';
             document.getElementById('cr-date-to').value = '';
+            document.getElementById('cr-date-from').classList.remove('is-invalid');
+            document.getElementById('cr-date-to').classList.remove('is-invalid');
         }
 
         function exportReport(format, params) {
@@ -962,6 +983,7 @@
                 window.open('/api/reports/activitylog/' + format, '_blank');
                 return;
             }
+            if (!validateCustomReportDates()) return;
             var params = buildReportQueryParams();
             window.open('/api/reports/partnerships/' + format + '?' + params.toString(), '_blank');
         }
@@ -1032,6 +1054,7 @@
         var _previewRequestSeq = 0;
 
         function previewCustomReport() {
+            if (document.getElementById('cr-type').value !== 'Audit' && !validateCustomReportDates()) return;
             getReportModal().show();
             showRpmLoading();
             var mySeq = ++_previewRequestSeq;
@@ -1073,8 +1096,17 @@
             var filtersEl = document.getElementById('prev-filters');
             var badgesHtml = '';
             if (data.filters) {
+                var LABELS = { reportType: 'Report Type', category: 'Category', dateFrom: 'Date From', dateTo: 'Date To', unit: 'College / Unit', agreementType: 'Agreement Type', country: 'Country', status: 'Status', compareBy: 'Compare By', groupBy: 'Group By' };
+                // "YYYY-MM-DD" -> "Sep 24, 2026" built from its own parts, so no timezone can shift the day
+                var niceDate = function (v) {
+                    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v));
+                    if (!m) return v;
+                    return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2] - 1] + ' ' + (+m[3]) + ', ' + m[1];
+                };
                 Object.entries(data.filters).forEach(function(pair) {
-                    badgesHtml += '<span class="badge bg-secondary-subtle text-secondary me-1 mb-1"><strong class="text-secondary-emphasis">' + escapeHtml(pair[0]) + ':</strong> ' + escapeHtml(pair[1]) + '</span>';
+                    var label = LABELS[pair[0]] || pair[0];
+                    var value = (pair[0] === 'dateFrom' || pair[0] === 'dateTo') ? niceDate(pair[1]) : pair[1];
+                    badgesHtml += '<span class="badge bg-secondary-subtle text-secondary me-1 mb-1"><strong class="text-secondary-emphasis">' + escapeHtml(label) + ':</strong> ' + escapeHtml(value) + '</span>';
                 });
             }
             filtersEl.innerHTML = badgesHtml;
