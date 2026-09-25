@@ -640,7 +640,10 @@
                       <!-- Partnership Requests Panel -->
                       <div id="panel-pr">
                         <div class="filter-row">
-                          <input class="form-control form-control-sm" id="pr-search" style="width:210px;" oninput="renderPR()">
+                          <div class="search-box" style="width:210px;">
+                            <input class="form-control form-control-sm" id="pr-search" oninput="renderPR()">
+                            <i class="ri-search-line search-icon"></i>
+                          </div>
                           <select class="form-select form-select-sm" id="pr-status" style="width:145px;"
                             onchange="renderPR()">
                             <option value="">All Status</option>
@@ -692,7 +695,10 @@
                       <!-- Document Requests Panel -->
                       <div id="panel-dr" style="display:none;">
                         <div class="filter-row">
-                          <input class="form-control form-control-sm" id="dr-search" style="width:210px;" oninput="renderDR()">
+                          <div class="search-box" style="width:210px;">
+                            <input class="form-control form-control-sm" id="dr-search" oninput="renderDR()">
+                            <i class="ri-search-line search-icon"></i>
+                          </div>
                           <select class="form-select form-select-sm" id="dr-status" style="width:170px;"
                             onchange="renderDR()">
                             <option value="">All Status</option>
