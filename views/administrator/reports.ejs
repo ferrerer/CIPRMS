@@ -1392,7 +1392,10 @@
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Country</label>' +
-                '        <input type="text" class="form-control" id="cmpcfg-' + id + '-country" value="' + escapeHtml(prefill.country || '') + '">' +
+                '        <div class="cr-country-wrap">' +
+                '          <input type="text" class="form-control" id="cmpcfg-' + id + '-country" value="' + escapeHtml(prefill.country || '') + '" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">' +
+                '          <div class="cr-country-dropdown" id="cmpcfg-' + id + '-country-dropdown" role="listbox"></div>' +
+                '        </div>' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">College / Unit</label>' +
@@ -1450,6 +1453,7 @@
             _cmpConfigIds.push(id);
             var list = document.getElementById('cmp-configs-list');
             list.insertAdjacentHTML('beforeend', renderConfigCardHtml(id, _cmpConfigIds.length - 1, prefill));
+            attachCountrySearch('cmpcfg-' + id + '-country', 'cmpcfg-' + id + '-country-dropdown');
             updateCmpButtonsState();
         }
 
@@ -1658,19 +1662,27 @@
         document.addEventListener('DOMContentLoaded', function () {
             // Load DSS stats quietly in background (elements are in the hidden insights tab)
             loadDssInsights();
-            initCustomReportCountrySearch();
+            attachCountrySearch('cr-country', 'cr-country-dropdown');
         });
 
-        // ── Custom Report Builder — searchable Country filter (2026-09-23) ──────────
-        // #cr-country stays exactly what it always was: a plain <input> whose raw .value is read by
-        // buildReportQueryParams() and sent to the server unchanged (no hidden field, no new query param, no
-        // backend change) — this only adds a type-to-filter dropdown on top of it, sourced from the same
-        // COUNTRY_OPTIONS list the Registry's Country combobox uses (assets/js/shared/country-options.js),
-        // so a report filter and a real partnership's stored country are drawn from one consistent list.
-        // Matching is substring-anywhere and case-insensitive, same as the Registry combobox.
-        function initCustomReportCountrySearch() {
-            var input = document.getElementById('cr-country');
-            var dropdown = document.getElementById('cr-country-dropdown');
+        // ── Searchable Country dropdown (2026-09-23; shared with Compare Reports 2026-09-25) ──────────
+        // Used by the Custom Report Builder's #cr-country and every Compare Reports card's
+        // #cmpcfg-{id}-country. Each stays a plain <input> whose raw .value is read and sent to the server
+        // unchanged (no hidden field, no new query param, no backend change) — this only adds a type-to-filter
+        // dropdown on top of it, sourced from the same COUNTRY_OPTIONS list the Registry and the Partner
+        // Request form use (assets/js/shared/country-options.js). Matching is substring-anywhere and
+        // case-insensitive; on blur a case-only difference is snapped to the list's spelling. Unlike the Partner
+        // Request form, an off-list value is NOT rejected here: these are filters, and historical records
+        // (e.g. "Philipines") must stay searchable.
+        function matchCountryOption(raw) {
+            var q = String(raw || '').trim().toLowerCase();
+            if (!q || typeof COUNTRY_OPTIONS === 'undefined') return null;
+            return COUNTRY_OPTIONS.find(function (c) { return c.toLowerCase() === q; }) || null;
+        }
+
+        function attachCountrySearch(inputId, dropdownId) {
+            var input = document.getElementById(inputId);
+            var dropdown = document.getElementById(dropdownId);
             if (!input || !dropdown || typeof COUNTRY_OPTIONS === 'undefined') return;
             var blurTimer = null;
 
@@ -1686,7 +1698,8 @@
             function openDropdown() {
                 if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
                 var q = input.value.trim().toLowerCase();
-                var matches = q ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
+                // An exact pick (just selected, or prefilled) shows the full list again on reopen.
+                var matches = (q && !matchCountryOption(q)) ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
                 dropdown.innerHTML = matches.length
                     ? matches.map(function (c) { return '<div class="cr-country-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
                     : '<div class="cr-country-empty">No matching country.</div>';
@@ -1707,13 +1720,19 @@
                     var match = COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase() === q; }) || COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
                     if (match) selectValue(match);
                 } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
-                    // Only swallow Escape while OUR dropdown is open — otherwise leave it alone (no enclosing
-                    // modal here to accidentally close, but this keeps the same safe pattern used elsewhere).
+                    // Only swallow Escape while OUR dropdown is open — otherwise leave it alone, so Escape
+                    // still closes the Compare Reports modal when no dropdown is showing.
                     e.stopPropagation();
                     closeDropdown();
                 }
             });
-            input.addEventListener('blur', function () { blurTimer = setTimeout(closeDropdown, 120); });
+            input.addEventListener('blur', function () {
+                blurTimer = setTimeout(function () {
+                    closeDropdown();
+                    var match = matchCountryOption(input.value);
+                    if (match) input.value = match;
+                }, 120);
+            });
             document.addEventListener('click', function (e) {
                 if (e.target !== input && !dropdown.contains(e.target)) closeDropdown();
             });

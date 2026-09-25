@@ -48,13 +48,26 @@ describe('Custom Report Builder — searchable Country filter markup/CSS', () =>
   });
 
   test('search filters by substring anywhere (not just prefix), matching "Jap" -> Japan and "Phil" -> Philippines', () => {
-    const script = view.slice(view.indexOf('function initCustomReportCountrySearch'), view.indexOf('function initCustomReportCountrySearch') + 2500);
+    const script = view.slice(view.indexOf('function attachCountrySearch'), view.indexOf('function attachCountrySearch') + 2500);
     expect(script).toContain('c.toLowerCase().indexOf(q) !== -1');
   });
 
-  test('Escape only closes the dropdown (no enclosing modal to protect here, but the same safe stopPropagation pattern is used)', () => {
-    const script = view.slice(view.indexOf('function initCustomReportCountrySearch'), view.indexOf('function initCustomReportCountrySearch') + 2500);
+  test('Escape only closes the dropdown (stopPropagation only while it is open, so the Compare modal still closes otherwise)', () => {
+    const script = view.slice(view.indexOf('function attachCountrySearch'), view.indexOf('function attachCountrySearch') + 2500);
     expect(script).toMatch(/e\.key === 'Escape' && dropdown\.style\.display === 'block'/);
+  });
+
+  test('#cr-country is wired to the shared searchable dropdown on load', () => {
+    expect(view).toContain("attachCountrySearch('cr-country', 'cr-country-dropdown')");
+  });
+
+  test('every Compare Reports card Country field is the same searchable dropdown over COUNTRY_OPTIONS', () => {
+    const card = view.slice(view.indexOf('function renderConfigCardHtml'), view.indexOf('function renumberComparisonConfigTitles'));
+    expect(card).toContain(`'-country" value="' + escapeHtml(prefill.country || '') + '" autocomplete="off" role="combobox"`);
+    expect(card).toContain(`'-country-dropdown" role="listbox"></div>'`);
+    expect(card).toContain('cr-country-wrap');
+    const add = view.slice(view.indexOf('function addComparisonConfig'), view.indexOf('function removeComparisonConfig'));
+    expect(add).toContain("attachCountrySearch('cmpcfg-' + id + '-country', 'cmpcfg-' + id + '-country-dropdown')");
   });
 
   test('#cr-country stays a plain input whose raw .value is what buildReportQueryParams() sends — no backend contract change', () => {
