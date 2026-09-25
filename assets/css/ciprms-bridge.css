@@ -437,12 +437,16 @@ a:focus-visible {
 }
 
 /* ── Filter inputs ── */
+/* input:not([type]) — search boxes written without a type attribute (e.g. the Requests page's #pr-search / #dr-search)
+   are text inputs too; without it they kept the near-invisible default background while the Status dropdown next to
+   them got this brighter style. */
 [data-bs-theme="dark"] .filter-row input[type="text"],
 [data-bs-theme="dark"] .filter-row input[type="search"],
+[data-bs-theme="dark"] .filter-row input:not([type]),
 [data-bs-theme="dark"] .filter-row select {
     border-color: rgba(255,255,255,.12);
     background: #262d3d;
-    color: #ced4da;
+    color: var(--vz-body-color);
 }
 [data-bs-theme="dark"] .filter-row input:focus,
 [data-bs-theme="dark"] .filter-row select:focus {
@@ -511,7 +515,7 @@ a:focus-visible {
     width: 100%;
     max-width: 360px;
     height: calc(1.5em + 0.94rem + 2px); /* matches Bootstrap 5's default .form-control height */
-    padding: .47rem .9rem;
+    padding: .47rem .9rem .47rem 2.25rem; /* left room for the search icon (Velzon's .gridjs-search::before) */
     font-size: .875rem;
     border-radius: .25rem;
     border-color: #ced4da;
@@ -523,6 +527,9 @@ a:focus-visible {
 @media (max-width: 575.98px) {
     .gridjs-search-input.gridjs-input { max-width: 100%; }
 }
+/* Placeholders were removed system-wide. Grid.js falls back to its own "Type a keyword..." when a table's search
+   placeholder is empty, so that built-in text is hidden here instead (the search icon marks the box). */
+.gridjs-search-input.gridjs-input::placeholder { color: transparent; }
 
 /* ── Grid.js tables (vendor theme, assets/libs/gridjs/theme/mermaid.min.css) ──
    That vendor stylesheet hardcodes #fff/light-gray backgrounds and dark text
@@ -689,10 +696,11 @@ a:focus-visible {
     word-break: break-word;
 }
 
-/* Grid.js search placeholder (the Audit Trail's "Search action, record, performed by or date…"). Vendor default is a
-   faint grey that nearly vanishes on the dark surface; given a readable tone in each theme, and cut with an ellipsis
-   rather than clipped mid-letter when the box is narrow (phones). Every other Grid.js table sets an empty
-   placeholder, so this only affects the ones that ask for text. */
-.gridjs-search-input.gridjs-input { text-overflow: ellipsis; }
-.gridjs-search-input.gridjs-input::placeholder { color: #74788d; opacity: 1; }
-[data-bs-theme="dark"] .gridjs-search-input.gridjs-input::placeholder { color: #a5adbd; opacity: 1; }
+/* Audit Trail search placeholder ("Search action, record, performed by or date…"). Placeholders were removed
+   system-wide and the rule above hides Grid.js's own fallback text on every Grid.js table; the Audit Trail is the one
+   table that asks for a real placeholder, so these rules are scoped to #audit-grid (an id, so they win over the
+   generic transparent rule) and leave every other table untouched. Given a readable tone in each theme, and cut with
+   an ellipsis rather than clipped mid-letter when the box is narrow (phones). */
+#audit-grid .gridjs-search-input.gridjs-input { text-overflow: ellipsis; }
+#audit-grid .gridjs-search-input.gridjs-input::placeholder { color: #74788d; opacity: 1; }
+[data-bs-theme="dark"] #audit-grid .gridjs-search-input.gridjs-input::placeholder { color: #a5adbd; opacity: 1; }

@@ -148,19 +148,8 @@
                                     </div>
                                 </div>
                             </div>
-<%# College Dean and Partner get the plain list: no "Alerts" tab (it was only the unread subset of the same list). %>
-<% if (!reducedHeader) { %>
-                            <div class="px-2 pt-2">
-                                <ul class="nav nav-tabs dropdown-tabs nav-tabs-custom" data-dropdown-tabs="true" id="notificationItemsTab" role="tablist">
-                                    <li class="nav-item waves-effect waves-light">
-                                        <a class="nav-link active" data-bs-toggle="tab" href="#all-noti-tab" role="tab">All</a>
-                                    </li>
-                                    <li class="nav-item waves-effect waves-light">
-                                        <a class="nav-link" data-bs-toggle="tab" href="#alerts-tab" role="tab">Alerts</a>
-                                    </li>
-                                </ul>
-                            </div>
-<% } %>
+<%# Every role gets the plain list: no "Alerts" tab (it was only the unread subset of the same list). Very important
+    notifications carry a red flag instead (isPriorityNotification in cirl.js). %>
                         </div>
                         <div class="tab-content" id="notificationItemsTabContent">
                             <div class="tab-pane fade show active py-2 ps-2" id="all-noti-tab" role="tabpanel">
@@ -173,16 +162,6 @@
                                 </div>
 <% } %>
                             </div>
-<% if (!reducedHeader) { %>
-                            <div class="tab-pane fade py-2 ps-2" id="alerts-tab" role="tabpanel">
-                                <div class="notif-scroll pe-2" id="notif-alerts-list">
-                                    <div class="text-center text-muted py-4 fs-13">Loading…</div>
-                                </div>
-                                <div class="my-2 text-center view-all">
-                                    <a href="<%= notificationsHref %>" class="btn btn-soft-primary btn-sm">View Unread Notifications <i class="ri-arrow-right-line align-middle"></i></a>
-                                </div>
-                            </div>
-<% } %>
                         </div>
                     </div>
                 </div>
@@ -276,7 +255,7 @@ refreshNotifBadge();
                     <span class="avatar-title bg-${color}-subtle text-${color} rounded-circle fs-16"><i class="${icon}"></i></span>
                 </div>
                 <div class="flex-grow-1" style="min-width:0;">
-                    <h6 class="mt-0 mb-1 lh-base fs-13 notif-title-line ${n.unread ? 'fw-semibold' : 'fw-normal text-muted'}" title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</h6>
+                    <h6 class="mt-0 mb-1 lh-base fs-13 notif-title-line ${n.unread ? 'fw-semibold' : 'fw-normal text-muted'}" title="${escapeHtml(n.title)}">${n.priority ? '<i class="ri-flag-fill text-danger me-1 notif-flag" title="Priority" aria-label="Priority"></i>' : ''}${escapeHtml(n.title)}</h6>
                     <p class="mb-1 fs-12 text-muted notif-desc-line" title="${escapeHtml(n.desc || '')}">${escapeHtml(n.desc || '')}</p>
                     <p class="mb-0 fs-11 fw-medium text-uppercase text-muted"><i class="mdi mdi-clock-outline"></i> ${escapeHtml(n.time || '')}</p>
                 </div>
@@ -312,7 +291,7 @@ refreshNotifBadge();
     // static "Loading…" placeholder, permanently (a) hides that tab's
     // ".view-all" footer and (b) injects its own hardcoded
     // ".empty-notification-elem" ("Hey! You have no any notifications")
-    // block as an extra sibling of #notif-list/#notif-alerts-list. Because
+    // block as an extra sibling of #notif-list. Because
     // that happens before this file's own fetch ever resolves, the stray
     // block and the hidden footer both survive untouched once real data
     // renders — this restores the footer and clears Velzon's own stale
@@ -347,17 +326,14 @@ refreshNotifBadge();
             .then(data => {
                 notifCache = Array.isArray(data) ? data : [];
                 renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
-                renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, HEADER_NOTIF_LIMIT), 'No unread notifications.');
             })
             .catch(() => {
                 renderList('notif-list', [], 'Could not load notifications.');
-                renderList('notif-alerts-list', [], 'Could not load notifications.');
             });
     }
 
     function rerenderFromCache() {
         renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
-        renderList('notif-alerts-list', notifCache.filter(n => n.unread).slice(0, HEADER_NOTIF_LIMIT), 'No unread notifications.');
         paintNotifBadge(notifCache.filter(n => n.unread).length);
     }
 

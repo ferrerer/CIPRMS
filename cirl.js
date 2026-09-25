@@ -2083,7 +2083,7 @@ app.get('/api/notifications/all', requireAdmin, async (req, res) => {
   try {
     const db = getDb();
     const docs = await db.collection('notifications').find({}).sort({ id: -1 }).toArray();
-    res.json(docs);
+    res.json(docs.map(d => ({ ...d, priority: isPriorityNotification(d) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5712,8 +5712,19 @@ function notificationHref(role, n) {
   if (kind === 'dashboard') return pages.dashboard || pages.monitoring;
   return pages.fallback;
 }
+// Very important notifications are shown with a red flag (header bell and Notifications page), for every role:
+// anything marked red ("danger": expired agreements, rejected / declined requests, cancelled events, critical items) and
+// the "expiring soon" partnership reminders. Routine updates (new request, approved, awaiting approval…) are not
+// flagged. A notification can also be flagged explicitly by saving it with `priority: true`.
+function isPriorityNotification(n) {
+  if (!n) return false;
+  if (n.priority === true) return true;
+  if (n.color === 'danger') return true;
+  return n.module === 'lifecycle' && n.color === 'warning';
+}
+
 function withNotificationHref(docs, role) {
-  return docs.map(d => ({ ...d, href: notificationHref(role, d) }));
+  return docs.map(d => ({ ...d, href: notificationHref(role, d), priority: isPriorityNotification(d) }));
 }
 
 function prLinkForRole(role, id) {

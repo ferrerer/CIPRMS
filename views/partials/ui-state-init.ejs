@@ -1,3 +1,25 @@
+<style>
+/* ── Brighter text in dark mode (every page includes this partial) ──────────
+   Velzon's dark theme draws body text in #ced4da and "muted" text in #878a99 — too dim to read comfortably on its
+   dark background. These raise every text tone one step; light mode is untouched. The selectors add `html` so they
+   outrank Velzon's own [data-bs-theme=dark] rules even though app.min.css loads after this. */
+html[data-bs-theme="dark"] {
+    --vz-body-color: #eef0f3;
+    --vz-body-color-rgb: 238, 240, 243;
+    --vz-heading-color: #f8f9fa;
+    --vz-secondary-color: #b9bfcc;          /* .text-muted, form hints, timestamps */
+    --vz-secondary-color-rgb: 185, 191, 204;
+    --vz-tertiary-color: rgba(238, 240, 243, 0.85);
+    --vz-tertiary-color-rgb: 238, 240, 243;
+    --vz-link-color: #eef0f3;
+    --vz-link-color-rgb: 238, 240, 243;
+}
+html[data-bs-theme="dark"][data-sidebar="dark"] {
+    --vz-vertical-menu-item-color: #c9ccd8;
+    --vz-vertical-menu-sub-item-color: #bcc0cd;
+    --vz-vertical-menu-title-color: #9ea3b3;
+}
+</style>
 <script>
 // ── CIPRMS per-user UI state (2026-09-11) ───────────────────────────────────
 // Single source of truth for the UI preferences that must survive normal page

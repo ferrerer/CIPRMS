@@ -138,12 +138,16 @@ describe('Reports — Custom Report Builder date filter UI and Audit Trail searc
     expect(src).not.toMatch(/placeholder: 'Search[^']*(institution|partner|country|status)/i);
   });
 
-  test('the placeholder is readable in both themes and ellipsised, not clipped (shared stylesheet, version bumped)', () => {
+  test('the placeholder is readable in both themes and ellipsised, scoped to the Audit Trail so other tables keep the system-wide hidden placeholder (version bumped)', () => {
     const css = read('assets', 'css', 'ciprms-bridge.css');
-    expect(css).toContain('.gridjs-search-input.gridjs-input::placeholder { color: #74788d; opacity: 1; }');
-    expect(css).toContain('[data-bs-theme="dark"] .gridjs-search-input.gridjs-input::placeholder { color: #a5adbd; opacity: 1; }');
-    expect(css).toContain('.gridjs-search-input.gridjs-input { text-overflow: ellipsis; }');
-    expect(src).toContain('ciprms-bridge.css?v=20260925b');
+    expect(css).toContain('#audit-grid .gridjs-search-input.gridjs-input::placeholder { color: #74788d; opacity: 1; }');
+    expect(css).toContain('[data-bs-theme="dark"] #audit-grid .gridjs-search-input.gridjs-input::placeholder { color: #a5adbd; opacity: 1; }');
+    expect(css).toContain('#audit-grid .gridjs-search-input.gridjs-input { text-overflow: ellipsis; }');
+    // the team's rule that hides Grid.js's fallback text on every other table is still there and still global
+    expect(css).toContain('.gridjs-search-input.gridjs-input::placeholder { color: transparent; }');
+    const generic = css.split('\n').map(l => l.trim()).filter(l => l.startsWith('.gridjs-search-input.gridjs-input::placeholder') || l.startsWith('[data-bs-theme="dark"] .gridjs-search-input.gridjs-input::placeholder'));
+    expect(generic).toEqual(['.gridjs-search-input.gridjs-input::placeholder { color: transparent; }']);
+    expect(src).toContain('ciprms-bridge.css?v=20260925d');
   });
 });
 

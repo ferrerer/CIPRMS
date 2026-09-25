@@ -10,7 +10,24 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <!-- Shared Country option list (same one the Registry and the Reports Custom Report Builder use). -->
+    <script src="/velzon/assets/js/shared/country-options.js"></script>
     <style>
+        /* ── Country searchable dropdown (same look as reports.ejs's Custom Report Builder filter) ── */
+        .cr-country-wrap { position: relative; }
+        .cr-country-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+            background: #fff; border: 1px solid #dfe3ea; border-radius: 8px;
+            box-shadow: 0 10px 28px rgba(20,25,45,.14); max-height: 220px; overflow-y: auto; padding: 6px;
+            display: none;
+        }
+        .cr-country-option { padding: 8px 10px; border-radius: 6px; font-size: .85rem; color: #313a46; cursor: pointer; }
+        .cr-country-option:hover { background: #f0f2fb; color: #405189; }
+        .cr-country-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+        [data-bs-theme="dark"] .cr-country-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+        [data-bs-theme="dark"] .cr-country-option { color: #d3d5db; }
+        [data-bs-theme="dark"] .cr-country-option:hover { background: #363c4c; color: #a9bcf5; }
+
         /* ── Section Switcher Tabs (same convention as administrator/partnership_requests.ejs) ── */
         .section-tabs { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
         .section-tab {
@@ -200,7 +217,10 @@
                                 </div>
                                 <div class="col-lg-6 mb-3">
                                     <label class="form-label" for="f-country">Country <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="f-country">
+                                    <div class="cr-country-wrap">
+                                        <input type="text" class="form-control" id="f-country" placeholder="Select or search a country" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                        <div class="cr-country-dropdown" id="f-country-dropdown" role="listbox"></div>
+                                    </div>
                                 </div>
                                 <div class="col-lg-4 mb-3">
                                     <label class="form-label" for="f-type">Agreement Type <span class="text-danger">*</span></label>
@@ -383,6 +403,7 @@
         ['f-type', 'f-nature', 'f-cat', 'f-region', 'f-unit'].forEach(function (id) { document.getElementById(id).value = ''; });
         document.getElementById('f-start').value = '';
         document.getElementById('f-end').value = '';
+        document.getElementById('f-country').classList.remove('is-invalid');
         ocrExtractedResult = null;
         document.getElementById('ocr-file-input').value = '';
         document.getElementById('ocr-progress-wrap').style.display = 'none';
@@ -439,6 +460,16 @@
             showToast('Institution, country, agreement type, and nature are required to submit.');
             return;
         }
+        // Country must be one of the shared COUNTRY_OPTIONS (a typed/OCR value is snapped to its exact
+        // spelling when it matches ignoring case), so requests store the same names the Registry and Reports use.
+        var country = matchCountryOption(payload.country);
+        if (!country) {
+            showToast('Please select a country from the list.');
+            document.getElementById('f-country').focus();
+            return;
+        }
+        payload.country = country;
+        document.getElementById('f-country').value = country;
         return CIPRMS.busy(btn, function () {
             var step;
             if (editingId) {
@@ -710,7 +741,77 @@
         });
     }
 
+    // ── Country — searchable dropdown over the shared COUNTRY_OPTIONS list ──────────
+    // Same behaviour as reports.ejs's initCustomReportCountrySearch(): #f-country stays a plain <input>
+    // (so drafts, OCR auto-fill and collectFormData() keep working unchanged) with a type-to-filter
+    // dropdown on top. Matching is substring-anywhere and case-insensitive.
+    function matchCountryOption(raw) {
+        var q = String(raw || '').trim().toLowerCase();
+        if (!q || typeof COUNTRY_OPTIONS === 'undefined') return null;
+        return COUNTRY_OPTIONS.find(function (c) { return c.toLowerCase() === q; }) || null;
+    }
+
+    function initCountrySearch() {
+        var input = document.getElementById('f-country');
+        var dropdown = document.getElementById('f-country-dropdown');
+        if (!input || !dropdown || typeof COUNTRY_OPTIONS === 'undefined') return;
+        var blurTimer = null;
+
+        function closeDropdown() {
+            dropdown.style.display = 'none';
+            dropdown.innerHTML = '';
+            input.setAttribute('aria-expanded', 'false');
+        }
+        function selectValue(val) {
+            input.value = val;
+            input.classList.remove('is-invalid');
+            closeDropdown();
+        }
+        function openDropdown() {
+            if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+            var q = input.value.trim().toLowerCase();
+            // An exact pick (e.g. just selected, or a resumed draft) shows the full list again on reopen.
+            var matches = (q && !matchCountryOption(q)) ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
+            dropdown.innerHTML = matches.length
+                ? matches.map(function (c) { return '<div class="cr-country-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
+                : '<div class="cr-country-empty">No matching country.</div>';
+            dropdown.style.display = 'block';
+            input.setAttribute('aria-expanded', 'true');
+            dropdown.querySelectorAll('.cr-country-option').forEach(function (opt) {
+                opt.addEventListener('mousedown', function (e) { e.preventDefault(); selectValue(opt.getAttribute('data-val')); });
+            });
+        }
+
+        input.addEventListener('focus', openDropdown);
+        input.addEventListener('click', openDropdown);
+        input.addEventListener('input', openDropdown);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var q = input.value.trim().toUpperCase();
+                var match = COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase() === q; }) || COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
+                if (match) selectValue(match);
+            } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
+                e.stopPropagation();
+                closeDropdown();
+            }
+        });
+        input.addEventListener('blur', function () {
+            blurTimer = setTimeout(function () {
+                closeDropdown();
+                // Snap a case-only difference to the list's spelling; flag anything not on the list.
+                var match = matchCountryOption(input.value);
+                if (match) input.value = match;
+                input.classList.toggle('is-invalid', !!input.value.trim() && !match);
+            }, 120);
+        });
+        document.addEventListener('click', function (e) {
+            if (e.target !== input && !dropdown.contains(e.target)) closeDropdown();
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        initCountrySearch();
         // A notification about a MOA/MOU submission lands here on its tab: /partner/requests?tab=dr
         if (new URLSearchParams(window.location.search).get('tab') === 'dr') switchSection('dr');
         loadHistory().then(openFormOnEntry);

@@ -11,7 +11,7 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet"/>
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet"/>
-    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925b" rel="stylesheet"/>
+    <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925d" rel="stylesheet"/>
     <link href="/velzon/assets/libs/dragula/dragula.min.css" rel="stylesheet"/>
     <%- include('../partials/calendar_layout') %>
     <style>
@@ -264,8 +264,9 @@
                                         <!-- Add Event, step 2: who to notify. Search runs on the user list already loaded from /api/users. -->
                                         <div id="step-recipients" class="d-none">
                                             <label class="form-label" for="rcp-search">Search recipients by email address <span class="text-muted fw-normal">(Optional)</span></label>
-                                            <div class="position-relative mb-2">
+                                            <div class="position-relative search-box mb-2">
                                                 <input type="text" class="form-control" id="rcp-search" autocomplete="off" aria-controls="rcp-results">
+                                                <i class="ri-search-line search-icon"></i>
                                             </div>
                                             <div id="rcp-results" role="listbox" aria-label="Matching users" aria-multiselectable="true"></div>
                                             <div class="form-text mb-3" id="rcp-hint">Click a person to add or remove them. Only the people selected here are notified and e-mailed a Google Calendar invitation.</div>
