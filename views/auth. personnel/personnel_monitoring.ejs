@@ -276,6 +276,7 @@
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Last Updated</label><div class="fw-bold fs-13" id="drd-updated">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Current Stage</label><div class="fw-bold fs-13" id="drd-stage">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Administrator</label><div class="fw-bold fs-13" id="drd-admin">—</div></div>
+                            <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-1">Workflow Progress</label><div id="drd-progress" class="d-flex flex-wrap gap-3">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Purpose</label><div class="text-muted fs-13" id="drd-purpose">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Remarks (CIRL)</label><div class="text-muted fs-13" id="drd-remark">—</div></div>
                             <div class="col-12"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Attached Documents</label><div id="drd-docs">—</div></div>
@@ -410,6 +411,31 @@
         'Completed': 'Completed',
         'Rejected': 'Rejected'
     };
+    // Requester-facing progress checklist (✓ done / ● current / ○ upcoming),
+    // matching the "existing progress/timeline UI" convention this page
+    // already uses for draft collaboration timelines — a compact read-only
+    // view of the same 6-stage pipeline the reviewer's Update Status dropdown
+    // drives, so the requester always sees exactly where their request is.
+    function drProgressChecklistHtml(canonicalStatus) {
+        if (canonicalStatus === 'Rejected') {
+            return '<div class="text-danger fs-13"><i class="ri-close-circle-line me-1"></i>This request was rejected — it will not continue through the workflow.</div>';
+        }
+        var idx = DR_WORKFLOW_STATUSES.indexOf(canonicalStatus);
+        // 'Completed' is the pipeline's final resting state — every stage
+        // including it is fully done, so nothing should render as merely
+        // "current" (in progress) the way an intermediate stage does.
+        var isFinal = canonicalStatus === 'Completed';
+        return DR_WORKFLOW_STATUSES.map(function (s, i) {
+            var done = isFinal ? true : i < idx;
+            var current = !isFinal && i === idx;
+            var icon = done ? '<i class="ri-checkbox-circle-fill text-success me-1"></i>'
+                : current ? '<i class="ri-record-circle-fill text-primary me-1"></i>'
+                : '<i class="ri-checkbox-blank-circle-line text-muted me-1"></i>';
+            var cls = current ? 'fw-semibold text-primary' : (done ? 'text-success' : 'text-muted');
+            return '<div class="fs-13 ' + cls + '">' + icon + escapeHtml(s) + '</div>';
+        }).join('');
+    }
+
     function fmtWhen(iso, fallback) {
         if (!iso) return fallback || '—';
         var d = new Date(iso);
@@ -665,11 +691,12 @@
         document.getElementById('drd-id').textContent = '#' + r.id;
         document.getElementById('drd-type').textContent = r.documentType || '—';
         document.getElementById('drd-inst').textContent = r.institution || '—';
-        // No Status or Workflow Progress here: the status is already the Status column of the My Document Requests table.
+        // No Status field here: it is already the Status column of the My Document Requests table (and Workflow Progress below).
         document.getElementById('drd-date').textContent = r.date || '—';
         document.getElementById('drd-updated').textContent = fmtWhen(r.updatedAt, r.date);
         document.getElementById('drd-stage').textContent = DR_STAGE_LABEL[cs] || cs;
         document.getElementById('drd-admin').textContent = r.decidedBy || '—';
+        document.getElementById('drd-progress').innerHTML = drProgressChecklistHtml(cs);
         document.getElementById('drd-purpose').textContent = r.notes || '—';
         document.getElementById('drd-remark').textContent = r.remark || '—';
         document.getElementById('drd-docs').innerHTML = renderAttachedDocs(r);
