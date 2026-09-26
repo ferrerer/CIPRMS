@@ -18,10 +18,12 @@
             var isPartnerUser = (typeof user !== 'undefined' && user && user.role === 'potential_partner');
             var reducedHeader = isDeptUser || isPartnerUser;
         %>
-        <% if (isPartnerUser) { %>
-        <%# Partner pages do not load ciprms-bridge.css, which is where the notification dropdown's overflow protection lives. %>
+        <%# The notification dropdown's overflow protection (capped, scrollable list; one-line titles/descriptions) lives in
+            ciprms-bridge.css, which some pages do not load: every Partner page, the College Dean's Monitoring page and the
+            Document Library. Linked for every page so the bell looks the same everywhere; the rules are identical to the
+            bridge's, so pages that load both are unaffected. %>
         <link rel="stylesheet" href="/velzon/assets/css/header-notifications.css">
-        <% } %>
+
         <a href="<%= homeDashboard %>" class="logo logo-dark">
             <span class="logo-sm">
                 <img src="/images/cirl-logo.jpg" alt="CIRL" height="28" style="border-radius:50%;object-fit:cover;">

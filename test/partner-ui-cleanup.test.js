@@ -190,7 +190,7 @@ describe('Partner header notifications are user-specific and correctly counted',
 });
 
 describe('Nothing leaks into Administrator, Staff or College Dean', () => {
-  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps Search and "See All", has a Settings/Logout-only profile menu, and NOT the Partner stylesheet (%s)', async (role, path) => {
+  test.each([['Administrator', '/dashboard'], ['Staff', '/staff/dashboard']])('%s keeps Search and "See All", has a Settings/Logout-only profile menu, and the shared notification-dropdown stylesheet (%s)', async (role, path) => {
     const { agent } = await agentFor(role);
     const html = (await agent.get(path)).text;
     expect(html).toContain('id="search-options"');
@@ -201,7 +201,7 @@ describe('Nothing leaks into Administrator, Staff or College Dean', () => {
     expect(menu).not.toMatch(/class="align-middle">(Profile|Notifications)</); // the profile menu is Settings + Logout for every role
     expect(menu).toMatch(/class="align-middle">Settings</);
     expect(menu).toContain('Logout');
-    expect(html).not.toContain('header-notifications.css');
+    expect(html).toContain('href="/velzon/assets/css/header-notifications.css"');
   });
 
   test('Administrator and Staff still have Dashboard, Document Library and Notifications pages + sidebar items', async () => {
@@ -216,12 +216,13 @@ describe('Nothing leaks into Administrator, Staff or College Dean', () => {
     for (const href of ['/staff/dashboard', '/staff/documents', '/staff/notifications']) expect(staffNav).toContain(href);
   });
 
-  test('College Dean is untouched: no Search, no "See All", no Partner stylesheet, same sidebar', async () => {
+  test('College Dean: no Search, no "See All", same sidebar, and the notification dropdown keeps its one-line, scrollable layout', async () => {
     const { agent } = await agentFor('Auth. Personnel');
     const html = (await agent.get('/personnel/monitoring')).text;
     expect(html).not.toContain('id="search-options"');
     expect(html).not.toMatch(/class="[^"]*view-all[^"]*"/);
-    expect(html).not.toContain('header-notifications.css');
+    // Its Monitoring page does not load ciprms-bridge.css, so without this the bell's items wrapped over many lines.
+    expect(html).toContain('href="/velzon/assets/css/header-notifications.css"');
     expect(navHrefs(html)).toEqual(['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings', '#']);
   });
 });
