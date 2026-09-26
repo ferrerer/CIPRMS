@@ -190,7 +190,24 @@
       @media (max-width: 576px) {
           .doc-chip span.doc-chip-label { max-width: 200px; }
       }
+
+      /* Submission of Approved MOA/MOU — searchable Country dropdown (same look as the Partner Request form) */
+      .cr-country-wrap { position: relative; }
+      .cr-country-dropdown {
+          position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+          background: #fff; border: 1px solid #dfe3ea; border-radius: 8px;
+          box-shadow: 0 10px 28px rgba(20,25,45,.14); max-height: 220px; overflow-y: auto; padding: 6px;
+          display: none;
+      }
+      .cr-country-option { padding: 8px 10px; border-radius: 6px; font-size: .85rem; color: #313a46; cursor: pointer; }
+      .cr-country-option:hover { background: #f0f2fb; color: #405189; }
+      .cr-country-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+      [data-bs-theme="dark"] .cr-country-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+      [data-bs-theme="dark"] .cr-country-option { color: #d3d5db; }
+      [data-bs-theme="dark"] .cr-country-option:hover { background: #363c4c; color: #a9bcf5; }
     </style>
+    <!-- Shared Country list (same one the Registry, Reports and the Partner Request form use) -->
+    <script src="/velzon/assets/js/shared/country-options.js"></script>
 </head>
 
 <body>
@@ -207,7 +224,7 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="page-title-box d-sm-flex align-items-center justify-content-between bg-galaxy-transparent">
-                            <h4 class="mb-sm-0">Document Requests</h4>
+                            <h4 class="mb-sm-0">Requests</h4>
                             <div class="page-title-right">
                                 <ol class="breadcrumb m-0">
                                     <li class="breadcrumb-item"><a href="/personnel/monitoring">CIPRMS</a></li>
@@ -218,8 +235,19 @@
                     </div>
                 </div>
 
+                <!-- Section switcher: Document Request | Submission of Approved MOA/MOU (same convention as the Partner's Requests page) -->
+                <div class="section-tabs">
+                    <a class="section-tab active" id="tab-dr" href="#" onclick="switchSection('dr');return false;">
+                        <i class="ri-file-shield-2-line"></i> Document Request
+                    </a>
+                    <a class="section-tab" id="tab-moa" href="#" onclick="switchSection('moa');return false;">
+                        <i class="ri-government-line"></i> Submission of Approved MOA/MOU
+                    </a>
+                </div>
+
                 <!-- ═══════════ PANEL: DOCUMENT REQUEST ═══════════ -->
-                <%# College Dean submits Document Requests only — Partnership Requests are closed to this role. %>
+                <%# College Dean submits Document Requests and Approved MOA/MOU copies (College Partnership Reports) only —
+                    every other Partnership Request action is closed to this role. %>
                 <div id="panel-dr">
 
                     <!-- Submission Form Section -->
@@ -322,6 +350,86 @@
                     <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track the status of everything you've submitted on the <a href="/personnel/monitoring">Monitoring</a> page.</p>
 
                 </div><!-- end panel-dr -->
+
+                <!-- ═══════════ PANEL: SUBMISSION OF APPROVED MOA/MOU (College Partnership Report) ═══════════
+                     The college already signed an MOA/MOU with another institution without going through CIRL; the Dean
+                     sends CIRL the approved copy so CIRL can record it in the Partnership Registry. -->
+                <div id="panel-moa" style="display:none;">
+                    <div class="row justify-content-center mb-5">
+                        <div class="col-lg-12">
+                            <div class="card shadow-sm border-0" style="border-radius: 8px;">
+                                <div class="card-body p-4">
+                                    <div class="dr-form-header">
+                                        <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL">
+                                        <div>
+                                            <p class="dr-form-title">Send Approved MOA/MOU to CIRL</p>
+                                            <p class="dr-form-subtitle">Center for International Relations and Linkages — CSPC</p>
+                                        </div>
+                                    </div>
+                                    <div class="alert alert-success d-flex align-items-center gap-2 mt-3 mb-0 d-none" id="cr-success-banner" role="status">
+                                        <i class="ri-checkbox-circle-fill fs-18"></i>
+                                        <div><strong>Sent to CIRL.</strong> <span id="cr-success-text"></span> Track it on <a href="/personnel/monitoring">Monitoring</a>.</div>
+                                    </div>
+                                    <div class="alert alert-info fs-13 py-2 mt-3">
+                                        <i class="ri-information-line me-1"></i>For an agreement your college has <strong>already signed</strong> with another institution.
+                                        Reporting college: <strong><%= user.unit ? user.unit : 'your college' %></strong>.
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-8">
+                                            <label class="form-label" for="cr-inst">Partner Institution <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control" id="cr-inst" maxlength="200">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="cr-country">Country <span class="text-danger">*</span></label>
+                                            <div class="cr-country-wrap">
+                                                <input type="text" class="form-control" id="cr-country" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                                <div class="cr-country-dropdown" id="cr-country-dropdown" role="listbox"></div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="cr-type">Agreement Type <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="cr-type">
+                                                <option value="">Select…</option><option>MOA</option><option>MOU</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <label class="form-label" for="cr-nature">Nature of Partnership <span class="text-danger">*</span></label>
+                                            <select class="form-select" id="cr-nature">
+                                                <option value="">Select…</option>
+                                                <option>Research</option><option>Student Exchange</option><option>Joint Program</option>
+                                                <option>Faculty Development</option><option>Technology Transfer</option><option>Community Outreach</option><option>Other</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="cr-start">Effective Date <span class="text-danger">*</span></label>
+                                            <input type="date" class="form-control" id="cr-start">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label" for="cr-end">Expiry Date <span class="text-danger">*</span></label>
+                                            <input type="date" class="form-control" id="cr-end">
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label" for="cr-file">Approved (signed) copy <span class="text-danger">*</span></label>
+                                            <input type="file" class="form-control" id="cr-file" accept=".pdf,.jpg,.jpeg,.png">
+                                            <div class="form-text">PDF, JPG or PNG — max 10MB.</div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label" for="cr-notes">Notes for CIRL</label>
+                                            <textarea class="form-control" id="cr-notes" rows="3" maxlength="1000"></textarea>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-end gap-2 mt-4">
+                                        <button type="button" class="btn btn-success px-5 fw-bold" id="cr-submit-btn" onclick="submitCollegeReport()">
+                                            <i class="ri-send-plane-line me-1"></i>Send to CIRL
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-muted fs-13"><i class="ri-information-line me-1"></i>Track what you've sent under <strong>College Partnership Reports</strong> on the <a href="/personnel/monitoring">Monitoring</a> page.</p>
+                </div><!-- end panel-moa -->
 
             </div>
         </div>
@@ -589,6 +697,141 @@
             btn.innerHTML = orig;
             showToast('<i class="ri-error-warning-line me-2"></i> Error submitting request.', '#f06548');
         });
+    }
+
+    // ── Section switcher: Document Request | Submission of Approved MOA/MOU ──
+    function switchSection(sec) {
+        document.getElementById('panel-dr').style.display = sec === 'dr' ? '' : 'none';
+        document.getElementById('panel-moa').style.display = sec === 'moa' ? '' : 'none';
+        document.getElementById('tab-dr').classList.toggle('active', sec === 'dr');
+        document.getElementById('tab-moa').classList.toggle('active', sec === 'moa');
+    }
+    // /personnel/requests?tab=moa opens the MOA/MOU tab directly (the Monitoring page links here).
+    if (new URLSearchParams(window.location.search).get('tab') === 'moa') switchSection('moa');
+
+    /* ═══ SUBMISSION OF APPROVED MOA/MOU — College Partnership Report (2026-09-26) ═══
+       Filed as a Partnership Request with isCollegeReport (POST /api/requests), then the approved copy is attached
+       (POST /api/requests/:id/documents, initial=1). CIRL records it in the Registry; the Dean tracks it on Monitoring. */
+    var CR_MAX_BYTES = 10 * 1024 * 1024;
+    var crPendingUploadId = null;   // a report that was created but whose file upload failed — Send retries only the upload
+
+    function matchCountryOption(raw) {
+        var q = String(raw || '').trim().toLowerCase();
+        if (!q || typeof COUNTRY_OPTIONS === 'undefined') return null;
+        return COUNTRY_OPTIONS.find(function (c) { return c.toLowerCase() === q; }) || null;
+    }
+    (function initCountrySearch() {
+        var input = document.getElementById('cr-country');
+        var dropdown = document.getElementById('cr-country-dropdown');
+        if (!input || !dropdown || typeof COUNTRY_OPTIONS === 'undefined') return;
+        var blurTimer = null;
+        function close() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; input.setAttribute('aria-expanded', 'false'); }
+        function pick(v) { input.value = v; input.classList.remove('is-invalid'); close(); }
+        function open() {
+            if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+            var q = input.value.trim().toLowerCase();
+            var list = (q && !matchCountryOption(q)) ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
+            dropdown.innerHTML = list.length
+                ? list.map(function (c) { return '<div class="cr-country-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
+                : '<div class="cr-country-empty">No matching country.</div>';
+            dropdown.style.display = 'block';
+            input.setAttribute('aria-expanded', 'true');
+            dropdown.querySelectorAll('.cr-country-option').forEach(function (o) {
+                o.addEventListener('mousedown', function (e) { e.preventDefault(); pick(o.getAttribute('data-val')); });
+            });
+        }
+        input.addEventListener('focus', open);
+        input.addEventListener('click', open);
+        input.addEventListener('input', open);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var q = input.value.trim().toUpperCase();
+                var m = COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase() === q; }) || COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
+                if (m) pick(m);
+            } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
+                e.stopPropagation();
+                close();
+            }
+        });
+        input.addEventListener('blur', function () {
+            blurTimer = setTimeout(function () {
+                close();
+                var m = matchCountryOption(input.value);
+                if (m) input.value = m;
+                input.classList.toggle('is-invalid', !!input.value.trim() && !m);
+            }, 120);
+        });
+        document.addEventListener('click', function (e) { if (e.target !== input && !dropdown.contains(e.target)) close(); });
+    })();
+
+    function resetCollegeReportForm() {
+        ['cr-inst', 'cr-country', 'cr-type', 'cr-nature', 'cr-start', 'cr-end', 'cr-notes', 'cr-file'].forEach(function (id) { document.getElementById(id).value = ''; });
+        document.querySelectorAll('#panel-moa .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+    }
+
+    function submitCollegeReport() {
+        var v = function (id) { return document.getElementById(id).value.trim(); };
+        var fileEl = document.getElementById('cr-file');
+        var file = fileEl.files[0] || null;
+        var bad = function (id, msg) { document.getElementById(id).classList.add('is-invalid'); showToast('<i class="ri-error-warning-line me-2"></i> ' + msg, '#f06548'); };
+        document.querySelectorAll('#panel-moa .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        document.getElementById('cr-success-banner').classList.add('d-none');
+
+        var missing = ['cr-inst', 'cr-country', 'cr-type', 'cr-nature', 'cr-start', 'cr-end'].filter(function (id) { return !v(id); });
+        if (!file) missing.push('cr-file');
+        if (missing.length) {
+            missing.forEach(function (id) { document.getElementById(id).classList.add('is-invalid'); });
+            showToast('<i class="ri-error-warning-line me-2"></i> Please fill in every required field and attach the approved copy.', '#f06548');
+            return;
+        }
+        var country = matchCountryOption(v('cr-country'));
+        if (!country) return bad('cr-country', 'Please select a country from the list.');
+        if (new Date(v('cr-end')) <= new Date(v('cr-start'))) return bad('cr-end', 'The expiry date must be after the effective date.');
+        if (file.size > CR_MAX_BYTES) return bad('cr-file', 'That file is too large. The maximum size is 10MB.');
+        if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) return bad('cr-file', 'Only PDF, JPG or PNG files are accepted.');
+
+        var btn = document.getElementById('cr-submit-btn');
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+
+        var create = crPendingUploadId
+            ? Promise.resolve(crPendingUploadId)
+            : CIPRMS.api('/api/requests', {
+                method: 'POST', quiet: true,
+                json: {
+                    isCollegeReport: true, institution: v('cr-inst'), country: country, type: v('cr-type'), nature: v('cr-nature'),
+                    startDate: v('cr-start'), endDate: v('cr-end'), notes: v('cr-notes')
+                }
+            }).then(function (res) {
+                if (!res.ok) throw new Error(res.error || 'Could not send the report.');
+                return res.data.request.id;
+            });
+
+        create.then(function (id) {
+            var fd = new FormData();
+            fd.append('document', file);
+            fd.append('initial', '1');
+            fd.append('note', 'Approved copy');
+            return CIPRMS.api('/api/requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
+                if (!res.ok) { var err = new Error(res.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
+                return id;
+            });
+        }).then(function (id) {
+            crPendingUploadId = null;
+            resetCollegeReportForm();
+            document.getElementById('cr-success-text').textContent = 'Reference #REQ-' + String(id).padStart(3, '0') + '. You will be notified once CIRL records it in the Partnership Registry.';
+            document.getElementById('cr-success-banner').classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }).catch(function (e) {
+            if (e && e.uploadStep) {
+                crPendingUploadId = e.requestId;
+                showToast('<i class="ri-error-warning-line me-2"></i> The report was sent, but the file could not be uploaded: ' + escapeHtml(e.message) + ' Choose the file again and click Send.', '#f7b84b');
+            } else {
+                showToast('<i class="ri-error-warning-line me-2"></i> ' + escapeHtml((e && e.message) || 'Could not send the report.'), '#f06548');
+            }
+        }).then(function () { btn.disabled = false; btn.innerHTML = orig; });
     }
 
 </script>

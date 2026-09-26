@@ -94,12 +94,19 @@ describe('College Partnership Report — College Dean', () => {
     expect(res.body.request.isCollegeReport).toBeUndefined();
   });
 
-  test('the Monitoring page shows the College Partnership Reports section and form', async () => {
+  test('the form is on Requests (Submission of Approved MOA/MOU tab); Monitoring tracks the reports and links to it', async () => {
     const { agent } = await agentFor('Auth. Personnel', { unit: 'CCS' });
-    const html = (await agent.get('/personnel/monitoring')).text;
-    expect(html).toContain('College Partnership Reports');
-    expect(html).toContain('id="cr-report-modal"');
-    expect(html).toContain('/velzon/assets/js/shared/country-options.js');
+    const requests = (await agent.get('/personnel/requests')).text;
+    expect(requests).toContain('id="tab-moa"');
+    expect(requests).toContain('Submission of Approved MOA/MOU');
+    for (const id of ['cr-inst', 'cr-country', 'cr-type', 'cr-nature', 'cr-start', 'cr-end', 'cr-file', 'cr-notes', 'cr-submit-btn']) expect(requests).toContain(`id="${id}"`);
+    expect(requests).toContain('/velzon/assets/js/shared/country-options.js');
+    expect(requests).toContain('id="docRequestForm"'); // the Document Request form is still there
+
+    const monitoring = (await agent.get('/personnel/monitoring')).text;
+    expect(monitoring).toContain('College Partnership Reports');
+    expect(monitoring).toContain('href="/personnel/requests?tab=moa"');
+    expect(monitoring).not.toContain('id="cr-report-modal"'); // one form only, on Requests
   });
 });
 
