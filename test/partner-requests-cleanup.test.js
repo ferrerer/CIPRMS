@@ -78,6 +78,40 @@ describe('Partner → Requests page', () => {
     expect(html).not.toContain('/api/document-requests');
     expect(html).toContain("if (!notes && !file && !moaPendingId)"); // needs a note OR a file — never both
   });
+
+  test('the Partnership Request form no longer asks for a Responsible CSPC Unit', () => {
+    expect(html).not.toContain('id="f-unit"');
+    expect(textOf(html)).not.toContain('Responsible CSPC Unit');
+  });
+});
+
+describe('A Partner\'s Partnership Request is always handled by CIRL', () => {
+  const base = { institution: 'jesttest Unit University', country: 'Japan', type: 'MOA', nature: 'Research', notes: 'jesttest unit' };
+
+  test('a new request gets unit CIRL even when another unit (or none) is sent', async () => {
+    const { agent } = await agentFor('potential_partner');
+    const noUnit = trackReq(await agent.post('/api/requests').send({ ...base, institution: base.institution + ' A' }));
+    expect(noUnit.status).toBe(200);
+    expect(noUnit.body.request.unit).toBe('CIRL');
+    const otherUnit = trackReq(await agent.post('/api/requests').send({ ...base, institution: base.institution + ' B', unit: 'CCS' }));
+    expect(otherUnit.body.request.unit).toBe('CIRL');
+  });
+
+  test('editing a draft keeps it on CIRL', async () => {
+    const { agent } = await agentFor('potential_partner');
+    const draft = trackReq(await agent.post('/api/requests').send({ ...base, institution: base.institution + ' C', isDraft: true }));
+    expect(draft.body.request.unit).toBe('CIRL');
+    const edited = await agent.patch(`/api/requests/${draft.body.request.id}/edit`).send({ unit: 'CAMS', notes: 'jesttest edited' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.request.unit).toBe('CIRL');
+  });
+
+  test('an MOA/MOU submission is not given a unit', async () => {
+    const { agent } = await agentFor('potential_partner');
+    const sub = trackReq(await agent.post('/api/requests').send({ institution: 'jesttest Unit Submission', notes: 'jesttest', isSubmission: true }));
+    expect(sub.status).toBe(200);
+    expect(sub.body.request.unit).toBe('');
+  });
 });
 
 describe('Partner submission: notes only / file only / file + notes (filed as a Partnership Request)', () => {

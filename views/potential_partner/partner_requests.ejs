@@ -254,13 +254,6 @@
                                     </select>
                                 </div>
                                 <div class="col-lg-4 mb-3">
-                                    <label class="form-label" for="f-unit">Responsible CSPC Unit</label>
-                                    <select class="form-select" id="f-unit">
-                                        <option value="">Select…</option>
-                                        <option>CCS</option><option>CILS</option><option>CETE</option><option>CNAS</option><option>CAMS</option><option>CIRL</option>
-                                    </select>
-                                </div>
-                                <div class="col-lg-4 mb-3">
                                     <label class="form-label" for="f-start">Proposed Start Date</label>
                                     <input type="date" class="form-control" id="f-start">
                                 </div>
@@ -400,7 +393,7 @@
     function resetForm() {
         editingId = null;
         ['f-inst', 'f-country', 'f-notes'].forEach(function (id) { document.getElementById(id).value = ''; });
-        ['f-type', 'f-nature', 'f-cat', 'f-region', 'f-unit'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['f-type', 'f-nature', 'f-cat', 'f-region'].forEach(function (id) { document.getElementById(id).value = ''; });
         document.getElementById('f-start').value = '';
         document.getElementById('f-end').value = '';
         document.getElementById('f-country').classList.remove('is-invalid');
@@ -430,7 +423,6 @@
         document.getElementById('f-nature').value = r.nature || '';
         document.getElementById('f-cat').value = r.category || '';
         document.getElementById('f-region').value = r.region || '';
-        document.getElementById('f-unit').value = r.unit || '';
         document.getElementById('f-start').value = r.startDate || '';
         document.getElementById('f-end').value = r.endDate || '';
         document.getElementById('f-notes').value = r.notes || '';
@@ -444,7 +436,7 @@
             nature: document.getElementById('f-nature').value,
             category: document.getElementById('f-cat').value,
             region: document.getElementById('f-region').value,
-            unit: document.getElementById('f-unit').value,
+            // Responsible CSPC Unit is not asked: a Partner's request is always handled by CIRL (set by the server).
             startDate: document.getElementById('f-start').value,
             endDate: document.getElementById('f-end').value,
             notes: document.getElementById('f-notes').value.trim(),
@@ -585,7 +577,6 @@
         set('f-country', r.country, r.countryConfidence);
         set('f-cat', r.category, r.categoryConfidence);
         set('f-region', r.region, r.regionConfidence);
-        set('f-unit', r.unit, r.unitConfidence);
         if (r.nature) set('f-nature', r.nature, r.natureConfidence);
 
         var typeWarn = document.getElementById('f-type-warn');

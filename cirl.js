@@ -18,6 +18,7 @@ const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
 const googleDocsService = require('./services/googleDocsService');
+const emailService = require('./services/emailService');
 const realtime = require('./services/realtime');
 const searchService = require('./services/searchService');
 const geocoding = require('./services/geocodingService');
@@ -1063,7 +1064,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       nature: submission ? 'MOA/MOU Submission' : (nature || '').trim(),
       category: category || '',
       region: region || '',
-      unit: unit || '',
+      unit: partnerRequestUnit(req.session.user, { isSubmission: submission, isRenewal }) || unit || '',
       startDate: startDate || '',
       endDate: endDate || '',
       attachmentLink: attachmentLink || '',
@@ -1108,6 +1109,15 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
             : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
       }, role => prLinkForRole(role, nextId));
 
+      emailSubmissionReceipt(req.session.user, {
+        tag: submission ? 'MOA/MOU Submission' : isRenewal ? 'Renewal Request' : 'Partnership Request',
+        title: submission ? `MOA/MOU submission received: ${entry.institution}` : `Request received: ${entry.institution}`,
+        desc: submission
+          ? `Your MOA/MOU submission for ${entry.institution} was sent to CSPC-CIRL (reference #REQ-${String(nextId).padStart(3, '0')}). You will be notified by e-mail as it is reviewed.`
+          : `Your ${isRenewal ? 'renewal' : 'partnership'} request for ${entry.institution}${entry.type ? ' (' + entry.type + ')' : ''} was submitted to CSPC-CIRL (reference #REQ-${String(nextId).padStart(3, '0')}). You will be notified by e-mail as it is reviewed.`,
+        link: prLinkForRole(req.session.user.role, nextId)
+      });
+
       // Give the submitter their own copy in the Document Library — skipped
       // when an OCR attachment already exists, since that upload was already
       // archived there (avoids a duplicate entry for one submission). A MOA/MOU
@@ -1125,6 +1135,16 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
     res.status(500).json({ error: err.message });
   }
 });
+
+// A Partner's new Partnership Request is always handled by CIRL, so its Responsible CSPC Unit is fixed to 'CIRL'
+// (the Partner form no longer asks for it, and anything sent is overridden). MOA/MOU submissions and renewals keep
+// their own unit handling. Returns the fixed unit, or null when the caller's value should be used.
+const PARTNER_REQUEST_UNIT = 'CIRL';
+function partnerRequestUnit(user, request) {
+  if (!user || user.role !== 'potential_partner') return null;
+  if (request && (request.isSubmission || request.isRenewal)) return null;
+  return PARTNER_REQUEST_UNIT;
+}
 
 // Edit a request that is still a Draft — self-service, ownership-checked.
 // Once a request is submitted (Pending/Under Review/etc.) it can no longer be
@@ -1152,6 +1172,8 @@ app.patch('/api/requests/:id/edit', requireRequester, denyCollegeStaffPartnershi
     for (const key of allowed) {
       if (req.body[key] !== undefined) patch[key] = req.body[key];
     }
+    const fixedUnit = partnerRequestUnit(req.session.user, target);
+    if (fixedUnit) patch.unit = fixedUnit;
     await db.collection('requests').updateOne({ id }, { $set: patch });
     const updated = await db.collection('requests').findOne({ id });
     res.json({ success: true, request: updated });
@@ -1199,6 +1221,23 @@ app.post('/api/requests/:id/submit', requireRequester, denyCollegeStaffPartnersh
     const updated = await db.collection('requests').findOne({ id });
     await logActivity(db, req.session.user, 'SUBMIT',
       `Partnership request submitted: ${updated.institution} (${updated.type}) by ${updated.requestedBy}`);
+
+    // Same alerts as a request submitted directly (POST /api/requests): the reviewers, and a receipt to the submitter.
+    const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES } }).toArray();
+    await notifyReviewers(db, reviewers, {
+      module: 'request',
+      tag: updated.isRenewal ? 'Renewal Request' : 'Partnership Request',
+      icon: updated.isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
+      color: updated.isRenewal ? 'info' : 'primary',
+      title: `New request submitted: ${updated.institution}`,
+      desc: `${updated.requestedBy} submitted a new partnership request for ${updated.institution}.`
+    }, role => prLinkForRole(role, id));
+    emailSubmissionReceipt(req.session.user, {
+      tag: 'Partnership Request',
+      title: `Request received: ${updated.institution}`,
+      desc: `Your partnership request for ${updated.institution} (${updated.type}) was submitted to CSPC-CIRL (reference #REQ-${String(id).padStart(3, '0')}). You will be notified by e-mail as it is reviewed.`,
+      link: prLinkForRole(req.session.user.role, id)
+    });
 
     if (['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !updated.attachmentLink) {
       await archiveRequestRecordToLibrary(db, {
@@ -1623,6 +1662,12 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       title: `New document request submitted: ${entry.institution}`,
       desc: `${entry.requestedBy} requested a ${entry.documentType} document for ${entry.institution}.`
     }, role => drLinkForRole(role, nextId));
+    emailSubmissionReceipt(req.session.user, {
+      tag: 'Document Request',
+      title: `Document request received: ${entry.institution}`,
+      desc: `Your request for ${entry.documentType} (${entry.institution}) was received by CSPC-CIRL. You will be notified by e-mail at each stage until it is completed.`,
+      link: drLinkForRole(req.session.user.role, nextId)
+    });
 
     // Document Requests never have an upload step of their own, so this is
     // the only copy of the submission that ever lands in the requester's
@@ -5472,6 +5517,19 @@ async function notifyUsers(db, emails, payload) {
   }));
   await db.collection('notifications').insertMany(docs);
   publishNewNotifications(db, docs).catch(err => console.error('realtime notification publish failed:', err.message));
+  // Request notifications (Partnership and Document Requests) also go to each recipient's e-mail. In the background:
+  // a slow or failing mail server never delays or breaks the request action itself (services/emailService.js).
+  if (payload && payload.module === 'request') {
+    emailService.sendNotificationEmails(targets, payload).catch(err => console.error('notification e-mail failed:', err.message));
+  }
+}
+
+// E-mail receipt to the person who just submitted a request, at the address they signed in with — e-mail only (the
+// submitter has always been left out of the in-app broadcast about their own submission). In the background, never
+// blocking the submission.
+function emailSubmissionReceipt(user, payload) {
+  if (!user || !user.email) return;
+  emailService.sendNotificationEmails([user.email], payload).catch(err => console.error('receipt e-mail failed:', err.message));
 }
 
 // Reviewer broadcasts (REQUEST_REVIEWER_ROLES = Administrator + Staff) can't
