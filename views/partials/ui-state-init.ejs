@@ -24,6 +24,18 @@ html[data-bs-theme="dark"] .btn-soft-primary {
 html[data-bs-theme="dark"] .text-primary {
     color: #9fb3f7 !important;
 }
+/* Sidebar scrolls with the page instead of staying pinned on screen (Velzon draws it position:fixed). Desktop only:
+   below 992px the sidebar is Velzon's slide-out menu, which must stay fixed to open where the user is. The wrapper
+   is made the positioning box so the sidebar's dark background still runs the full height of a long page. */
+@media (min-width: 992px) {
+    html[data-layout="vertical"] #layout-wrapper {
+        position: relative;
+        min-height: 100vh;
+    }
+    html[data-layout="vertical"] .navbar-menu {
+        position: absolute;
+    }
+}
 html[data-bs-theme="dark"][data-sidebar="dark"] {
     --vz-vertical-menu-item-color: #c9ccd8;
     --vz-vertical-menu-sub-item-color: #bcc0cd;
