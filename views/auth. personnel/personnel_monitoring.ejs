@@ -567,7 +567,10 @@
         downloadBtn.href = safeLink || '#';
         downloadBtn.setAttribute('download', item.filename);
 
-        var sourceEl = document.getElementById((prefix || 'dr') + '-draft-modal');
+        // The eye button in Document Request Details ("attach-dr-<id>" items) opens this preview from the details modal
+        // itself, so that is the one to hide and bring back — otherwise it stayed on top of the preview.
+        var sourceId = String(prefix || '').indexOf('attach-dr-') === 0 ? 'dr-detail-modal' : (prefix || 'dr') + '-draft-modal';
+        var sourceEl = document.getElementById(sourceId);
         var sourceInstance = sourceEl && bootstrap.Modal.getInstance(sourceEl);
         draftPreviewReturnTo = sourceInstance ? sourceEl.id : null;
         if (sourceInstance) sourceInstance.hide();
@@ -713,8 +716,9 @@
 
     // A real close (Close button, Esc, backdrop click, or after Cancel) drops the breadcrumb back to Monitoring.
     // "View Draft" also hides this modal, but sets draftDetailReturnTo first (checked here) so that swap doesn't count.
+    // Previewing an attached document swaps this modal out the same way (draftPreviewReturnTo).
     document.getElementById('dr-detail-modal').addEventListener('hidden.bs.modal', function () {
-        if (!draftDetailReturnTo) resetBreadcrumb();
+        if (!draftDetailReturnTo && draftPreviewReturnTo !== 'dr-detail-modal') resetBreadcrumb();
     });
 
     function cancelDocRequest(id, btn) {
