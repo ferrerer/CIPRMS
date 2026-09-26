@@ -1966,11 +1966,10 @@
         signoffWrap.style.display = 'none';
       }
 
+      // One action only: download the request as the CSPC-F-CIRL-04 PDF. The modal still closes from its header ✕.
       document.getElementById('dr-modal-footer').innerHTML = `
-        <a href="/api/document-requests/${id}/pdf" class="btn btn-soft-info btn-sm btn-icon" title="Download PDF">
-          <i class="ri-file-download-line"></i></a>
-        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
-          <i class="ri-close-line me-1"></i>Close</button>`;
+        <a href="/api/document-requests/${id}/pdf" class="btn btn-primary">
+          <i class="ri-download-2-line me-1"></i>Download Request</a>`;
 
       setBreadcrumb(['Requests', 'Document Request', drRequestLabel(r)]);
       modalInstance('dr-modal').show();
