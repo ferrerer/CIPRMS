@@ -272,7 +272,6 @@
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Request #</label><div class="fw-bold fs-13" id="drd-id">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Document Type</label><div class="fw-bold fs-13" id="drd-type">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Institution</label><div class="fw-bold fs-13" id="drd-inst">—</div></div>
-                            <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Status</label><div id="drd-status">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Date Submitted</label><div class="fw-bold fs-13" id="drd-date">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Last Updated</label><div class="fw-bold fs-13" id="drd-updated">—</div></div>
                             <div class="col-6"><label class="input-label text-muted fs-10 fw-bold text-uppercase">Current Stage</label><div class="fw-bold fs-13" id="drd-stage">—</div></div>
@@ -692,7 +691,7 @@
         document.getElementById('drd-id').textContent = '#' + r.id;
         document.getElementById('drd-type').textContent = r.documentType || '—';
         document.getElementById('drd-inst').textContent = r.institution || '—';
-        document.getElementById('drd-status').innerHTML = '<span class="badge ' + statusBadgeClass(cs) + '">' + cs + '</span>';
+        // No Status field here: it is already the Status column of the My Document Requests table (and Workflow Progress below).
         document.getElementById('drd-date').textContent = r.date || '—';
         document.getElementById('drd-updated').textContent = fmtWhen(r.updatedAt, r.date);
         document.getElementById('drd-stage').textContent = DR_STAGE_LABEL[cs] || cs;
