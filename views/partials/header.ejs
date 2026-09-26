@@ -11,9 +11,9 @@
         <% var homeDashboard = (typeof user !== 'undefined' && user) ? (user.role === 'Administrator' ? '/dashboard' : user.role === 'Auth. Personnel' ? '/personnel/monitoring' : user.role === 'potential_partner' ? '/partner/monitoring' : '/staff/dashboard') : '/'; %>
         <% var notificationsHref = (typeof user !== 'undefined' && user) ? (user.role === 'Auth. Personnel' ? '/personnel/notifications' : user.role === 'potential_partner' ? '/partner/notifications' : user.role === 'Staff' ? '/staff/notifications' : '/notifications') : '/notifications'; %>
         <%
-            // College Dean (backend role "Auth. Personnel") and Potential Partner: no Search bar, and no link to the
-            // Notifications PAGE (that page is closed/removed for both). Their Notifications bell and Profile/user menu are
-            // the same as every other role's. Administrator and Staff keep the full header.
+            // College Dean (backend role "Auth. Personnel") and Potential Partner: no Search bar. Partner also has no link to a
+            // Notifications PAGE (it has none); College Dean's page is open again (2026-09-26), so its bell shows
+            // "View All Notifications" like Administrator and Staff. Their bell and Profile/user menu are the same as every other role's.
             var isDeptUser = (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel');
             var isPartnerUser = (typeof user !== 'undefined' && user && user.role === 'potential_partner');
             var reducedHeader = isDeptUser || isPartnerUser;
@@ -158,7 +158,8 @@
                                 <div class="notif-scroll pe-2" id="notif-list">
                                     <div class="text-center text-muted py-4 fs-13">Loading…</div>
                                 </div>
-<% if (!reducedHeader) { %>
+<%# College Dean gets "View All Notifications" too (its Notifications page is open again); Partner still has no such page. %>
+<% if (!isPartnerUser) { %>
                                 <div class="my-3 text-center view-all">
                                     <a href="<%= notificationsHref %>" class="btn btn-soft-success waves-effect waves-light">View All Notifications <i class="ri-arrow-right-line align-middle"></i></a>
                                 </div>

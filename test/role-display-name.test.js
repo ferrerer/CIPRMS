@@ -196,7 +196,7 @@ describe('The stored role values, sessions and RBAC are UNCHANGED', () => {
     expect(denied.body.error).toBe('CIRL Staff cannot create Administrator accounts.'); // the visible message uses the display name
 
     const { agent: college } = await agentFor(COLLEGE_INTERNAL);
-    for (const path of ['/dashboard', '/users', '/reports', '/partnership-requests', '/staff/dashboard', '/personnel/dashboard', '/personnel/documents', '/personnel/notifications']) {
+    for (const path of ['/dashboard', '/users', '/reports', '/partnership-requests', '/staff/dashboard', '/personnel/dashboard', '/personnel/documents']) {
       const res = await college.get(path);
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe('/personnel/monitoring');

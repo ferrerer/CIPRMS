@@ -78,7 +78,8 @@ describe('the matrix as rendered', () => {
     expect(matrix['Dashboard'].partner.level).toBe('none');
     expect(matrix['Document Library'].college.level).toBe('none');
     expect(matrix['Document Library'].partner.level).toBe('none');
-    expect(matrix['Notifications'].college.text).toBe('Bell Only (own)');
+    expect(matrix['Notifications'].college.text).toBe('Own Only');   // bell + its own Notifications page (reopened 2026-09-26)
+    expect(matrix['Notifications'].partner.text).toBe('Bell Only (own)');
     expect(matrix['Document Requests'].partner.text).toBe('Submit MOA/MOU Only');
     expect(matrix['User Management'].staff.text).toBe('Full (except Administrator accounts)');
     expect(matrix['Reports & Analytics'].staff.text).toBe('Full, Own Audit Trail Only');
@@ -142,12 +143,13 @@ describe('every row agrees with what the routes really do', () => {
     for (const k of ['college', 'partner']) expect([403, 404]).toContain((await agents[k].post('/api/calendarevents/99999999/join')).status);
   });
 
-  test('Notifications: every role has its own bell feed; the Notifications PAGE is closed to College Dean and Partner', async () => {
+  test('Notifications: every role has its own bell feed; the Notifications PAGE is closed to Partner only (College Dean\'s reopened 2026-09-26)', async () => {
     for (const k of ROLES) expect((await agents[k].get('/api/notifications/unread-count')).status).toBe(200);
     expect(await pageOpens('admin', { admin: '/notifications' })).toBe(true);
     expect(await pageOpens('staff', { staff: '/staff/notifications' })).toBe(true);
-    expect(await pageOpens('college', { college: '/personnel/notifications' })).toBe(false);
+    expect(await pageOpens('college', { college: '/personnel/notifications' })).toBe(true);
     expect(await pageOpens('partner', { partner: '/partner/notifications' })).toBe(false);
-    expect(matrix['Notifications'].college.text).toMatch(/Bell/);
+    expect(matrix['Notifications'].college.text).toMatch(/Own Only/);
+    expect(matrix['Notifications'].partner.text).toMatch(/Bell/);
   });
 });

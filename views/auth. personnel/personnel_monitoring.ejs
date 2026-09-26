@@ -10,6 +10,23 @@
     <link href="/velzon/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <!-- Shared Country list (same one the Registry, Reports and the Partner Request form use) -->
+    <script src="/velzon/assets/js/shared/country-options.js"></script>
+    <style>
+        .cr-country-wrap { position: relative; }
+        .cr-country-dropdown {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1060;
+            background: #fff; border: 1px solid #dfe3ea; border-radius: 8px;
+            box-shadow: 0 10px 28px rgba(20,25,45,.14); max-height: 220px; overflow-y: auto; padding: 6px;
+            display: none;
+        }
+        .cr-country-option { padding: 8px 10px; border-radius: 6px; font-size: .85rem; color: #313a46; cursor: pointer; }
+        .cr-country-option:hover { background: #f0f2fb; color: #405189; }
+        .cr-country-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+        [data-bs-theme="dark"] .cr-country-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
+        [data-bs-theme="dark"] .cr-country-option { color: #d3d5db; }
+        [data-bs-theme="dark"] .cr-country-option:hover { background: #363c4c; color: #a9bcf5; }
+    </style>
 </head>
 <body>
 
@@ -106,6 +123,38 @@
                 </div>
                 <!-- end stat cards -->
 
+                <!-- College Partnership Reports (2026-09-26): the college already signed an MOA/MOU with another institution
+                     without going through CIRL — the Dean sends CIRL the approved copy so it is on record. CIRL records it
+                     in the Partnership Registry (or asks for more information). -->
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class="card" id="college-reports-card">
+                            <div class="card-header d-flex align-items-center flex-wrap gap-2">
+                                <div class="flex-grow-1">
+                                    <h4 class="card-title mb-1"><i class="ri-government-line me-2"></i>College Partnership Reports</h4>
+                                    <p class="text-muted fs-12 mb-0">Your college partnered with another institution on its own? Send CIRL a copy of the approved MOA/MOU so it is recorded in the Partnership Registry.</p>
+                                </div>
+                                <button type="button" class="btn btn-soft-primary btn-sm" onclick="openCollegeReportForm()"><i class="ri-send-plane-line me-1"></i>Send Approved MOA/MOU to CIRL</button>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Report #</th><th>Partner Institution</th><th>Country</th><th>Agreement</th>
+                                                <th>Validity</th><th>Date Sent</th><th>Status</th><th class="text-end">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cr-report-body">
+                                            <tr><td colspan="8" class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- My Document Requests -->
                 <div class="row">
                     <div class="col-xl-12">
@@ -163,6 +212,85 @@
                     </div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- Send Approved MOA/MOU to CIRL (College Partnership Report) -->
+        <div class="modal fade" id="cr-report-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="ri-government-line me-2 text-primary"></i>Send Approved MOA/MOU to CIRL</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info fs-13 py-2">
+                            <i class="ri-information-line me-1"></i>For an agreement your college has <strong>already signed</strong> with another institution.
+                            Reporting college: <strong><%= (typeof user !== 'undefined' && user && user.unit) ? user.unit : 'your college' %></strong>.
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label" for="cr-inst">Partner Institution <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="cr-inst" maxlength="200">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="cr-country">Country <span class="text-danger">*</span></label>
+                                <div class="cr-country-wrap">
+                                    <input type="text" class="form-control" id="cr-country" autocomplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox">
+                                    <div class="cr-country-dropdown" id="cr-country-dropdown" role="listbox"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label" for="cr-type">Agreement Type <span class="text-danger">*</span></label>
+                                <select class="form-select" id="cr-type">
+                                    <option value="">Select…</option><option>MOA</option><option>MOU</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label" for="cr-nature">Nature of Partnership <span class="text-danger">*</span></label>
+                                <select class="form-select" id="cr-nature">
+                                    <option value="">Select…</option>
+                                    <option>Research</option><option>Student Exchange</option><option>Joint Program</option>
+                                    <option>Faculty Development</option><option>Technology Transfer</option><option>Community Outreach</option><option>Other</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="cr-start">Effective Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="cr-start">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="cr-end">Expiry Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="cr-end">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="cr-file">Approved (signed) copy <span class="text-danger">*</span></label>
+                                <input type="file" class="form-control" id="cr-file" accept=".pdf,.jpg,.jpeg,.png">
+                                <div class="form-text">PDF, JPG or PNG — max 10MB.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="cr-notes">Notes for CIRL</label>
+                                <textarea class="form-control" id="cr-notes" rows="3" maxlength="1000"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-success" id="cr-submit-btn" onclick="submitCollegeReport()"><i class="ri-send-plane-line me-1"></i>Send to CIRL</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- College Partnership Report details -->
+        <div class="modal fade" id="cr-view-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="cr-view-title"><i class="ri-government-line me-2 text-primary"></i>College Partnership Report</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="cr-view-body"></div>
+                </div>
             </div>
         </div>
 
@@ -795,6 +923,8 @@
     function openFromQuery() {
         var params = new URLSearchParams(window.location.search);
         var id = params.get('id');
+        // type=pr: a notification about one of this Dean's College Partnership Reports
+        if (id && params.get('type') === 'pr') { openCollegeReportWhenLoaded(parseInt(id, 10)); return; }
         if (!id || params.get('type') !== 'dr') return;
         var row = document.querySelector('#dr-monitor-body tr[data-dr-id="' + id + '"]');
         if (!row) return;
@@ -825,12 +955,265 @@
     }
     refreshDocs();
 
+    /* ═══ COLLEGE PARTNERSHIP REPORTS (2026-09-26) ═══
+       The Dean sends CIRL a copy of an MOA/MOU the college already signed on its own. Filed as a Partnership Request
+       with isCollegeReport (POST /api/requests), then the approved copy is attached (POST /api/requests/:id/documents,
+       initial=1). CIRL records it in the Registry ("Recorded"), asks for more information, or declines it. */
+    var myCollegeReports = [];
+    var crPendingUploadId = null;   // a report that was created but whose file upload failed — Send retries only the upload
+    var crOpenAfterLoad = null;
+    var CR_MAX_BYTES = 10 * 1024 * 1024;
+    var CR_STATUS = {
+        'Pending': { label: 'Sent to CIRL', cls: 'bg-warning-subtle text-warning' },
+        'Under Review': { label: 'CIRL needs more information', cls: 'bg-info-subtle text-info' },
+        'Approved': { label: 'Recorded in Registry', cls: 'bg-success-subtle text-success' },
+        'Rejected': { label: 'Not recorded', cls: 'bg-danger-subtle text-danger' }
+    };
+    function crStatusBadge(s) {
+        var m = CR_STATUS[s] || { label: s || '—', cls: 'bg-light text-body' };
+        return '<span class="badge ' + m.cls + '">' + escapeHtml(m.label) + '</span>';
+    }
+    function crRef(id) { return '#REQ-' + String(id).padStart(3, '0'); }
+    function crDate(v) {
+        if (!v) return '—';
+        var d = new Date(v);
+        return isNaN(d) ? escapeHtml(v) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function loadCollegeReports() {
+        return CIPRMS.api('/api/requests/mine', { quiet: true }).then(function (res) {
+            var body = document.getElementById('cr-report-body');
+            if (!res.ok || !Array.isArray(res.data)) {
+                if (!myCollegeReports.length) body.innerHTML = '<tr><td colspan="8" class="text-center text-danger py-4">Failed to load your reports.</td></tr>';
+                return false;
+            }
+            myCollegeReports = res.data.filter(function (r) { return r.isCollegeReport; });
+            renderCollegeReports();
+            if (crOpenAfterLoad) { var id = crOpenAfterLoad; crOpenAfterLoad = null; openCollegeReport(id); }
+            var shown = document.getElementById('cr-view-modal').classList.contains('show');
+            if (shown && currentCollegeReportId) openCollegeReport(currentCollegeReportId, true);
+        });
+    }
+
+    function renderCollegeReports() {
+        var body = document.getElementById('cr-report-body');
+        if (!myCollegeReports.length) {
+            body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No reports yet. Use <strong>Send Approved MOA/MOU to CIRL</strong> for an agreement your college signed on its own.</td></tr>';
+            return;
+        }
+        body.innerHTML = myCollegeReports.map(function (r) {
+            return '<tr data-cr-id="' + r.id + '">' +
+                '<td class="fw-semibold text-primary">' + crRef(r.id) + '</td>' +
+                '<td class="fw-medium">' + escapeHtml(r.institution) + '</td>' +
+                '<td>' + escapeHtml(r.country || '—') + '</td>' +
+                '<td><span class="badge bg-primary-subtle text-primary">' + escapeHtml(r.type || '—') + '</span></td>' +
+                '<td class="fs-13">' + crDate(r.startDate) + ' – ' + crDate(r.endDate) + '</td>' +
+                '<td class="fs-13">' + escapeHtml(r.date || '—') + '</td>' +
+                '<td>' + crStatusBadge(r.status) + '</td>' +
+                '<td class="text-end"><button type="button" class="btn btn-sm btn-soft-primary" onclick="openCollegeReport(' + r.id + ')"><i class="ri-eye-line me-1"></i>View</button></td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    function openCollegeReportWhenLoaded(id) {
+        if (myCollegeReports.some(function (r) { return r.id === id; })) openCollegeReport(id);
+        else crOpenAfterLoad = id;
+    }
+
+    // ── Country: searchable dropdown over the shared COUNTRY_OPTIONS list (same behaviour as the Partner Request form) ──
+    function matchCountryOption(raw) {
+        var q = String(raw || '').trim().toLowerCase();
+        if (!q || typeof COUNTRY_OPTIONS === 'undefined') return null;
+        return COUNTRY_OPTIONS.find(function (c) { return c.toLowerCase() === q; }) || null;
+    }
+    (function initCountrySearch() {
+        var input = document.getElementById('cr-country');
+        var dropdown = document.getElementById('cr-country-dropdown');
+        if (!input || !dropdown || typeof COUNTRY_OPTIONS === 'undefined') return;
+        var blurTimer = null;
+        function close() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; input.setAttribute('aria-expanded', 'false'); }
+        function pick(v) { input.value = v; input.classList.remove('is-invalid'); close(); }
+        function open() {
+            if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
+            var q = input.value.trim().toLowerCase();
+            var list = (q && !matchCountryOption(q)) ? COUNTRY_OPTIONS.filter(function (c) { return c.toLowerCase().indexOf(q) !== -1; }) : COUNTRY_OPTIONS;
+            dropdown.innerHTML = list.length
+                ? list.map(function (c) { return '<div class="cr-country-option" data-val="' + escapeHtml(c) + '">' + escapeHtml(c) + '</div>'; }).join('')
+                : '<div class="cr-country-empty">No matching country.</div>';
+            dropdown.style.display = 'block';
+            input.setAttribute('aria-expanded', 'true');
+            dropdown.querySelectorAll('.cr-country-option').forEach(function (o) {
+                o.addEventListener('mousedown', function (e) { e.preventDefault(); pick(o.getAttribute('data-val')); });
+            });
+        }
+        input.addEventListener('focus', open);
+        input.addEventListener('click', open);
+        input.addEventListener('input', open);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                var q = input.value.trim().toUpperCase();
+                var m = COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase() === q; }) || COUNTRY_OPTIONS.find(function (c) { return c.toUpperCase().indexOf(q) === 0; });
+                if (m) pick(m);
+            } else if (e.key === 'Escape' && dropdown.style.display === 'block') {
+                e.stopPropagation();   // close the list, not the whole form
+                close();
+            }
+        });
+        input.addEventListener('blur', function () {
+            blurTimer = setTimeout(function () {
+                close();
+                var m = matchCountryOption(input.value);
+                if (m) input.value = m;
+                input.classList.toggle('is-invalid', !!input.value.trim() && !m);
+            }, 120);
+        });
+        document.addEventListener('click', function (e) { if (e.target !== input && !dropdown.contains(e.target)) close(); });
+    })();
+
+    function openCollegeReportForm() {
+        if (!crPendingUploadId) {
+            ['cr-inst', 'cr-country', 'cr-type', 'cr-nature', 'cr-start', 'cr-end', 'cr-notes', 'cr-file'].forEach(function (id) { document.getElementById(id).value = ''; });
+        }
+        document.querySelectorAll('#cr-report-modal .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('cr-report-modal')).show();
+    }
+
+    function submitCollegeReport() {
+        var v = function (id) { return document.getElementById(id).value.trim(); };
+        var fileEl = document.getElementById('cr-file');
+        var file = fileEl.files[0] || null;
+        document.querySelectorAll('#cr-report-modal .is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+
+        var missing = ['cr-inst', 'cr-country', 'cr-type', 'cr-nature', 'cr-start', 'cr-end'].filter(function (id) { return !v(id); });
+        if (!file) missing.push('cr-file');
+        if (missing.length) {
+            missing.forEach(function (id) { document.getElementById(id).classList.add('is-invalid'); });
+            showToast('Please fill in every required field and attach the approved copy.', '#f06548');
+            return;
+        }
+        var country = matchCountryOption(v('cr-country'));
+        if (!country) { document.getElementById('cr-country').classList.add('is-invalid'); showToast('Please select a country from the list.', '#f06548'); return; }
+        if (new Date(v('cr-end')) <= new Date(v('cr-start'))) { document.getElementById('cr-end').classList.add('is-invalid'); showToast('The expiry date must be after the effective date.', '#f06548'); return; }
+        if (file.size > CR_MAX_BYTES) { fileEl.classList.add('is-invalid'); showToast('That file is too large. The maximum size is 10MB.', '#f06548'); return; }
+        if (!/\.(pdf|jpe?g|png)$/i.test(file.name)) { fileEl.classList.add('is-invalid'); showToast('Only PDF, JPG or PNG files are accepted.', '#f06548'); return; }
+
+        var btn = document.getElementById('cr-submit-btn');
+        var orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+
+        var create = crPendingUploadId
+            ? Promise.resolve(crPendingUploadId)
+            : CIPRMS.api('/api/requests', {
+                method: 'POST', quiet: true,
+                json: {
+                    isCollegeReport: true, institution: v('cr-inst'), country: country, type: v('cr-type'), nature: v('cr-nature'),
+                    startDate: v('cr-start'), endDate: v('cr-end'), notes: v('cr-notes')
+                }
+            }).then(function (res) {
+                if (!res.ok) throw new Error(res.error || 'Could not send the report.');
+                return res.data.request.id;
+            });
+
+        create.then(function (id) {
+            var fd = new FormData();
+            fd.append('document', file);
+            fd.append('initial', '1');
+            fd.append('note', 'Approved copy');
+            return CIPRMS.api('/api/requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
+                if (!res.ok) { var err = new Error(res.error || 'Upload failed.'); err.uploadStep = true; err.requestId = id; throw err; }
+                return id;
+            });
+        }).then(function (id) {
+            crPendingUploadId = null;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('cr-report-modal')).hide();
+            showToast('Sent to CIRL (' + crRef(id) + '). You will be notified once it is recorded.', '#0ab39c');
+            loadCollegeReports();
+        }).catch(function (e) {
+            if (e && e.uploadStep) {
+                crPendingUploadId = e.requestId;
+                showToast('The report was sent, but the file could not be uploaded: ' + e.message + ' Choose the file again and click Send.', '#f7b84b');
+                loadCollegeReports();
+            } else {
+                showToast((e && e.message) || 'Could not send the report.', '#f06548');
+            }
+        }).then(function () { btn.disabled = false; btn.innerHTML = orig; });
+    }
+
+    var currentCollegeReportId = null;
+    function openCollegeReport(id, refreshOnly) {
+        var r = myCollegeReports.find(function (x) { return x.id === id; });
+        if (!r) return;
+        currentCollegeReportId = id;
+        var files = (r.supportingDocuments || []).filter(function (d) { return d.fileLink; });
+        var filesHtml = files.length
+            ? files.map(function (d) {
+                var url = escapeHtml(sanitizeUrl(d.fileLink));
+                return '<div class="d-flex align-items-center justify-content-between border rounded p-2 mb-2">' +
+                    '<div><div class="fw-medium fs-13"><i class="ri-file-text-line me-1 text-primary"></i>' + escapeHtml(d.originalFilename || 'Document') + '</div>' +
+                    '<div class="text-muted fs-12">' + escapeHtml(d.uploadedBy || '') + ' · ' + escapeHtml(fmtWhen(d.uploadedAt, '')) + (d.note ? ' · ' + escapeHtml(d.note) : '') + '</div></div>' +
+                    (url ? '<a href="' + url + '" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary"><i class="ri-external-link-line me-1"></i>Open</a>' : '') +
+                    '</div>';
+            }).join('')
+            : '<p class="text-muted fs-13 mb-0">No file attached yet.</p>';
+        var canAdd = r.status === 'Pending' || r.status === 'Under Review';
+        var row = function (label, value) { return '<div class="col-sm-6"><div class="text-muted fs-12">' + label + '</div><div class="fw-medium">' + value + '</div></div>'; };
+        document.getElementById('cr-view-title').innerHTML = '<i class="ri-government-line me-2 text-primary"></i>' + crRef(r.id) + ' — ' + escapeHtml(r.institution);
+        document.getElementById('cr-view-body').innerHTML =
+            '<div class="row g-3 mb-3">' +
+            row('Status', crStatusBadge(r.status)) +
+            row('Reporting College', escapeHtml(r.unit || '—')) +
+            row('Partner Institution', escapeHtml(r.institution)) +
+            row('Country', escapeHtml(r.country || '—')) +
+            row('Agreement Type', escapeHtml(r.type || '—')) +
+            row('Nature of Partnership', escapeHtml(r.nature || '—')) +
+            row('Effective – Expiry', crDate(r.startDate) + ' – ' + crDate(r.endDate)) +
+            row('Date Sent', escapeHtml(r.date || '—')) +
+            '</div>' +
+            (r.notes ? '<div class="mb-3"><div class="text-muted fs-12">Notes</div><div class="border rounded p-2 fs-13">' + escapeHtml(r.notes) + '</div></div>' : '') +
+            (r.status === 'Under Review' ? '<div class="alert alert-info fs-13 py-2"><i class="ri-question-answer-line me-1"></i>CIRL asked for more information — see the note above, then add the file or details below.</div>' : '') +
+            (r.status === 'Approved' ? '<div class="alert alert-success fs-13 py-2"><i class="ri-checkbox-circle-line me-1"></i>CIRL recorded this partnership in the Partnership Registry.</div>' : '') +
+            '<div class="text-muted fs-12 mb-2">Files</div>' + filesHtml +
+            (canAdd
+                ? '<div class="border-top pt-3 mt-3"><label class="form-label fs-13">Add a file or note for CIRL</label>' +
+                  '<input type="file" class="form-control form-control-sm mb-2" id="cr-add-file" accept=".pdf,.jpg,.jpeg,.png">' +
+                  '<textarea class="form-control form-control-sm mb-2" id="cr-add-note" rows="2" maxlength="1000"></textarea>' +
+                  '<button type="button" class="btn btn-sm btn-primary" id="cr-add-btn" onclick="addCollegeReportFile(' + r.id + ')"><i class="ri-upload-2-line me-1"></i>Send</button></div>'
+                : '');
+        if (!refreshOnly) {
+            setBreadcrumb(['Monitoring', 'College Partnership Report', r.institution + ' — ' + crRef(r.id)]);
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('cr-view-modal')).show();
+        }
+    }
+    document.getElementById('cr-view-modal').addEventListener('hidden.bs.modal', function () { currentCollegeReportId = null; resetBreadcrumb(); });
+
+    function addCollegeReportFile(id) {
+        var fileEl = document.getElementById('cr-add-file');
+        var note = document.getElementById('cr-add-note').value.trim();
+        var file = fileEl.files[0] || null;
+        if (!file && !note) { showToast('Choose a file, write a note, or both.', '#f06548'); return; }
+        if (file && file.size > CR_MAX_BYTES) { showToast('That file is too large. The maximum size is 10MB.', '#f06548'); return; }
+        var btn = document.getElementById('cr-add-btn');
+        btn.disabled = true;
+        var fd = new FormData();
+        if (file) fd.append('document', file);
+        fd.append('note', note);
+        CIPRMS.api('/api/requests/' + id + '/documents', { method: 'POST', body: fd, quiet: true }).then(function (res) {
+            btn.disabled = false;
+            if (!res.ok) { showToast(res.error || 'Could not send.', '#f06548'); return; }
+            showToast('Sent to CIRL.', '#0ab39c');
+            loadCollegeReports();
+        });
+    }
+
+    loadCollegeReports();
     loadDRRequests();
     // Live updates: a reviewer moved one of my Document Requests to the next stage. The server is asked again for the
     // real data — counters, Approval Progress and the table are all recomputed from it, never from the event itself.
     if (window.CIPRMS && CIPRMS.live) {
         CIPRMS.live(['documentRequest.updated', 'documentRequest.statusChanged', 'request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
-            return Promise.all([loadDRRequests({ live: true }), refreshDocs()]).then(function (r) { return r.indexOf(false) === -1; });
+            return Promise.all([loadDRRequests({ live: true }), refreshDocs(), loadCollegeReports()]).then(function (r) { return r.indexOf(false) === -1; });
         }, { debounce: 250 });
     }
 </script>

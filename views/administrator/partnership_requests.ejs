@@ -1170,7 +1170,7 @@
           <td class="fw-medium fs-13">${by}</td>
           <td><span class="fw-semibold fs-13">${inst}</span></td>
           <td class="text-muted fs-13">${country}</td>
-          <td><span class="badge badge-type bg-primary-subtle text-primary border border-primary-subtle">${type}</span>${r.isRenewal ? ' <span class="badge bg-info-subtle text-info">Renewal</span>' : ''}</td>
+          <td><span class="badge badge-type bg-primary-subtle text-primary border border-primary-subtle">${type}</span>${r.isRenewal ? ' <span class="badge bg-info-subtle text-info">Renewal</span>' : ''}${r.isCollegeReport ? ' <span class="badge bg-success-subtle text-success" title="A college sent CIRL a copy of an MOA/MOU it already signed">College Report</span>' : ''}</td>
           <td class="text-muted fs-13">${date}</td>
           <td>${statusBadge(status)}</td>
           <td>
@@ -1225,7 +1225,7 @@
           </div>
           <div class="col-sm-6">
             <p class="detail-label">Request Type</p>
-            <p class="detail-value mb-0">${r.isSubmission ? 'MOA/MOU Submission' : r.isRenewal ? 'Renewal of Existing Partnership' : 'New Partnership'}</p>
+            <p class="detail-value mb-0">${r.isSubmission ? 'MOA/MOU Submission' : r.isCollegeReport ? 'College Partnership Report (already signed by the college)' : r.isRenewal ? 'Renewal of Existing Partnership' : 'New Partnership'}</p>
           </div>
           <div class="col-sm-6">
             <p class="detail-label">Requested By</p>
@@ -1313,7 +1313,7 @@
         ` : ''}
         ${isReview ? `
           <button type="button" class="btn btn-success" onclick="resolvePR('${uid}','Approved', this)">
-            <i class="ri-check-line me-1"></i>Approve</button>
+            <i class="ri-check-line me-1"></i>${r.isCollegeReport ? 'Record in Registry' : 'Approve'}</button>
         ` : ''}`;
 
       setBreadcrumb(['Requests', 'Partnership Request', prRequestLabel(r)]);

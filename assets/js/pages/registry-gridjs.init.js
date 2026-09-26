@@ -1334,7 +1334,9 @@ function applyRequestToForm(r) {
 
   if (r.unit) fUnitCombo.setValues(r.unit);
 
-  var remarksParts = ['[From Partnership Request #REQ-' + String(r.id).padStart(3, '0') + ']'];
+  var remarksParts = [r.isCollegeReport
+    ? '[Reported by ' + (r.requestedBy || 'the College Dean') + (r.unit ? ' (' + r.unit + ')' : '') + ' — College Partnership Report #REQ-' + String(r.id).padStart(3, '0') + ']'
+    : '[From Partnership Request #REQ-' + String(r.id).padStart(3, '0') + ']'];
   if (r.notes) remarksParts.push(r.notes);
   document.getElementById('f-remarks').value = remarksParts.join(' ');
 

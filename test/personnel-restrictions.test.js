@@ -25,8 +25,7 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
 
   test.each([
     ['Dashboard', '/personnel/dashboard'],
-    ['Document Library', '/personnel/documents'],
-    ['Notifications page (the header bell stays)', '/personnel/notifications']
+    ['Document Library', '/personnel/documents']
   ])('%s (%s) redirects to /personnel/monitoring', async (_label, path) => {
     const res = await agent.get(path);
     expect(res.status).toBe(302);
@@ -41,8 +40,8 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
     }
   });
 
-  test('the pages this role keeps still render (Monitoring, Requests, Calendar, Settings/Profile)', async () => {
-    for (const path of ['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings']) {
+  test('the pages this role keeps still render (Monitoring, Requests, Calendar, Settings/Profile, Notifications)', async () => {
+    for (const path of ['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings', '/personnel/notifications']) {
       const res = await agent.get(path);
       expect(res.status).toBe(200);
     }
@@ -82,11 +81,11 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
     }
   });
 
-  test('the Notifications PAGE stays closed — no header link, "View All" button or menu item leads to it', async () => {
+  test('the bell has "View All Notifications" leading to the Dean\'s own Notifications page (reopened 2026-09-26), but no menu item', async () => {
     for (const path of ['/personnel/monitoring', '/personnel/settings']) {
       const html = (await agent.get(path)).text;
-      expect(html).not.toContain('/personnel/notifications');
-      expect(html).not.toMatch(/class="[^"]*view-all[^"]*"/);
+      expect(html).toMatch(/class="[^"]*view-all[^"]*"/);
+      expect(html).toContain('href="/personnel/notifications" class="btn btn-soft-success');
       expect(html).not.toMatch(/class="align-middle">Notifications</);
     }
   });
@@ -104,7 +103,7 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
     const navHrefs = [...html.matchAll(/<a class="nav-link menu-link[^"]*"\s+href="([^"]+)"/g)].map(m => m[1]);
     expect(navHrefs).toEqual(['/personnel/monitoring', '/personnel/requests', '/personnel/calendar', '/personnel/settings', '#']); // '#' = Logout
     expect(html).toContain('College Dean');
-    for (const gone of ['/personnel/dashboard', '/personnel/documents', '/personnel/notifications']) {
+    for (const gone of ['/personnel/dashboard', '/personnel/documents']) {
       expect(html).not.toContain('href="' + gone + '"');
     }
   });

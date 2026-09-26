@@ -344,7 +344,7 @@ function requirePersonnel(req, res, next) {
  * College Dean (backend role "Auth. Personnel") has a deliberately
  * reduced UI: Monitoring, Requests (Document Requests only) and Calendar.
  * This guard sits behind requirePersonnel on the pages that role does not
- * get — the Notifications PAGE and Document Library — and bounces ONLY an
+ * get — the Document Library (the Notifications page was reopened 2026-09-26) — and bounces ONLY an
  * Auth. Personnel session to its Monitoring home. (Settings/Profile and the
  * header Notifications bell ARE available to this role; there is no Dashboard
  * page at all — /personnel/dashboard is a plain redirect.)
@@ -382,10 +382,15 @@ function requireRequester(req, res, next) {
  * the API is closed to it here on the server rather than left to a hidden button. A JSON 403, not a
  * redirect: this is an API refusal. Administrator and Partner pass unchanged; Staff never reaches this
  * (requireRequester already redirects it).
+ *
+ * One exception (2026-09-26): a College Dean may CREATE a College Partnership Report — a copy of an MOA/MOU its
+ * college already signed with another institution without going through CIRL (POST /api/requests with
+ * isCollegeReport: true). Every other Partnership Request route stays closed to it.
  */
 function denyCollegeStaffPartnershipRequests(req, res, next) {
   const user = req.session && req.session.user;
   if (user && user.role === 'Auth. Personnel') {
+    if (req.method === 'POST' && req.path === '/api/requests' && req.body && req.body.isCollegeReport === true) return next();
     return res.status(403).json({ error: 'College Dean cannot submit Partnership Requests. Use a Document Request instead.' });
   }
   return next();
@@ -1023,10 +1028,22 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
   // Request (so reviewers handle it under Partnership Requests/Submission, not Document Requests) but is not a request
   // to create a partnership — no country/type/nature, never a draft, and approving it never touches the registry.
   const submission = isSubmission === true && !!req.session.user && req.session.user.role === 'potential_partner';
-  const draft = isDraft === true && !submission;
+  // College Partnership Report (College Dean only, 2026-09-26): the college already signed an MOA/MOU with another
+  // institution on its own; the Dean sends CIRL the approved copy so it is on record. Filed as a Partnership Request so
+  // CIRL reviews it in the same queue, and "approving" it records it in the Registry (same conversion as any request).
+  // The approved copy itself is uploaded right after, through POST /api/requests/:id/documents.
+  const collegeReport = req.body.isCollegeReport === true && !!req.session.user && req.session.user.role === 'Auth. Personnel';
+  const draft = isDraft === true && !submission && !collegeReport;
   // Drafts are allowed to be incomplete — only a real submission requires the core fields.
   if (submission && !(institution || '').trim()) {
     return res.status(400).json({ error: 'Institution is required.' });
+  }
+  if (collegeReport) {
+    const start = new Date(startDate), end = new Date(endDate);
+    if (!startDate || !endDate || isNaN(start) || isNaN(end)) {
+      return res.status(400).json({ error: 'The agreement\'s start and end dates are required.' });
+    }
+    if (end <= start) return res.status(400).json({ error: 'The end date must be after the start date.' });
   }
   if (!draft && !submission && (!institution || !country || !type || !nature)) {
     return res.status(400).json({ error: 'Missing required fields: institution, country, type, nature.' });
@@ -1056,6 +1073,13 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
     const last = await db.collection('requests').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length > 0 ? (last[0].id + 1) : 1;
 
+    // A College Partnership Report belongs to the Dean's own college (from their account, never from the form).
+    let reportUnit = '';
+    if (collegeReport) {
+      const me = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { unit: 1 } });
+      reportUnit = (me && me.unit) || req.session.user.unit || '';
+    }
+
     const entry = {
       id: nextId,
       institution: (institution || '').trim(),
@@ -1064,7 +1088,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       nature: submission ? 'MOA/MOU Submission' : (nature || '').trim(),
       category: category || '',
       region: region || '',
-      unit: partnerRequestUnit(req.session.user, { isSubmission: submission, isRenewal }) || unit || '',
+      unit: collegeReport ? reportUnit : (partnerRequestUnit(req.session.user, { isSubmission: submission, isRenewal }) || unit || ''),
       startDate: startDate || '',
       endDate: endDate || '',
       attachmentLink: attachmentLink || '',
@@ -1075,15 +1099,19 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       updatedAt: new Date().toISOString(),
       ...(submission ? { isSubmission: true } : {}),
-      ...(isRenewal ? { isRenewal: true, renewalPartnershipId: renewalPartnershipId } : {})
+      ...(collegeReport ? { isCollegeReport: true } : {}),
+      ...(isRenewal && !collegeReport ? { isRenewal: true, renewalPartnershipId: renewalPartnershipId } : {})
     };
 
     await db.collection('requests').insertOne(entry);
     if (!draft) {
+      const ref = `#REQ-${String(nextId).padStart(3, '0')}`;
       await logActivity(db, req.session.user, 'SUBMIT',
         submission
           ? `MOA/MOU submission sent: ${entry.institution} by ${entry.requestedBy}`
-          : `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
+          : collegeReport
+            ? `College partnership reported: ${entry.institution} (${type}) by ${entry.requestedBy}${entry.unit ? ' — ' + entry.unit : ''}`
+            : `Partnership request submitted: ${institution} (${type}) by ${entry.requestedBy}`);
 
       // Administrator and Staff — both review Partnership/Renewal Requests
       // (PATCH /api/requests/:id is requireStaffAccess-gated as of the
@@ -1095,34 +1123,50 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       const reviewers = await db.collection('users')
         .find({ role: { $in: REQUEST_REVIEWER_ROLES } })
         .toArray();
-      await notifyReviewers(db, reviewers, {
-        module: 'request',
-        tag: isRenewal ? 'Renewal Request' : 'Partnership Request',
-        icon: isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
-        color: isRenewal ? 'info' : 'primary',
-        title: submission ? `New MOA/MOU submission: ${entry.institution}`
-          : isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
-        desc: submission
-          ? `${entry.requestedBy} sent a MOA/MOU submission for ${entry.institution}.`
-          : isRenewal
-            ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
-            : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
-      }, role => prLinkForRole(role, nextId));
+      await notifyReviewers(db, reviewers, collegeReport
+        ? {
+          module: 'request',
+          tag: 'College Partnership Report',
+          icon: 'ri-government-line',
+          color: 'success',
+          title: `College partnership reported: ${entry.institution}`,
+          desc: `${entry.requestedBy}${entry.unit ? ' (' + entry.unit + ')' : ''} sent a copy of an approved ${entry.type} with ${entry.institution}, ${entry.country} (${entry.startDate} to ${entry.endDate}). Review it and record it in the Registry.`
+        }
+        : {
+          module: 'request',
+          tag: isRenewal ? 'Renewal Request' : 'Partnership Request',
+          icon: isRenewal ? 'ri-refresh-line' : 'ri-building-4-line',
+          color: isRenewal ? 'info' : 'primary',
+          title: submission ? `New MOA/MOU submission: ${entry.institution}`
+            : isRenewal ? `Renewal initiated: ${entry.institution}` : `New request submitted: ${entry.institution}`,
+          desc: submission
+            ? `${entry.requestedBy} sent a MOA/MOU submission for ${entry.institution}.`
+            : isRenewal
+              ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
+              : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
+        }, role => prLinkForRole(role, nextId));
 
-      emailSubmissionReceipt(req.session.user, {
-        tag: submission ? 'MOA/MOU Submission' : isRenewal ? 'Renewal Request' : 'Partnership Request',
-        title: submission ? `MOA/MOU submission received: ${entry.institution}` : `Request received: ${entry.institution}`,
-        desc: submission
-          ? `Your MOA/MOU submission for ${entry.institution} was sent to CSPC-CIRL (reference #REQ-${String(nextId).padStart(3, '0')}). You will be notified by e-mail as it is reviewed.`
-          : `Your ${isRenewal ? 'renewal' : 'partnership'} request for ${entry.institution}${entry.type ? ' (' + entry.type + ')' : ''} was submitted to CSPC-CIRL (reference #REQ-${String(nextId).padStart(3, '0')}). You will be notified by e-mail as it is reviewed.`,
-        link: prLinkForRole(req.session.user.role, nextId)
-      });
+      emailSubmissionReceipt(req.session.user, collegeReport
+        ? {
+          tag: 'College Partnership Report',
+          title: `Partnership report received: ${entry.institution}`,
+          desc: `CSPC-CIRL received your copy of the approved ${entry.type} with ${entry.institution} (reference ${ref}). You will be notified by e-mail once CIRL records it in the Partnership Registry.`,
+          link: prLinkForRole(req.session.user.role, nextId)
+        }
+        : {
+          tag: submission ? 'MOA/MOU Submission' : isRenewal ? 'Renewal Request' : 'Partnership Request',
+          title: submission ? `MOA/MOU submission received: ${entry.institution}` : `Request received: ${entry.institution}`,
+          desc: submission
+            ? `Your MOA/MOU submission for ${entry.institution} was sent to CSPC-CIRL (reference ${ref}). You will be notified by e-mail as it is reviewed.`
+            : `Your ${isRenewal ? 'renewal' : 'partnership'} request for ${entry.institution}${entry.type ? ' (' + entry.type + ')' : ''} was submitted to CSPC-CIRL (reference ${ref}). You will be notified by e-mail as it is reviewed.`,
+          link: prLinkForRole(req.session.user.role, nextId)
+        });
 
       // Give the submitter their own copy in the Document Library — skipped
       // when an OCR attachment already exists, since that upload was already
       // archived there (avoids a duplicate entry for one submission). A MOA/MOU
-      // submission archives the file the partner attaches instead of a request record.
-      if (!submission && ['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
+      // submission and a College Partnership Report archive the file attached to them instead of a request record.
+      if (!submission && !collegeReport && ['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
         await archiveRequestRecordToLibrary(db, {
           requestType: 'partnership', requestId: nextId, institution: entry.institution,
           type: entry.type, submittedBy: entry.requestedBy, submittedByEmail: entry.submittedByEmail
@@ -1352,10 +1396,10 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
     // separate action for this, so re-using the existing status value avoids
     // adding a new field/workflow for what is still just a status change.
     if (['Approved', 'Rejected', 'Under Review'].includes(status) && updated.submittedByEmail) {
-      const label = updated.isRenewal ? 'Renewal Request' : 'Partnership Request';
+      const label = updated.isCollegeReport ? 'College Partnership Report' : updated.isRenewal ? 'Renewal Request' : 'Partnership Request';
       const submitter = await db.collection('users').findOne({ email: updated.submittedByEmail });
       const link = prLinkForRole(submitter && submitter.role, id);
-      const what = updated.isSubmission ? 'MOA/MOU submission' : updated.isRenewal ? 'renewal request' : 'partnership request';
+      const what = updated.isSubmission ? 'MOA/MOU submission' : updated.isCollegeReport ? 'partnership report' : updated.isRenewal ? 'renewal request' : 'partnership request';
       let title, desc, icon, color;
       if (status === 'Under Review') {
         title = `Additional documents requested: ${updated.institution}`;
@@ -1371,7 +1415,9 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
             : `Your ${what} for ${updated.institution} has been approved.`)
           : (updated.isRenewal
             ? `Your renewal request for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`
-            : `Your ${what} for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
+            : updated.isCollegeReport
+              ? `CIRL did not record your partnership report for ${updated.institution} in the Registry.${notes ? ' Reason: ' + notes : ''}`
+              : `Your ${what} for ${updated.institution} was not approved.${notes ? ' Reason: ' + notes : ''}`);
       }
       await notifyUsers(db, [updated.submittedByEmail], { module: 'request', tag: label, icon, color, title, desc, link });
     }
@@ -1459,7 +1505,9 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
           documentType: target.isSubmission ? 'MOA/MOU Submission' : expandDocTypeLabel(target.type),
           institution: target.institution,
           partner: target.institution,
-          title: `${target.isSubmission ? 'MOA/MOU Submission' : (target.type || 'Document')} – ${target.institution} (Request #${id})`
+          title: target.isCollegeReport
+            ? `Approved ${target.type || 'Agreement'} – ${target.institution} (${target.unit ? target.unit + ' ' : ''}College Report #${id})`
+            : `${target.isSubmission ? 'MOA/MOU Submission' : (target.type || 'Document')} – ${target.institution} (Request #${id})`
         }, {
           uploadedBy: isReviewer ? actor.name : (target.requestedBy || 'Unknown'),
           uploadedByEmail: isReviewer ? actor.email : target.submittedByEmail,
@@ -1479,7 +1527,8 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
       // The file that goes with a brand-new MOA/MOU submission is part of the submission itself: it is not a "revised
       // draft", so it neither starts the review nor sends reviewers a second notification. Only the owner, only on a
       // submission that has no document yet, and only when the page says it is the initial attachment.
-      const initialSubmissionFile = !!target.isSubmission && isOwner && req.body.initial === '1'
+      // The same goes for the approved copy attached to a College Partnership Report.
+      const initialSubmissionFile = !!(target.isSubmission || target.isCollegeReport) && isOwner && req.body.initial === '1'
         && !(Array.isArray(target.supportingDocuments) && target.supportingDocuments.length);
       // A new version puts the request back "in collaboration" — reuses the
       // existing Under Review status rather than inventing a new one (it
@@ -2513,15 +2562,25 @@ app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async
         `Partnership request approved and converted to Registry: ${sourceRequest.institution} (Record #${nextId})`);
       if (sourceRequest.submittedByEmail) {
         const submitter = await db.collection('users').findOne({ email: sourceRequest.submittedByEmail });
-        await notifyUsers(db, [sourceRequest.submittedByEmail], {
-          module: 'request',
-          tag: sourceRequest.isRenewal ? 'Renewal Request' : 'Partnership Request',
-          icon: 'ri-checkbox-circle-line',
-          color: 'success',
-          title: `Partnership Request Approved: ${sourceRequest.institution}`,
-          desc: `Your partnership request for ${sourceRequest.institution} has been approved and added to the Partnership Registry.`,
-          link: prLinkForRole(submitter && submitter.role, sourceRequest.id)
-        });
+        await notifyUsers(db, [sourceRequest.submittedByEmail], sourceRequest.isCollegeReport
+          ? {
+            module: 'request',
+            tag: 'College Partnership Report',
+            icon: 'ri-checkbox-circle-line',
+            color: 'success',
+            title: `Partnership recorded by CIRL: ${sourceRequest.institution}`,
+            desc: `CIRL recorded your college's ${sourceRequest.type || 'agreement'} with ${sourceRequest.institution} in the Partnership Registry.`,
+            link: prLinkForRole(submitter && submitter.role, sourceRequest.id)
+          }
+          : {
+            module: 'request',
+            tag: sourceRequest.isRenewal ? 'Renewal Request' : 'Partnership Request',
+            icon: 'ri-checkbox-circle-line',
+            color: 'success',
+            title: `Partnership Request Approved: ${sourceRequest.institution}`,
+            desc: `Your partnership request for ${sourceRequest.institution} has been approved and added to the Partnership Registry.`,
+            link: prLinkForRole(submitter && submitter.role, sourceRequest.id)
+          });
       }
     }
 
@@ -7847,7 +7906,9 @@ app.get('/personnel/calendar', requirePersonnel, (req, res) => {
   });
 });
 
-app.get('/personnel/notifications', requirePersonnel, denyDepartmentPage, (req, res) => {
+// Open to College Dean again (2026-09-26) so the header bell's "View All Notifications" works for it like for every
+// other staff role. Every notification API it calls is already scoped to the signed-in user's own notifications.
+app.get('/personnel/notifications', requirePersonnel, (req, res) => {
   res.render('administrator/notifications', {
     activePage: 'notifications',
     sidebarPartial: 'sidebar_personnel',

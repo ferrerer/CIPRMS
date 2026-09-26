@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
@@ -131,8 +131,8 @@
                                                    - Document Library: the pages are closed to College Dean (denyDepartmentPage) and
                                                      Partner (/partner/documents redirects). Administrator/CIRL Staff browse their own
                                                      uploads and may open any request attachment (GET /uploads/documents/:filename).
-                                                   - Notifications: College Dean and Partner keep the header bell (own notifications)
-                                                     but not the Notifications page.
+                                                   - Notifications: College Dean has the header bell and its Notifications page (own notifications); Partner keeps
+                                                     only the header bell, not the Notifications page.
                                                    - Requests: College Dean has Document Requests only; Partner has Partnership Requests
                                                      plus "Submission Of MOA/MOU" (which uses the Document Request endpoints).
                                                      POST /api/requests is still requireRequester, i.e. open to College Dean at the API
@@ -165,8 +165,8 @@
                                                   note: 'Partners submit and track their own. College Dean has no Partnership Request page (the submit API itself is still open to the role).' },
                                                 { feature: 'Document Requests', admin: F('Full (Review / Fulfill / Reject)'), college: S('Submit Only'), partner: S('Submit MOA/MOU Only'), staff: F('Full (Review / Fulfill / Reject)'),
                                                   note: 'Partners use the &ldquo;Submission Of MOA/MOU&rdquo; form. Reviewers get the printable form and PDF.' },
-                                                { feature: 'Notifications', admin: S('Own Only'), college: S('Bell Only (own)'), partner: S('Bell Only (own)'), staff: S('Own Only'),
-                                                  note: 'Always the user\'s own notifications. College Dean and Partner have the header bell but no Notifications page.' },
+                                                { feature: 'Notifications', admin: S('Own Only'), college: S('Own Only'), partner: S('Bell Only (own)'), staff: S('Own Only'),
+                                                  note: 'Always the user\'s own notifications. Partner has the header bell but no Notifications page.' },
                                                 { feature: 'Reports &amp; Analytics', admin: F('Full'), college: N(), partner: N(), staff: S('Full, Own Audit Trail Only'),
                                                   note: 'Audit Trail: Administrator sees every record; CIRL Staff sees only their own actions.' },
                                                 { feature: 'Settings (own account)', admin: F('Full'), college: F('Full'), partner: F('Full'), staff: F('Full'),
