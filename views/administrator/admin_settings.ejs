@@ -205,6 +205,23 @@
                         </div>
                       </div>
                     </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex align-items-start gap-3">
+                      <div class="avatar-sm flex-shrink-0">
+                        <span class="avatar-title bg-light rounded-circle fs-3">
+                          <i class="ri-file-word-2-fill text-primary"></i>
+                        </span>
+                      </div>
+                      <div class="flex-grow-1">
+                        <h5 class="mb-1">Google Docs</h5>
+                        <p class="text-muted fs-13 mb-3">When connected, Administrators and CIRL Staff can start an MOA or MOU draft in Google Docs from any Partnership Request. The draft is filled in from the request, saved in the connected account's Drive (folder "CIPRMS Agreement Drafts") and shared automatically: Administrators and CIRL Staff can edit, the requesting partner can comment, and College Deans of the request's unit can view.</p>
+                        <div id="gd-status-box">
+                          <p class="text-muted fs-13">Loading…</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                 </div>
@@ -486,7 +503,88 @@
     window.history.replaceState({}, '', window.location.pathname);
   })();
 
+  // ── Google Docs integration (2026-09-26) — same flow as Google Calendar above, its own connection ──
+  const GD_FAILURE_REASONS = Object.assign({}, GC_FAILURE_REASONS, {
+    denied: 'Google Drive access was not granted. Click Connect again and choose Allow.'
+  });
+
+  function renderGoogleDocsStatus(data) {
+    const box = document.getElementById('gd-status-box');
+    if (data.connected) {
+      const syncWarning = data.lastSyncOk === false
+        ? `<div class="alert alert-warning py-2 px-3 mt-2 mb-0 fs-13">
+             <i class="ri-error-warning-line align-middle me-1"></i>
+             Last Google attempt failed${data.lastSyncAt ? ' at ' + gcEsc(new Date(data.lastSyncAt).toLocaleString()) : ''}: ${gcEsc(data.lastSyncError || 'Unknown error')}
+           </div>`
+        : '';
+      const account = data.googleAccountEmail
+        ? `Google account: <strong>${gcEsc(data.googleAccountEmail)}</strong> <span class="text-muted fs-12">(drafts are owned by this account)</span>`
+        : `Google account: <span class="text-muted">not confirmed yet — use Check connection</span>`;
+      box.innerHTML = `
+        <div class="alert alert-success mb-0" role="alert">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div>
+              <i class="ri-checkbox-circle-line align-middle me-1"></i>Connected
+              <div class="mt-1">${account}</div>
+              <div class="fs-12 text-muted mt-1">Connected by ${gcEsc(data.connectedByEmail)} on ${data.connectedAt ? gcEsc(new Date(data.connectedAt).toLocaleString()) : '—'}
+                ${data.verifiedAt ? '· last checked ' + gcEsc(new Date(data.verifiedAt).toLocaleString()) : ''}</div>
+            </div>
+            <div class="d-flex gap-2 flex-shrink-0">
+              <button type="button" class="btn btn-sm btn-outline-primary" id="gd-verify-btn" onclick="verifyGoogleDocs()"><i class="ri-refresh-line me-1"></i>Check connection</button>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="disconnectGoogleDocs()"><i class="ri-link-unlink-m me-1"></i>Disconnect</button>
+            </div>
+          </div>
+        </div>
+        ${syncWarning}`;
+    } else {
+      box.innerHTML = `
+        ${data.configured ? '' : '<div class="alert alert-danger py-2 px-3 fs-13">Google credentials are not configured on this server, so Google Docs cannot be connected.</div>'}
+        <a href="/api/google-docs/connect" class="btn btn-primary${data.configured ? '' : ' disabled'}">
+          <i class="ri-google-fill me-1"></i>Connect Google Docs
+        </a>
+        <div class="fs-12 text-muted mt-2">Google will ask you to sign in and allow CIPRMS to <em>see, edit, create and delete only the specific Google Drive files it uses</em>. Nothing else in that Drive is visible to CIPRMS. Use the CIRL office account, since it will own every draft.</div>
+        ${gcRedirectUriHelp(data)}`;
+    }
+  }
+
+  function loadGoogleDocsStatus() {
+    fetch('/api/google-docs/status').then(r => r.json()).then(renderGoogleDocsStatus)
+      .catch(() => { document.getElementById('gd-status-box').innerHTML = '<p class="text-danger fs-13">Failed to load status.</p>'; });
+  }
+
+  function verifyGoogleDocs() {
+    const btn = document.getElementById('gd-verify-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…'; }
+    fetch('/api/google-docs/verify', { method: 'POST' }).then(r => r.json()).then(data => {
+      if (data.success) showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Docs connection is working.', '#0ab39c');
+      else showToast('<i class="ri-error-warning-line me-1"></i>' + gcEsc(data.error || 'Connection check failed.'), '#f06548');
+      loadGoogleDocsStatus();
+    }).catch(() => { showToast('Could not run the check.', '#f06548'); loadGoogleDocsStatus(); });
+  }
+
+  function disconnectGoogleDocs() {
+    if (!confirm('Disconnect Google Docs? Existing drafts stay in Google Drive and keep their sharing, but no new drafts can be created until reconnected.')) return;
+    fetch('/api/google-docs/disconnect', { method: 'POST' }).then(r => r.json()).then(data => {
+      if (data.success) { showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Docs disconnected.', '#0ab39c'); loadGoogleDocsStatus(); }
+    });
+  }
+
+  (function handleGoogleDocsRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('googleDocs');
+    if (!result) return;
+    document.querySelectorAll('.nav-tabs-custom .nav-link').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-content .tab-pane').forEach(el => el.classList.remove('active', 'show'));
+    document.querySelector('a[href="#tab-integrations"]').classList.add('active');
+    document.getElementById('tab-integrations').classList.add('active', 'show');
+    if (result === 'connected') showToast('<i class="ri-checkbox-circle-line me-1"></i>Google Docs connected and checked.', '#0ab39c');
+    else if (result === 'connected_unverified') showToast('<i class="ri-error-warning-line me-1"></i>Connected, but the first check failed — see the message below.', '#f7b84b');
+    else showToast('<i class="ri-error-warning-line me-1"></i>' + gcEsc(GD_FAILURE_REASONS[params.get('reason')] || 'Could not connect Google Docs. Please try again.'), '#f06548');
+    window.history.replaceState({}, '', window.location.pathname);
+  })();
+
   loadGoogleCalendarStatus();
+  loadGoogleDocsStatus();
   loadProfile();
 </script>
 

@@ -17,6 +17,7 @@ const { connectDB, getDb } = require('./db');
 const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
+const googleDocsService = require('./services/googleDocsService');
 const realtime = require('./services/realtime');
 const searchService = require('./services/searchService');
 const geocoding = require('./services/geocodingService');
@@ -6804,6 +6805,225 @@ app.post('/api/google-calendar/disconnect', requireAdmin, async (req, res) => {
   try {
     const db = getDb();
     await googleCalendarService.disconnect(db);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GOOGLE DOCS — MOA/MOU agreement drafts (2026-09-26) ──────────────────────────
+// Same org-wide model as Google Calendar above, as its own connection (services/googleDocsService.js). An
+// Administrator connects it once in Settings → Integrations; Administrator/Staff then create a Google Doc draft for a
+// Partnership Request, which is shared by e-mail with: every active Administrator and CIRL Staff (edit), the
+// partner who submitted the request (comment) and the College Deans of the request's unit (view). Google enforces
+// those permissions; CIPRMS only shows the link to the reviewers and the request's own submitter.
+function getGoogleDocsCallbackUrl(req) {
+  const host = req.get('host') || 'localhost:3000';
+  if (host.includes('localhost') || host.includes('127.0.0.1')) return `http://${host}/api/google-docs/callback`;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  return `${protocol}://${host}/api/google-docs/callback`;
+}
+
+function googleDocsFailure(res, reason) {
+  return res.redirect('/admin/settings?googleDocs=error&reason=' + encodeURIComponent(reason));
+}
+
+app.get('/api/google-docs/status', requireAdmin, async (req, res) => {
+  try {
+    const integration = await googleDocsService.getIntegration(getDb());
+    const common = { configured: googleCalendarConfigured(), redirectUri: getGoogleDocsCallbackUrl(req) };
+    res.json(integration
+      ? {
+        ...common,
+        connected: true,
+        connectedByEmail: integration.connectedByEmail,
+        connectedAt: integration.connectedAt,
+        googleAccountEmail: integration.googleAccountEmail || null,
+        verifiedAt: integration.verifiedAt || null,
+        lastSyncOk: integration.lastSyncOk === undefined ? null : integration.lastSyncOk,
+        lastSyncError: integration.lastSyncError || null,
+        lastSyncAt: integration.lastSyncAt || null
+      }
+      : { ...common, connected: false });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/google-docs/connect', requireAdmin, (req, res) => {
+  if (!googleCalendarConfigured()) return googleDocsFailure(res, 'not_configured');
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.googleDocsOAuthState = state;
+  res.redirect(googleDocsService.getAuthUrl(getGoogleDocsCallbackUrl(req), state));
+});
+
+app.get('/api/google-docs/callback', requireAdmin, async (req, res) => {
+  const { code, state, error } = req.query;
+  const expectedState = req.session.googleDocsOAuthState;
+  delete req.session.googleDocsOAuthState;
+  if (error) return googleDocsFailure(res, error === 'access_denied' ? 'denied' : 'google_error');
+  if (typeof code !== 'string' || !code || !sameOAuthState(expectedState, state)) return googleDocsFailure(res, 'state');
+  try {
+    const { verification } = await googleDocsService.handleOAuthCallback(getDb(), code, getGoogleDocsCallbackUrl(req), req.session.user);
+    res.redirect('/admin/settings?googleDocs=' + (verification && verification.ok ? 'connected' : 'connected_unverified'));
+  } catch (err) {
+    const message = googleDocsService.describeGoogleError(err);
+    console.error('Google Docs: OAuth callback failed:', message);
+    let reason = 'exchange';
+    if (/refresh token/i.test(message)) reason = 'no_refresh_token';
+    else if (/redirect URI/i.test(message)) reason = 'redirect_uri';
+    else if (/OAuth client ID\/secret/i.test(message)) reason = 'client';
+    googleDocsFailure(res, reason);
+  }
+});
+
+app.post('/api/google-docs/verify', requireAdmin, async (req, res) => {
+  try {
+    const result = await googleDocsService.verifyConnection(getDb());
+    if (result.ok) return res.json({ success: true, googleAccountEmail: result.accountEmail });
+    res.json({ success: false, error: result.error === 'not_connected' ? 'Google Docs is not connected.' : result.error });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/google-docs/disconnect', requireAdmin, async (req, res) => {
+  try {
+    await googleDocsService.disconnect(getDb());
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Who a request's draft is shared with, and how. Reviewers edit; the submitter comments; College Deans of the
+// request's unit view. One entry per e-mail (the strongest role wins), Inactive accounts left out.
+async function agreementDocRecipients(db, request) {
+  const active = { status: { $ne: 'Inactive' } };
+  const reviewers = await db.collection('users').find({ role: { $in: REQUEST_REVIEWER_ROLES }, ...active }, { projection: { email: 1 } }).toArray();
+  const units = (Array.isArray(request.unit) ? request.unit : String(request.unit || '').split(','))
+    .map(u => u.trim()).filter(Boolean);
+  const deans = units.length
+    ? await db.collection('users').find({ role: 'Auth. Personnel', unit: { $in: units }, ...active }, { projection: { email: 1 } }).toArray()
+    : [];
+  const byEmail = new Map();
+  const add = (email, role) => {
+    const e = String(email || '').trim().toLowerCase();
+    if (e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && !byEmail.has(e)) byEmail.set(e, role);
+  };
+  reviewers.forEach(u => add(u.email, 'writer'));
+  add(request.submittedByEmail, 'commenter');
+  deans.forEach(u => add(u.email, 'reader'));
+  return [...byEmail].map(([email, role]) => ({ email, role }));
+}
+
+function publicDoc(d) {
+  return { id: d.id, kind: d.kind, title: d.title, url: d.url, createdByName: d.createdByName, createdAt: d.createdAt, sharing: d.sharing || [] };
+}
+
+// Linked drafts of one request — reviewers, and the request's own submitter.
+app.get('/api/requests/:id/google-docs', requireAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    const request = await db.collection('requests').findOne({ id });
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+    const user = req.session.user;
+    const isReviewer = REQUEST_REVIEWER_ROLES.includes(user.role);
+    if (!isReviewer && request.submittedByEmail !== user.email) return res.status(403).json({ error: 'You do not have permission to do this.' });
+    const docs = await googleDocsService.docsCollection(db).find({ requestId: id }).sort({ id: 1 }).toArray();
+    res.json({
+      connected: isReviewer ? !!(await googleDocsService.getIntegration(db)) : undefined,
+      // Share results (who got which access, and failures) are only for reviewers.
+      docs: docs.map(d => isReviewer ? publicDoc(d) : { id: d.id, kind: d.kind, title: d.title, url: d.url, createdAt: d.createdAt })
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create an MOA/MOU draft for a request (Administrator / CIRL Staff).
+app.post('/api/requests/:id/google-docs', requireStaffAccess, announce('request'), async (req, res) => {
+  const kind = req.body && req.body.kind;
+  if (!['MOA', 'MOU'].includes(kind)) return res.status(400).json({ error: 'kind must be MOA or MOU.' });
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    const request = await db.collection('requests').findOne({ id });
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+    if (request.status === 'Draft') return res.status(400).json({ error: 'This request has not been submitted yet.' });
+
+    const recipients = await agreementDocRecipients(db, request);
+    let created;
+    try {
+      created = await googleDocsService.createAgreementDoc(db, request, kind, recipients);
+    } catch (err) {
+      return res.status(422).json({ error: err.message });
+    }
+    const last = await googleDocsService.docsCollection(db).find({}).sort({ id: -1 }).limit(1).toArray();
+    const doc = {
+      id: last.length ? (last[0].id || 0) + 1 : 1,
+      requestId: id,
+      kind,
+      title: created.title,
+      fileId: created.fileId,
+      url: created.url,
+      createdByEmail: req.session.user.email,
+      createdByName: req.session.user.name,
+      createdAt: new Date().toISOString(),
+      sharing: created.sharing
+    };
+    await googleDocsService.docsCollection(db).insertOne(doc);
+    await logActivity(db, req.session.user, 'CREATE', `Google Docs ${kind} draft created for partnership request: ${request.institution} (#REQ-${String(id).padStart(3, '0')})`);
+
+    if (request.submittedByEmail) {
+      const submitter = await db.collection('users').findOne({ email: request.submittedByEmail });
+      await notifyUsers(db, [request.submittedByEmail], {
+        module: 'request',
+        tag: request.isRenewal ? 'Renewal Request' : 'Partnership Request',
+        icon: 'ri-file-word-2-line',
+        color: 'info',
+        title: `${kind} draft shared: ${request.institution}`,
+        desc: `${req.session.user.name} started a ${kind} draft in Google Docs for your request (${request.institution}). You can open it and add comments from Monitoring.`,
+        link: prLinkForRole(submitter && submitter.role, id)
+      });
+    }
+    res.json({ success: true, doc: publicDoc(doc) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Re-share a draft with the request's current people (e.g. new staff, or a failed share to retry).
+app.post('/api/google-docs/:docId/reshare', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const doc = await googleDocsService.docsCollection(db).findOne({ id: parseInt(req.params.docId) });
+    if (!doc) return res.status(404).json({ error: 'Draft not found.' });
+    const request = await db.collection('requests').findOne({ id: doc.requestId });
+    if (!request) return res.status(404).json({ error: 'Request not found.' });
+    let sharing;
+    try {
+      sharing = await googleDocsService.reshareDoc(db, doc.fileId, await agreementDocRecipients(db, request),
+        `CIPRMS shared this ${doc.kind} draft for Partnership Request #REQ-${String(request.id).padStart(3, '0')} (${request.institution}).`);
+    } catch (err) {
+      return res.status(422).json({ error: err.message });
+    }
+    await googleDocsService.docsCollection(db).updateOne({ id: doc.id }, { $set: { sharing } });
+    res.json({ success: true, doc: publicDoc({ ...doc, sharing }) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unlink a draft from its request. The Google Doc itself is kept in the connected account's Drive.
+app.delete('/api/google-docs/:docId', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const doc = await googleDocsService.docsCollection(db).findOne({ id: parseInt(req.params.docId) });
+    if (!doc) return res.status(404).json({ error: 'Draft not found.' });
+    await googleDocsService.docsCollection(db).deleteOne({ id: doc.id });
+    await logActivity(db, req.session.user, 'DELETE', `Google Docs ${doc.kind} draft unlinked from partnership request #REQ-${String(doc.requestId).padStart(3, '0')}`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

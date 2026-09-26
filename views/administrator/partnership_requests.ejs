@@ -1289,6 +1289,7 @@
             <i class="ri-file-list-3-line me-1"></i>View Draft
           </button>
         </div>
+        ${IS_ADMIN ? `<div id="pr-gdocs-box" class="border rounded p-3 mb-3"><p class="text-muted fs-12 mb-0">Loading Google Docs drafts…</p></div>` : ''}
         ${!isReview ? `
           <div class="status-ribbon ${sc.cls}">
             <i class="${sc.icon} fs-3"></i>
@@ -1317,6 +1318,93 @@
 
       setBreadcrumb(['Requests', 'Partnership Request', prRequestLabel(r)]);
       modalInstance('pr-modal').show();
+      if (IS_ADMIN) loadPRGoogleDocs(r.id);
+    }
+
+    /* ─── GOOGLE DOCS AGREEMENT DRAFTS (2026-09-26) ───
+       MOA/MOU drafts written in Google Docs, linked to this request. Created in the org Google account connected
+       under Settings → Integrations, and shared by e-mail: Administrators/CIRL Staff edit, the requesting partner
+       comments, College Deans of the request's unit view (see /api/requests/:id/google-docs in cirl.js). */
+    const GDOC_ROLE_LABEL = { writer: 'can edit', commenter: 'can comment', reader: 'can view' };
+
+    function gdocItemHtml(d) {
+      const url = escapeHtml(sanitizeUrl(d.url));
+      const failed = (d.sharing || []).filter(s => !s.ok);
+      const shared = (d.sharing || []).filter(s => s.ok);
+      const sharedSummary = shared.length
+        ? shared.map(s => `${escapeHtml(s.email)} <span class="text-muted">(${GDOC_ROLE_LABEL[s.role] || s.role})</span>`).join(', ')
+        : '<span class="text-muted">nobody yet</span>';
+      return `
+        <div class="border rounded p-2 mb-2">
+          <div class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+            <div class="flex-grow-1">
+              <div class="fw-semibold fs-13"><i class="ri-file-word-2-line text-primary me-1"></i>${escapeHtml(d.title)}</div>
+              <div class="text-muted fs-12">Created by ${escapeHtml(d.createdByName || '—')} · ${d.createdAt ? escapeHtml(new Date(d.createdAt).toLocaleString()) : '—'}</div>
+            </div>
+            <div class="d-flex gap-1 flex-shrink-0">
+              ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-sm btn-primary"><i class="ri-external-link-line me-1"></i>Open in Google Docs</a>` : ''}
+              <button type="button" class="btn btn-sm btn-soft-secondary" title="Share again with the current reviewers, partner and deans" onclick="reshareGoogleDoc(${d.id}, this)"><i class="ri-share-line"></i></button>
+              <button type="button" class="btn btn-sm btn-soft-danger" title="Unlink from this request (the Google Doc itself is kept)" onclick="unlinkGoogleDoc(${d.id})"><i class="ri-link-unlink-m"></i></button>
+            </div>
+          </div>
+          <div class="fs-12 mt-1"><span class="text-muted">Shared with:</span> ${sharedSummary}</div>
+          ${failed.length ? `<div class="fs-12 text-danger mt-1"><i class="ri-error-warning-line me-1"></i>Could not share with ${failed.map(s => escapeHtml(s.email)).join(', ')}. ${escapeHtml(failed[0].error || '')}</div>` : ''}
+        </div>`;
+    }
+
+    async function loadPRGoogleDocs(requestId) {
+      const box = document.getElementById('pr-gdocs-box');
+      if (!box) return;
+      const res = await CIPRMS.api('/api/requests/' + requestId + '/google-docs', { quiet: true });
+      if (String(currentPRId) !== String(requestId) || !document.getElementById('pr-gdocs-box')) return; // another request was opened meanwhile
+      if (!res.ok) { box.innerHTML = `<p class="text-danger fs-12 mb-0">Could not load Google Docs drafts: ${escapeHtml(res.error || 'error')}</p>`; return; }
+      const { connected, docs } = res.data;
+      const createButtons = connected
+        ? `<div class="d-flex gap-1">
+             <button type="button" class="btn btn-sm btn-soft-primary" onclick="createGoogleDoc(${requestId}, 'MOA', this)"><i class="ri-add-line me-1"></i>MOA draft</button>
+             <button type="button" class="btn btn-sm btn-soft-primary" onclick="createGoogleDoc(${requestId}, 'MOU', this)"><i class="ri-add-line me-1"></i>MOU draft</button>
+           </div>`
+        : '';
+      box.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between gap-2 mb-2 flex-wrap">
+          <div>
+            <p class="detail-label mb-1">Agreement Draft (Google Docs)</p>
+            <p class="text-muted fs-12 mb-0">${connected
+              ? 'Write the MOA/MOU together in Google Docs. Staff edit, the partner comments, deans of the unit view.'
+              : 'Google Docs is not connected. An Administrator can connect it in Settings → Integrations.'}</p>
+          </div>
+          ${createButtons}
+        </div>
+        ${docs.length ? docs.map(gdocItemHtml).join('') : '<p class="text-muted fs-12 mb-0">No Google Docs draft yet.</p>'}`;
+    }
+
+    async function createGoogleDoc(requestId, kind, btn) {
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Creating…';
+      const res = await CIPRMS.api('/api/requests/' + requestId + '/google-docs', { method: 'POST', json: { kind }, quiet: true, timeout: 60000 });
+      btn.disabled = false;
+      btn.innerHTML = original;
+      if (!res.ok) { showToast('<i class="ri-error-warning-line me-1"></i>' + escapeHtml(res.error || 'Could not create the draft.'), '#f06548'); return; }
+      showToast('<i class="ri-checkbox-circle-line me-1"></i>' + kind + ' draft created and shared.', '#0ab39c');
+      loadPRGoogleDocs(requestId);
+    }
+
+    async function reshareGoogleDoc(docId, btn) {
+      btn.disabled = true;
+      const res = await CIPRMS.api('/api/google-docs/' + docId + '/reshare', { method: 'POST', quiet: true, timeout: 60000 });
+      btn.disabled = false;
+      if (!res.ok) { showToast('<i class="ri-error-warning-line me-1"></i>' + escapeHtml(res.error || 'Could not share again.'), '#f06548'); return; }
+      showToast('<i class="ri-checkbox-circle-line me-1"></i>Sharing updated.', '#0ab39c');
+      loadPRGoogleDocs(currentPRId);
+    }
+
+    async function unlinkGoogleDoc(docId) {
+      if (!confirm('Unlink this Google Doc from the request? The document itself stays in Google Drive with its current sharing.')) return;
+      const res = await CIPRMS.api('/api/google-docs/' + docId, { method: 'DELETE', quiet: true });
+      if (!res.ok) { showToast('<i class="ri-error-warning-line me-1"></i>' + escapeHtml(res.error || 'Could not unlink.'), '#f06548'); return; }
+      showToast('<i class="ri-checkbox-circle-line me-1"></i>Draft unlinked.', '#0ab39c');
+      loadPRGoogleDocs(currentPRId);
     }
 
     /* ─── DRAFT / DOCUMENT COLLABORATION TIMELINE ───

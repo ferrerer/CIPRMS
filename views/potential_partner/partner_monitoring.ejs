@@ -197,6 +197,7 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <div id="pr-gdocs-partner" class="mb-3" style="display:none;"></div>
                         <div id="pr-draft-timeline" class="mb-3"></div>
                         <div id="pr-draft-upload-wrap" class="border-top pt-3">
                             <label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Upload a New Version</label>
@@ -523,6 +524,29 @@
         document.getElementById('pr-draft-note').value = '';
         setBreadcrumb(['Monitoring', r.isSubmission ? 'MOA/MOU Submission' : 'Partnership Request', prRequestLabel(r), 'Draft Collaboration']);
         bootstrap.Modal.getOrCreateInstance(document.getElementById('pr-draft-modal')).show();
+        loadPartnerGoogleDocs(id);
+    }
+
+    // MOA/MOU drafts CIRL started in Google Docs for this request (2026-09-26). The partner was already given
+    // comment access by e-mail when the draft was created; this just puts the link where they work on the request.
+    function loadPartnerGoogleDocs(id) {
+        var box = document.getElementById('pr-gdocs-partner');
+        box.style.display = 'none';
+        box.innerHTML = '';
+        CIPRMS.api('/api/requests/' + id + '/google-docs', { quiet: true }).then(function (res) {
+            if (currentDraftPRId !== id || !res.ok || !res.data.docs.length) return;
+            box.innerHTML =
+                '<label class="input-label text-muted fs-10 fw-bold text-uppercase d-block mb-2">Agreement Draft in Google Docs</label>' +
+                res.data.docs.map(function (d) {
+                    var url = escapeHtml(sanitizeUrl(d.url));
+                    return '<div class="d-flex align-items-center justify-content-between gap-2 border rounded p-2 mb-2">' +
+                        '<div><div class="fw-semibold fs-13"><i class="ri-file-word-2-line text-primary me-1"></i>' + escapeHtml(d.title) + '</div>' +
+                        '<div class="text-muted fs-12">You can read it and add comments. Open it while signed in to Google with the same e-mail address you use for CIPRMS.</div></div>' +
+                        (url ? '<a href="' + url + '" target="_blank" rel="noopener" class="btn btn-sm btn-primary flex-shrink-0"><i class="ri-external-link-line me-1"></i>Open in Google Docs</a>' : '') +
+                        '</div>';
+                }).join('');
+            box.style.display = '';
+        });
     }
 
     function uploadDraftDocument() {

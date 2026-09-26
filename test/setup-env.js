@@ -8,3 +8,5 @@
 // Pointing the service at a throw-away collection for the whole test process
 // means no test can ever touch the real connection again.
 process.env.GOOGLE_CALENDAR_INTEGRATION_COLLECTION = 'jesttest_googleCalendarIntegration';
+// Same protection for the Google Docs connection (services/googleDocsService.js).
+process.env.GOOGLE_DOCS_INTEGRATION_COLLECTION = 'jesttest_googleDocsIntegration';
