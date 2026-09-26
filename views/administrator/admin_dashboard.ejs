@@ -16,6 +16,7 @@
     <link href="/velzon/assets/css/custom.min.css" rel="stylesheet" />
     <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925d" rel="stylesheet" />
     <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 </head>
 
 <body>
@@ -464,13 +465,54 @@
     <script src="/velzon/assets/js/app.js"></script>
     <script src="/velzon/assets/libs/apexcharts/apexcharts.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 
     <script>
         // ── Leaflet Map (initialized empty; markers added once real data loads) ──
         const map = L.map('partnership-map', { center: [20, 15], zoom: 2, zoomControl: true });
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO', subdomains: 'abcd', maxZoom: 19
-        }).addTo(map);
+        // Base map: OpenFreeMap (free, no account, no API key) drawn with MapLibre inside this Leaflet map, with every
+        // place label forced to its Latin/English form. History: this was Carto's free "Voyager" raster endpoint, which
+        // now answers every tile with a watermark saying an API key is required; the OpenStreetMap raster tiles that
+        // replaced it print each country's own script (Japanese, Chinese, Korean, Cyrillic...) on the map.
+        //
+        // The labels are NOT written in this file: they come from the provider's own tile data. The stock style prints
+        // the Latin name and then the native-script name under it; here each label uses only, in order, the provider's
+        // English name, its Latin name/transliteration, the plain name when that is already Latin, or its international
+        // (transliterated) name. A place that only has a native-script name in the data gets no label rather than a
+        // label in a script most users cannot read. Highway numbers come from a separate field and are already Latin.
+        const BASEMAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+        const LATIN_LABEL = ['case',
+            ['has', 'name:en'], ['get', 'name:en'],
+            ['has', 'name:latin'], ['get', 'name:latin'],
+            ['!', ['has', 'name:nonlatin']], ['coalesce', ['get', 'name_en'], ['get', 'name']],
+            ['all', ['has', 'name_int'], ['!=', ['get', 'name_int'], ['get', 'name']]], ['get', 'name_int'],
+            ''];
+        const BASEMAP_ATTRIBUTION = '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+
+        // Only used when the vector base map cannot start (no WebGL in the browser, or the style could not be
+        // fetched): plain OpenStreetMap raster tiles, so the map is never blank. Its labels are in each country's own
+        // script — that is the price of the fallback — and the markers do not depend on either base map.
+        function addFallbackBasemap() {
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+        }
+        (function addBasemap() {
+            if (!(window.maplibregl && L.maplibreGL)) { addFallbackBasemap(); return; }
+            fetch(BASEMAP_STYLE_URL).then(function (r) { if (!r.ok) throw new Error('style ' + r.status); return r.json(); }).then(function (style) {
+                style.layers.forEach(function (l) {
+                    if (l.type === 'symbol' && l.layout && l.layout['text-field'] && JSON.stringify(l.layout['text-field']).indexOf('name:latin') !== -1) {
+                        l.layout['text-field'] = LATIN_LABEL;
+                    }
+                });
+                let gl;
+                try { gl = L.maplibreGL({ style: style, attribution: BASEMAP_ATTRIBUTION }).addTo(map); }
+                catch (e) { if (gl) map.removeLayer(gl); throw e; }
+                window.partnershipBasemap = gl;
+            }).catch(function (err) { console.warn('Vector base map unavailable, using the raster fallback:', err && err.message); addFallbackBasemap(); });
+        })();
 
         // Markers live in their own layer so a live refresh can clear and redraw them.
         const markerLayer = L.layerGroup().addTo(map);
