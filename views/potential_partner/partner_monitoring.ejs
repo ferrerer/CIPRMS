@@ -616,13 +616,13 @@
             var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
             return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
         };
-        var html = pageItem('‹ Previous', current - 1, { disabled: current === 1, isPrev: true });
+        var html = pageItem('&lsaquo; Previous', current - 1, { disabled: current === 1, isPrev: true });
         buildPageList(current, total).forEach(function(p) {
             html += (p === '...')
-                ? pageItem('…', null, { ellipsis: true, disabled: true })
+                ? pageItem('&hellip;', null, { ellipsis: true, disabled: true })
                 : pageItem(p, p, { active: p === current });
         });
-        html += pageItem('Next ›', current + 1, { disabled: current === total, isNext: true });
+        html += pageItem('Next &rsaquo;', current + 1, { disabled: current === total, isNext: true });
         return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
     }
 

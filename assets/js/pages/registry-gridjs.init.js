@@ -2,6 +2,48 @@
 
 var partnerships = [];
 var filtered = [];
+var regCurrentPage = 1;
+
+function buildPageList(current, total) {
+    var maxVisible = 5;
+    if (total <= maxVisible + 2) {
+        return Array.from({ length: total }, function (_, i) { return i + 1; });
+    }
+    var start = Math.max(1, current - Math.floor(maxVisible / 2));
+    var end = start + maxVisible - 1;
+    if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+    var pages = [];
+    for (var i = start; i <= end; i++) pages.push(i);
+    if (start > 1) { pages.unshift('...'); pages.unshift(1); }
+    if (end < total) { pages.push('...'); pages.push(total); }
+    return pages;
+}
+
+function buildPaginationHtml(current, total, onClickFn) {
+    if (total <= 1) return '';
+    var pageItem = function(label, page, opts) {
+        opts = opts || {};
+        var disabled = opts.disabled ? ' disabled' : '';
+        var active = opts.active ? ' active' : '';
+        var isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+        var isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
+        var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+        return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+    };
+    var html = pageItem('&lsaquo; Previous', current - 1, { disabled: current === 1, isPrev: true });
+    buildPageList(current, total).forEach(function(p) {
+        html += (p === '...')
+            ? pageItem('&hellip;', null, { ellipsis: true, disabled: true })
+            : pageItem(p, p, { active: p === current });
+    });
+    html += pageItem('Next &rsaquo;', current + 1, { disabled: current === total, isNext: true });
+    return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
+}
+
+function goToRegPage(p) {
+    regCurrentPage = p;
+    buildGrid();
+}
 
 // Set while the Add New Partnership modal was opened via "Approve" on a
 // pending Partnership Request (see checkFromRequestParam()) — carries the
@@ -792,6 +834,7 @@ function applyFilter() {
         && (!yrs || p.startYear == yrs)
         && (!yre || p.endYear == yre);
   });
+  regCurrentPage = 1;
   buildGrid();
 }
 
@@ -875,7 +918,16 @@ function buildGrid() {
     return [gridjs.html(instHtml), gridjs.html(countryHtml), natureDisplay, p.start, gridjs.html(endHtml), gridjs.html(daysBadgeHtml(p.days, p.status)), gridjs.html(statusBadge), gridjs.html(actions)];
   });
 
-  if (window._regGrid) { window._regGrid.updateConfig({data:data}).forceRender(); return; }
+  var itemsPerPage = 6;
+  var totalPages = Math.ceil(data.length / itemsPerPage);
+  if (regCurrentPage > totalPages) regCurrentPage = Math.max(1, totalPages);
+  var startIdx = (regCurrentPage - 1) * itemsPerPage;
+  var pageData = data.slice(startIdx, startIdx + itemsPerPage);
+
+  var pagEl = document.getElementById('reg-pagination');
+  if (pagEl) pagEl.innerHTML = buildPaginationHtml(regCurrentPage, totalPages, 'goToRegPage');
+
+  if (window._regGrid) { window._regGrid.updateConfig({data:pageData}).forceRender(); return; }
   var regGridEl = document.getElementById('reg-grid');
   if (regGridEl) regGridEl.innerHTML = ''; // clear the template's loading placeholder — Grid.js requires an empty container on first render
   regGridEl && (window._regGrid = new gridjs.Grid({
@@ -885,9 +937,9 @@ function buildGrid() {
       {name:'End',width:'11%'},{name:'Days Left',width:'11%',sort:false},
       {name:'Status',width:'10%',sort:false},{name:'Actions',width:'10%',sort:false}
     ],
-    data:data, search:true, pagination:{limit:6}, sort:true,
+    data:pageData, search:true, pagination:false, sort:true,
     className:{table:'table table-hover align-middle mb-0',thead:'table-light',search:'mb-3'},
-    language:{search:{placeholder:''},pagination:{previous:'\u2190',next:'\u2192',showing:'Showing',results:function(){return 'partnerships';}}}
+    language:{search:{placeholder:''}}
   }).render(document.getElementById('reg-grid')));
 }
 
