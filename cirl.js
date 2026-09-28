@@ -6378,7 +6378,8 @@ async function resolveCalendarParticipants(db, recipients) {
     const requested = [...new Set(recipients
       .filter(r => typeof r === 'string' && !CALENDAR_RECIPIENT_ROLES.includes(r))
       .map(r => r.trim()).filter(Boolean))];
-    if (roles.length) users.push(...await db.collection('users').find({ role: { $in: roles } }).toArray());
+    // Only Active users receive in-app notifications — Inactive accounts cannot log in to see them.
+    if (roles.length) users.push(...await db.collection('users').find({ role: { $in: roles }, status: 'Active' }).toArray());
     if (requested.length) {
       const lookup = [...new Set([...requested, ...requested.map(meetingTime.emailKey)])];
       const found = await db.collection('users').find({ email: { $in: lookup } }).toArray();
@@ -6597,7 +6598,12 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
 
     // Recipients are only meaningful at creation time — only the users
     // selected here are notified, per the recipient-targeting requirement.
-    const rawRecipients = req.body.recipients;
+    // If no recipients are explicitly selected, fall back to notifying every
+    // active user (equivalent to picking "All Users") so an event always
+    // generates in-app notifications and the invite is never silently dropped.
+    const rawRecipients = (Array.isArray(req.body.recipients) && req.body.recipients.length)
+      ? req.body.recipients
+      : ['all'];
     const participants = await resolveCalendarParticipants(db, rawRecipients);
     const targetEmails = participants.emails;
     // "All Users" (or no recipients picked at all) means the event is public/
