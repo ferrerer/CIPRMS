@@ -128,6 +128,7 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                <div id="pr-pagination" class="p-3"></div>
                             </div>
                         </div>
                     </div>
@@ -156,6 +157,7 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                <div id="moa-pagination" class="p-3"></div>
                             </div>
                         </div>
                     </div>
@@ -585,14 +587,63 @@
     function partnershipOnly(list) { return list.filter(function (r) { return !r.isSubmission; }); }
     function submissionsOnly(list) { return list.filter(function (r) { return r.isSubmission; }); }
 
+    
+    /* ─── PAGINATION HELPERS (Request pattern) ─── */
+    var prCurrentPage = 1, prItemsPerPage = 10;
+    var moaCurrentPage = 1, moaItemsPerPage = 10;
+
+    function buildPageList(current, total) {
+        var maxVisible = 5;
+        if (total <= maxVisible + 2) return Array.from({length: total}, function(_, i){ return i + 1; });
+        var start = Math.max(1, current - Math.floor(maxVisible / 2));
+        var end = start + maxVisible - 1;
+        if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+        var pages = [];
+        for (var i = start; i <= end; i++) pages.push(i);
+        if (start > 1) { pages.unshift('...'); pages.unshift(1); }
+        if (end < total) { pages.push('...'); pages.push(total); }
+        return pages;
+    }
+
+    function buildPaginationHtml(current, total, onClickFn) {
+        if (total <= 1) return '';
+        var pageItem = function(label, page, opts) {
+            opts = opts || {};
+            var disabled = opts.disabled ? ' disabled' : '';
+            var active = opts.active ? ' active' : '';
+            var isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+            var isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
+            var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+            return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+        };
+        var html = pageItem('‹ Previous', current - 1, { disabled: current === 1, isPrev: true });
+        buildPageList(current, total).forEach(function(p) {
+            html += (p === '...')
+                ? pageItem('…', null, { ellipsis: true, disabled: true })
+                : pageItem(p, p, { active: p === current });
+        });
+        html += pageItem('Next ›', current + 1, { disabled: current === total, isNext: true });
+        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
+    }
+
+    function goToPRPage(p) { prCurrentPage = p; renderPRTable(); }
+    function goToMoaPage(p) { moaCurrentPage = p; renderMoaTable(); }
+
     function renderPRTable() {
         var body = document.getElementById('pr-monitor-body');
+        var pagEl = document.getElementById('pr-pagination');
         var prs = partnershipOnly(myRequests);
         if (!prs.length) {
             body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No partnership requests yet.</td></tr>';
+            if (pagEl) pagEl.innerHTML = '';
             return;
         }
-        body.innerHTML = prs.map(function (r) {
+        var totalPages = Math.ceil(prs.length / prItemsPerPage);
+        if (prCurrentPage > totalPages) prCurrentPage = totalPages || 1;
+        var startIdx = (prCurrentPage - 1) * prItemsPerPage;
+        var pageItems = prs.slice(startIdx, startIdx + prItemsPerPage);
+        if (pagEl) pagEl.innerHTML = buildPaginationHtml(prCurrentPage, totalPages, 'goToPRPage');
+        body.innerHTML = pageItems.map(function (r) {
             // Withdraw was removed from Monitoring: a submitted request can only be viewed here.
             var actions = r.status === 'Draft'
                 ? '<a href="/partner/requests" class="btn btn-sm btn-soft-primary" title="Continue this draft"><i class="ri-edit-line me-1"></i>Continue</a>'
@@ -635,15 +686,18 @@
 
     function renderMoaTable() {
         var body = document.getElementById('moa-monitor-body');
+        var pagEl = document.getElementById('moa-pagination');
         var current = submissionsOnly(myRequests).filter(function (r) { return r.status !== 'Draft'; });
         if (!current.length && !legacySubmissions.length) {
             body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No MOA/MOU submissions yet. Use <strong>New Submission</strong> to send CIRL your MOA/MOU files or notes.</td></tr>';
+            if (pagEl) pagEl.innerHTML = '';
             return;
         }
-        var rows = current.map(function (r) {
+        var allRows = [];
+        current.forEach(function (r) {
             var files = (r.attachmentLink ? 1 : 0) + (r.supportingDocuments || []).length;
             var actions = '<button class="btn btn-sm btn-soft-info" onclick="openDraftModal(' + r.id + ')" title="View files"><i class="ri-file-list-3-line me-1"></i>View</button>';
-            return '<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
+            allRows.push('<tr data-pr-id="' + r.id + '"' + (flashPRIds.has(r.id) ? ' class="rt-flash"' : '') + '>' +
                 '<td>' + escapeHtml(r.institution || '—') + '</td>' +
                 '<td style="max-width:260px;">' + moaNotesCell(r.notes) + '</td>' +
                 '<td>' + files + '</td>' +
@@ -651,11 +705,11 @@
                 '<td>' + (r.date || '—') + '</td>' +
                 '<td>' + fmtWhen(r.updatedAt, r.date) + '</td>' +
                 '<td>' + escapeHtml(r.decidedBy || '—') + '</td>' +
-                '<td class="text-end text-nowrap">' + actions + '</td></tr>';
+                '<td class="text-end text-nowrap">' + actions + '</td></tr>');
         });
         legacySubmissions.forEach(function (d) {
             var cs = d.canonicalStatus || d.status;
-            rows.push('<tr>' +
+            allRows.push('<tr>' +
                 '<td>' + escapeHtml(d.institution || '—') + '</td>' +
                 '<td style="max-width:260px;">' + moaNotesCell(d.notes) + '</td>' +
                 '<td>' + (d.supportingDocuments || []).length + '</td>' +
@@ -665,7 +719,12 @@
                 '<td>' + escapeHtml(d.decidedBy || '—') + '</td>' +
                 '<td class="text-end"><span class="text-muted fs-12">Earlier submission</span></td></tr>');
         });
-        body.innerHTML = rows.join('');
+        var totalPages = Math.ceil(allRows.length / moaItemsPerPage);
+        if (moaCurrentPage > totalPages) moaCurrentPage = totalPages || 1;
+        var startIdx = (moaCurrentPage - 1) * moaItemsPerPage;
+        var pageItems = allRows.slice(startIdx, startIdx + moaItemsPerPage);
+        if (pagEl) pagEl.innerHTML = buildPaginationHtml(moaCurrentPage, totalPages, 'goToMoaPage');
+        body.innerHTML = pageItems.join('');
     }
 
     // Pending -> "Pending", Under Review -> "In Progress", Approved -> "Approved"; Rejected and Withdrawn are both

@@ -133,6 +133,7 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                <div id="cr-pagination" class="p-3"></div>
                             </div>
                         </div>
                     </div>
@@ -161,13 +162,14 @@
                                         </tbody>
                                     </table>
                                 </div>
+                                <div id="dr-pagination" class="p-3"></div>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="row">
-                    <!-- Approval Progress -->
+                <!-- Approval Progress -->
                     <div class="col-xl-6">
                         <div class="card">
                             <div class="card-header"><h4 class="card-title mb-0"><i class="ri-progress-4-line me-2"></i>Approval Progress</h4></div>
@@ -658,13 +660,62 @@
     var flashDRIds = new Set();   // rows a live update just changed
     var currentDRDetailId = null;
 
+    
+    /* ─── PAGINATION HELPERS (Request pattern) ─── */
+    var crCurrentPage = 1, crItemsPerPage = 10;
+    var drCurrentPage = 1, drItemsPerPage = 10;
+
+    function buildPageList(current, total) {
+        var maxVisible = 5;
+        if (total <= maxVisible + 2) return Array.from({length: total}, function(_, i){ return i + 1; });
+        var start = Math.max(1, current - Math.floor(maxVisible / 2));
+        var end = start + maxVisible - 1;
+        if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+        var pages = [];
+        for (var i = start; i <= end; i++) pages.push(i);
+        if (start > 1) { pages.unshift('...'); pages.unshift(1); }
+        if (end < total) { pages.push('...'); pages.push(total); }
+        return pages;
+    }
+
+    function buildPaginationHtml(current, total, onClickFn) {
+        if (total <= 1) return '';
+        var pageItem = function(label, page, opts) {
+            opts = opts || {};
+            var disabled = opts.disabled ? ' disabled' : '';
+            var active = opts.active ? ' active' : '';
+            var isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+            var isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
+            var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+            return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+        };
+        var html = pageItem('‹ Previous', current - 1, { disabled: current === 1, isPrev: true });
+        buildPageList(current, total).forEach(function(p) {
+            html += (p === '...')
+                ? pageItem('…', null, { ellipsis: true, disabled: true })
+                : pageItem(p, p, { active: p === current });
+        });
+        html += pageItem('Next ›', current + 1, { disabled: current === total, isNext: true });
+        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
+    }
+
+    function goToCRPage(p) { crCurrentPage = p; renderCollegeReports(); }
+    function goToDRPage(p) { drCurrentPage = p; renderDRTable(); }
+
     function renderDRTable() {
         var body = document.getElementById('dr-monitor-body');
+        var pagEl = document.getElementById('dr-pagination');
         if (!myDocRequests.length) {
             body.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No document requests yet.</td></tr>';
+            if (pagEl) pagEl.innerHTML = '';
             return;
         }
-        body.innerHTML = myDocRequests.map(function (r) {
+        var totalPages = Math.ceil(myDocRequests.length / drItemsPerPage);
+        if (drCurrentPage > totalPages) drCurrentPage = totalPages || 1;
+        var startIdx = (drCurrentPage - 1) * drItemsPerPage;
+        var pageItems = myDocRequests.slice(startIdx, startIdx + drItemsPerPage);
+        if (pagEl) pagEl.innerHTML = buildPaginationHtml(drCurrentPage, totalPages, 'goToDRPage');
+        body.innerHTML = pageItems.map(function (r) {
             var cs = r.canonicalStatus || r.status;
             // Requester-facing Actions: View Details only. Draft history,
             // PDF download and Cancel remain reachable from the details modal.
@@ -917,11 +968,18 @@
 
     function renderCollegeReports() {
         var body = document.getElementById('cr-report-body');
+        var pagEl = document.getElementById('cr-pagination');
         if (!myCollegeReports.length) {
             body.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No reports yet. Use <strong>Send Approved MOA/MOU to CIRL</strong> for an agreement your college signed on its own.</td></tr>';
+            if (pagEl) pagEl.innerHTML = '';
             return;
         }
-        body.innerHTML = myCollegeReports.map(function (r) {
+        var totalPages = Math.ceil(myCollegeReports.length / crItemsPerPage);
+        if (crCurrentPage > totalPages) crCurrentPage = totalPages || 1;
+        var startIdx = (crCurrentPage - 1) * crItemsPerPage;
+        var pageItems = myCollegeReports.slice(startIdx, startIdx + crItemsPerPage);
+        if (pagEl) pagEl.innerHTML = buildPaginationHtml(crCurrentPage, totalPages, 'goToCRPage');
+        body.innerHTML = pageItems.map(function (r) {
             return '<tr data-cr-id="' + r.id + '">' +
                 '<td class="fw-semibold text-primary">' + crRef(r.id) + '</td>' +
                 '<td class="fw-medium">' + escapeHtml(r.institution) + '</td>' +
