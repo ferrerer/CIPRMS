@@ -472,20 +472,12 @@ function isActivated(userDoc) {
 // ── HELPER: profile picture ───────────────────────────────────────────────────
 // Which picture an account shows, in order: the photo its owner uploaded here (Settings → click the photo), else the
 // profile photo of their Google account (googleAvatarUrl — saved at every "Continue with Google" sign-in, so it also
-// shows after later email/password logins), else an email avatar (Gravatar), else the default picture.
+// shows after later email/password logins), else the default avatar from /images/default-avatar.jpg.
 const DEFAULT_AVATAR_URL = '/images/default-avatar.jpg';
 function avatarUrlFor(userDoc) {
   if (!userDoc) return DEFAULT_AVATAR_URL;
   if (userDoc.avatarUrl) return userDoc.avatarUrl;
   if (userDoc.googleAvatarUrl) return userDoc.googleAvatarUrl;
-  if (userDoc.emailAvatarUrl) return userDoc.emailAvatarUrl;
-  if (userDoc.email && typeof userDoc.email === 'string') {
-    const cleanEmail = userDoc.email.trim().toLowerCase();
-    if (cleanEmail && !cleanEmail.endsWith('.example.com') && !cleanEmail.endsWith('@example.com') && !cleanEmail.includes('jesttest')) {
-      const hash = crypto.createHash('md5').update(cleanEmail).digest('hex');
-      return `https://www.gravatar.com/avatar/${hash}?d=404`;
-    }
-  }
   return DEFAULT_AVATAR_URL;
 }
 // The profile photo URL from a Google sign-in, or null when the account has none. Only an https URL on Google's own
@@ -5345,6 +5337,8 @@ app.get('/api/users', requireStaffAccess, async (req, res) => {
     // picker; the latter had no defined order before this change either, so
     // this only replaces an incidental order with a deterministic one there.
     const docs = await db.collection('users').find({}, { projection: { password: 0 } }).sort({ id: -1 }).toArray();
+    // Attach a resolved avatar URL for each user (uploaded → Google → default)
+    docs.forEach(d => { d.displayAvatar = avatarUrlFor(d); });
     res.json(docs);
   } catch (err) {
     res.status(500).json({ error: err.message });

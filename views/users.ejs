@@ -431,7 +431,12 @@
 
     document.getElementById('usr-tbody').innerHTML = paged.map(u => `
       <tr>
-        <td class="fw-medium">${escapeHtml(u.name)}</td>
+        <td class="fw-medium">
+          <div class="d-flex align-items-center gap-2">
+            <img src="${u.displayAvatar || '/images/default-avatar.jpg'}" alt="" class="rounded-circle" style="width:32px;height:32px;object-fit:cover;" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/images/default-avatar.jpg'">
+            ${escapeHtml(u.name)}
+          </div>
+        </td>
         <td class="text-muted">${escapeHtml(u.email)}</td>
         <td>${roleBadge(u.role)}</td>
         <td>${u.activated === false ? '<span class="badge bg-warning-subtle text-warning"><i class="ri-time-line align-middle me-1"></i>Not yet activated</span>'
