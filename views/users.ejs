@@ -58,12 +58,12 @@
                                 <div class="row g-2 align-items-end mt-3">
                                     <div class="col-sm-8 col-md-6 col-lg-4">
                                         <div class="search-box">
-                                            <input class="form-control" id="usr-filter-email" oninput="renderUsers()">
+                                            <input class="form-control" id="usr-filter-email" oninput="currentPage=1;renderUsers()">
                                             <i class="ri-search-line search-icon"></i>
                                         </div>
                                     </div>
                                     <div class="col-sm-4 col-md-3 col-lg-2">
-                                        <select class="form-select" id="usr-filter-role" onchange="renderUsers()">
+                                        <select class="form-select" id="usr-filter-role" onchange="currentPage=1;renderUsers()">
                                             <option value="">All Roles</option>
                                             <option value="Administrator">Administrator</option>
                                             <option value="Auth. Personnel">College Dean</option>
@@ -90,6 +90,8 @@
                                         <tbody id="usr-tbody"></tbody>
                                     </table>
                                 </div>
+                                <!-- Pagination Container -->
+                                <div id="usr-pagination" class="p-3"></div>
                             </div>
                         </div>
                     </div>
@@ -312,6 +314,8 @@
   let editingId = null;
   let bsModal;
   let users = [];
+  let currentPage = 1;
+  const itemsPerPage = 10;
 
   // â”€â”€ API helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function apiPost(payload) {
@@ -370,7 +374,46 @@
       : `<span class="badge bg-danger-subtle text-danger"><i class="ri-close-circle-line align-middle me-1"></i>Inactive</span>`;
   }
 
-  // â”€â”€ Render table from in-memory users array â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // -- Windowed pagination helpers (same pattern as notifications) -----------
+  function buildPageList(current, total, maxVisible) {
+      maxVisible = maxVisible || 5;
+      if (total <= maxVisible + 2) {
+          return Array.from({ length: total }, function (_, i) { return i + 1; });
+      }
+      var start = Math.max(1, current - Math.floor(maxVisible / 2));
+      var end = start + maxVisible - 1;
+      if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+      var pages = [];
+      for (var i = start; i <= end; i++) pages.push(i);
+      if (start > 1) { pages.unshift('...'); pages.unshift(1); }
+      if (end < total) { pages.push('...'); pages.push(total); }
+      return pages;
+  }
+
+  function buildPaginationHtml(current, total, onClickFn) {
+      if (total <= 1) return '';
+      var pageItem = function (label, page, opts) {
+          opts = opts || {};
+          var disabled = opts.disabled ? ' disabled' : '';
+          var active = opts.active ? ' active' : '';
+          var isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+          var isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
+          var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+          return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+      };
+      var html = pageItem('&lsaquo; Previous', current - 1, { disabled: current === 1, isPrev: true });
+      buildPageList(current, total).forEach(function (p) {
+          html += (p === '...')
+              ? pageItem('&hellip;', null, { ellipsis: true, disabled: true })
+              : pageItem(p, p, { active: p === current });
+      });
+      html += pageItem('Next &rsaquo;', current + 1, { disabled: current === total, isNext: true });
+      return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
+  }
+
+  function goToPage(p) { currentPage = p; renderUsers(); }
+
+  // -- Render table from in-memory users array --------------------------------
   function renderUsers() {
     const emailFilter = (document.getElementById('usr-filter-email').value || '').trim().toLowerCase();
     const roleFilter = document.getElementById('usr-filter-role').value;
@@ -379,15 +422,20 @@
       && (!roleFilter || u.role === roleFilter)
     );
 
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    if (currentPage > totalPages) currentPage = Math.max(1, totalPages);
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    const paged = filtered.slice(startIdx, startIdx + itemsPerPage);
+
     document.getElementById('usr-count').textContent = `${filtered.length} of ${users.length} user${users.length !== 1 ? 's' : ''}`;
 
-    document.getElementById('usr-tbody').innerHTML = filtered.map(u => `
+    document.getElementById('usr-tbody').innerHTML = paged.map(u => `
       <tr>
         <td class="fw-medium">${escapeHtml(u.name)}</td>
         <td class="text-muted">${escapeHtml(u.email)}</td>
         <td>${roleBadge(u.role)}</td>
         <td>${u.activated === false ? '<span class="badge bg-warning-subtle text-warning"><i class="ri-time-line align-middle me-1"></i>Not yet activated</span>'
-              : u.unit ? escapeHtml(u.unit) : '<span class="text-muted">—</span>'}</td>
+              : u.unit ? escapeHtml(u.unit) : '<span class="text-muted">&mdash;</span>'}</td>
         <td class="text-muted">${u.login || 'Never'}</td>
         <td>${statusBadge(u.status)}</td>
         <td>
@@ -405,6 +453,9 @@
           </div>
         </td>
       </tr>`).join('');
+
+    // Render pagination controls
+    document.getElementById('usr-pagination').innerHTML = buildPaginationHtml(currentPage, totalPages, 'goToPage');
   }
 
   // ── Modal helpers ────────────────────────────────────────────────────────────────────────
