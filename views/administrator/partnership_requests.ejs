@@ -641,11 +641,11 @@
                       <div id="panel-pr">
                         <div class="filter-row">
                           <div class="search-box" style="width:210px;">
-                            <input class="form-control form-control-sm" id="pr-search" oninput="renderPR()">
+                            <input class="form-control form-control-sm" id="pr-search" oninput="prCurrentPage=1; renderPR()">
                             <i class="ri-search-line search-icon"></i>
                           </div>
                           <select class="form-select form-select-sm" id="pr-status" style="width:145px;"
-                            onchange="renderPR()">
+                            onchange="prCurrentPage=1; renderPR()">
                             <option value="">All Status</option>
                             <option>Pending</option>
                             <option>Under Review</option>
@@ -690,17 +690,18 @@
                             <tbody id="pr-tbody"></tbody>
                           </table>
                         </div>
+                        <div id="pr-pagination" class="p-3"></div>
                       </div>
 
                       <!-- Document Requests Panel -->
                       <div id="panel-dr" style="display:none;">
                         <div class="filter-row">
                           <div class="search-box" style="width:210px;">
-                            <input class="form-control form-control-sm" id="dr-search" oninput="renderDR()">
+                            <input class="form-control form-control-sm" id="dr-search" oninput="drCurrentPage=1; renderDR()">
                             <i class="ri-search-line search-icon"></i>
                           </div>
                           <select class="form-select form-select-sm" id="dr-status" style="width:170px;"
-                            onchange="renderDR()">
+                            onchange="drCurrentPage=1; renderDR()">
                             <option value="">All Status</option>
                             <option>Received</option>
                             <option>Preparing</option>
@@ -729,6 +730,7 @@
                             <tbody id="dr-tbody"></tbody>
                           </table>
                         </div>
+                        <div id="dr-pagination" class="p-3"></div>
                       </div>
 
                     </div><!-- /card-body -->
@@ -1074,7 +1076,50 @@
       document.getElementById('tab-dr').classList.toggle('active', sec === 'dr');
     }
 
+    
+    /* ─── PAGINATION HELPERS ─── */
+    var prCurrentPage = 1, prItemsPerPage = 10;
+    var drCurrentPage = 1, drItemsPerPage = 10;
+
+    function buildPageList(current, total) {
+        var maxVisible = 5;
+        if (total <= maxVisible + 2) return Array.from({length: total}, function(_, i){ return i + 1; });
+        var start = Math.max(1, current - Math.floor(maxVisible / 2));
+        var end = start + maxVisible - 1;
+        if (end > total) { end = total; start = Math.max(1, end - maxVisible + 1); }
+        var pages = [];
+        for (var i = start; i <= end; i++) pages.push(i);
+        if (start > 1) { pages.unshift('...'); pages.unshift(1); }
+        if (end < total) { pages.push('...'); pages.push(total); }
+        return pages;
+    }
+
+    function buildPaginationHtml(current, total, onClickFn) {
+        if (total <= 1) return '';
+        var pageItem = function(label, page, opts) {
+            opts = opts || {};
+            var disabled = opts.disabled ? ' disabled' : '';
+            var active = opts.active ? ' active' : '';
+            var isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+            var isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
+            var click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
+            return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+        };
+        var html = pageItem('&lsaquo; Previous', current - 1, { disabled: current === 1, isPrev: true });
+        buildPageList(current, total).forEach(function(p) {
+            html += (p === '...')
+                ? pageItem('&hellip;', null, { ellipsis: true, disabled: true })
+                : pageItem(p, p, { active: p === current });
+        });
+        html += pageItem('Next &rsaquo;', current + 1, { disabled: current === total, isNext: true });
+        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
+    }
+
+    function goToPRPage(p) { prCurrentPage = p; renderPR(); }
+    function goToDRPage(p) { drCurrentPage = p; renderDR(); }
+
     /* ─── STATS ─── */
+
     function updateStats() {
       document.getElementById('cnt-pr-total').textContent = prData.length;
       document.getElementById('cnt-dr-total').textContent = drData.length;
@@ -1115,6 +1160,7 @@
       document.querySelectorAll('#pr-filter-tabs .btn').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
       document.getElementById('pr-status').value = val;
+      prCurrentPage = 1;
       renderPR();
     }
 
@@ -1148,10 +1194,19 @@
       if (!prFiltered.length) {
         tbody.innerHTML = `<tr><td colspan="9" class="text-center py-5 text-muted">
           <i class="ri-inbox-line d-block fs-1 mb-2"></i>No partnership requests found.</td></tr>`;
+        document.getElementById('pr-pagination').innerHTML = '';
         return;
       }
 
-      tbody.innerHTML = prFiltered.map((r, i) => {
+      const totalPages = Math.ceil(prFiltered.length / prItemsPerPage);
+      if (prCurrentPage > totalPages) prCurrentPage = Math.max(1, totalPages);
+      const startIdx = (prCurrentPage - 1) * prItemsPerPage;
+      const paged = prFiltered.slice(startIdx, startIdx + prItemsPerPage);
+      
+      document.getElementById('pr-pagination').innerHTML = buildPaginationHtml(prCurrentPage, totalPages, 'goToPRPage');
+
+      tbody.innerHTML = paged.map((r, mappedIndex) => {
+        const i = startIdx + mappedIndex;
         const uid = String(r.id || i);
         // Institution/requester/country/notes are free-form fields any
         // potential_partner or Auth. Personnel can submit — escape before
@@ -1873,10 +1928,19 @@
       if (!drFiltered.length) {
         tbody.innerHTML = `<tr><td colspan="7" class="text-center py-5 text-muted">
           <i class="ri-inbox-line d-block fs-1 mb-2"></i>No document requests found.</td></tr>`;
+        document.getElementById('dr-pagination').innerHTML = '';
         return;
       }
+      
+      const totalPages = Math.ceil(drFiltered.length / drItemsPerPage);
+      if (drCurrentPage > totalPages) drCurrentPage = Math.max(1, totalPages);
+      const startIdx = (drCurrentPage - 1) * drItemsPerPage;
+      const paged = drFiltered.slice(startIdx, startIdx + drItemsPerPage);
+      
+      document.getElementById('dr-pagination').innerHTML = buildPaginationHtml(drCurrentPage, totalPages, 'goToDRPage');
 
-      tbody.innerHTML = drFiltered.map((r, i) => {
+      tbody.innerHTML = paged.map((r, mappedIndex) => {
+        const i = startIdx + mappedIndex;
         const cs = r.canonicalStatus || r.status;
         const canAct = IS_ADMIN && !DR_TERMINAL_STATUSES.includes(cs);
         return `<tr data-rid="${r.id}"${flashDR.has(r.id) ? ' class="rt-flash"' : ''}>
