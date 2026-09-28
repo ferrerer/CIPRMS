@@ -2748,45 +2748,86 @@ function buildPartnershipFilter(query) {
 }
 
 /**
- * `start`/`end` are stored as formatted display strings (e.g. "Apr 12,
- * 2026"), not real Dates, so date-range filtering happens in memory after
- * the DB query — fine at this data scale, and avoids reformatting the whole
- * collection.
- *
- * This used to filter by `end` alone, which meant almost any realistic
- * Date From/Date To window returned ZERO records: partnerships here run
- * 3-6+ years, so a window like "2021" excluded a partnership that started
- * in Apr 2021 and runs to 2026, even though it was clearly active (and
- * newly signed) throughout that window — confirmed live against the real
- * database. Date From/Date To is a generic "partnerships active/relevant
- * during this period" filter, not an "ends within this period" filter (the
- * dedicated Report Types and the Status filter already cover expiry-based
- * questions) — so this now uses standard date-RANGE OVERLAP: a partnership
- * matches whenever its own [start, end] period overlaps the requested
- * window at all (start <= dateTo AND end >= dateFrom), not only when one
- * single field happens to land inside it.
+ * Parses a date input into a Date object representing the beginning or end of
+ * that calendar day in local time, avoiding UTC timestamp shifts.
+ * Handles bare "YYYY-MM-DD" date strings, Date instances, and formatted
+ * display strings (e.g. "Sep 26, 2023" or "September 26, 2023").
  */
-function filterByDateRange(docs, dateFrom, dateTo) {
+function parseLocalDate(input, isEndOfDay = false) {
+  if (!input) return null;
+  if (input instanceof Date) {
+    if (isNaN(input.getTime())) return null;
+    return isEndOfDay
+      ? new Date(input.getFullYear(), input.getMonth(), input.getDate(), 23, 59, 59, 999)
+      : new Date(input.getFullYear(), input.getMonth(), input.getDate(), 0, 0, 0, 0);
+  }
+  const str = String(input).trim();
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10) - 1;
+    const d = parseInt(isoMatch[3], 10);
+    return isEndOfDay
+      ? new Date(y, m, d, 23, 59, 59, 999)
+      : new Date(y, m, d, 0, 0, 0, 0);
+  }
+  const parsed = new Date(str);
+  if (isNaN(parsed.getTime())) return null;
+  return isEndOfDay
+    ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59, 999)
+    : new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+}
+
+/**
+ * Returns the relevant partnership date string for filtering purposes.
+ * For expiration-centric report types / statuses (e.g. 'Expired Partnerships',
+ * 'Expired List', 'Expiration', 'Expiring Soon'), the expiration date (end) is the primary relevant date.
+ * For all other reports (e.g. 'Active Partnerships', 'Summary', etc.), the
+ * date of signing/establishment (start) is the authoritative relevant date.
+ * Falls back to the other date field if the primary is missing.
+ */
+function getRelevantPartnershipDate(doc, options = {}) {
+  const reportType = options.reportType || '';
+  const status = options.status || '';
+  const isExpiryCentric = [
+    'Expired Partnerships', 'Expired List', 'Expiration', 'Expiring Soon'
+  ].includes(reportType) || ['Expired', 'Expiring Soon'].includes(status);
+
+  if (isExpiryCentric) {
+    return doc.end || doc.endDate || doc.start || doc.startDate || null;
+  }
+  return doc.start || doc.startDate || doc.end || doc.endDate || null;
+}
+
+/**
+ * Custom Report Builder Date Range Filter:
+ * Strict inclusive boundary filtering on the partnership's relevant date.
+ *
+ * 1. Date From only:
+ *    - Include only partnerships whose relevant date falls ON or AFTER Date From (>= dateFrom).
+ *    - Exclude anything before Date From.
+ * 2. Date To only:
+ *    - Include only partnerships whose relevant date falls ON or BEFORE Date To (<= dateTo).
+ *    - Exclude anything after Date To.
+ * 3. Date From + Date To:
+ *    - Include ONLY partnerships whose relevant date falls between Date From and Date To, inclusive.
+ *    - Exclude anything before Date From or after Date To.
+ *
+ * Boundaries are inclusive. Local calendar date semantics are strictly preserved.
+ */
+function filterByDateRange(docs, dateFrom, dateTo, options = {}) {
   if (!dateFrom && !dateTo) return docs;
-  // `dateFrom`/`dateTo` come from an <input type="date"> as bare "YYYY-MM-DD"
-  // strings. A bare ISO date-only string is parsed as UTC midnight per the
-  // ECMAScript spec, but appending a time-of-day (as `to` already did below)
-  // makes it a date-TIME form, parsed as LOCAL midnight instead — and a
-  // partnership's own start/end (e.g. "Apr 12, 2026") is a non-ISO format,
-  // always parsed as LOCAL time too. Leaving `from` as a bare date therefore
-  // compared a UTC instant against local-time instants, silently excluding
-  // any record dated exactly on the `dateFrom` boundary day in a timezone
-  // ahead of UTC (confirmed live in Asia/Manila, UTC+8). Appending
-  // 'T00:00:00' to `from` too makes both boundaries — and the record dates
-  // being compared — consistently local-time.
-  const from = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
-  const to = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+  const from = dateFrom ? parseLocalDate(dateFrom, false) : null;
+  const to = dateTo ? parseLocalDate(dateTo, true) : null;
+
   return docs.filter(d => {
-    const start = new Date(d.start);
-    const end = new Date(d.end);
-    if (isNaN(start) || isNaN(end)) return false;
-    if (from && end < from) return false;
-    if (to && start > to) return false;
+    const rawDate = getRelevantPartnershipDate(d, options);
+    if (!rawDate) return false;
+    const targetDate = parseLocalDate(rawDate, false);
+    if (!targetDate) return false;
+
+    if (from && targetDate < from) return false;
+    if (to && targetDate > to) return false;
     return true;
   });
 }
@@ -3516,13 +3557,16 @@ async function computeCustomReportData(db, query, user) {
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
+  // Explicit Status filter always wins; otherwise fall back to whatever
+  // status the Report Type implies (see REPORT_TYPE_IMPLIED_STATUS above).
+  const effectiveStatusFilter = statusFilter || REPORT_TYPE_IMPLIED_STATUS[reportType] || '';
+
   // Mid-Year/Yearly Output Report: strictly the CURRENT calendar year/half-
   // year, computed server-side from the server's own clock — a client-
   // supplied dateFrom/dateTo is intentionally ignored entirely for these two
   // report types (the Reports & Analytics tiles no longer send one at all;
   // see reports.ejs) so a manipulated query string can never smuggle in a
-  // different year. Every other report type's Date From/To behavior
-  // (filterByDateRange's overlap semantics) is completely unchanged below.
+  // different year.
   let periodRangeLabel = null;
   if (reportType === 'Mid-Year' || reportType === 'Yearly') {
     const currentYear = new Date().getFullYear();
@@ -3534,7 +3578,7 @@ async function computeCustomReportData(db, query, user) {
     const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     periodRangeLabel = { dateFrom: fmt(rangeStart), dateTo: fmt(rangeEnd) };
   } else if (dateFrom || dateTo) {
-    docs = filterByDateRange(docs, dateFrom, dateTo);
+    docs = filterByDateRange(docs, dateFrom, dateTo, { reportType, status: effectiveStatusFilter });
   }
 
   // Recompute & standardize status for each doc
@@ -3543,10 +3587,6 @@ async function computeCustomReportData(db, query, user) {
     if (calcStatus) p.status = calcStatus;
     p.isRenewed = Boolean(p.isRenewed || p.renewed || (p.remarks && /renew/i.test(p.remarks)) || p.nature === 'Renewal');
   });
-
-  // Explicit Status filter always wins; otherwise fall back to whatever
-  // status the Report Type implies (see REPORT_TYPE_IMPLIED_STATUS above).
-  const effectiveStatusFilter = statusFilter || REPORT_TYPE_IMPLIED_STATUS[reportType] || '';
 
   // Apply Status filter if specified (explicitly, or implied by Report Type)
   if (effectiveStatusFilter) {
@@ -4526,9 +4566,16 @@ async function computeComparisonReport(db, query, user) {
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
+  // Explicit Status filter always wins; otherwise fall back to whatever
+  // status the ORIGINAL report's Report Type implied — this is what keeps
+  // Group A (the "original, preserved report") identical to what Preview
+  // just showed, instead of silently reverting to every status the moment
+  // Compare is opened (see REPORT_TYPE_IMPLIED_STATUS).
+  const effectiveStatusQ = statusQ || REPORT_TYPE_IMPLIED_STATUS[reportType] || '';
+
   // Date range filter
   if (dateFrom || dateTo) {
-    docs = filterByDateRange(docs, dateFrom, dateTo);
+    docs = filterByDateRange(docs, dateFrom, dateTo, { reportType, status: effectiveStatusQ });
   }
 
   // Recompute status using lifecycle logic for every doc
@@ -4537,13 +4584,6 @@ async function computeComparisonReport(db, query, user) {
     if (calcStatus) p.status = calcStatus;
     p.isRenewed = Boolean(p.isRenewed || p.renewed || (p.remarks && /renew/i.test(p.remarks)) || p.nature === 'Renewal');
   });
-
-  // Explicit Status filter always wins; otherwise fall back to whatever
-  // status the ORIGINAL report's Report Type implied — this is what keeps
-  // Group A (the "original, preserved report") identical to what Preview
-  // just showed, instead of silently reverting to every status the moment
-  // Compare is opened (see REPORT_TYPE_IMPLIED_STATUS).
-  const effectiveStatusQ = statusQ || REPORT_TYPE_IMPLIED_STATUS[reportType] || '';
 
   // Optional single-status pre-filter (for narrowing scope before comparison)
   if (effectiveStatusQ) {
@@ -4617,7 +4657,7 @@ async function computeComparisonReport(db, query, user) {
 
     async function fetchOverrideGroup(overrideFilter, statusOverride) {
       let odocs = await db.collection('partnerships').find(overrideFilter).sort({ id: 1 }).toArray();
-      if (dateFrom || dateTo) odocs = filterByDateRange(odocs, dateFrom, dateTo);
+      if (dateFrom || dateTo) odocs = filterByDateRange(odocs, dateFrom, dateTo, { reportType, status: statusOverride || effectiveStatusQ });
       odocs.forEach(p => {
         const calcStatus = computeStatusFromEnd(p.end);
         if (calcStatus) p.status = calcStatus;

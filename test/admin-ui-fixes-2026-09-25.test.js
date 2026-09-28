@@ -187,17 +187,18 @@ describe('Custom Report Builder — date boundaries against the real API (dispos
     expect(await names({})).toBe('ABC');
     expect(await names({ dateFrom: '', dateTo: '' })).toBe('ABC');
   });
-  test('Date From only: a record ending exactly on that day is included (inclusive boundary), earlier-ended ones are not', async () => {
-    expect(await names({ dateFrom: '2040-03-20' })).toBe('AB');
+  test('Date From only: a record starting on or after that day is included (inclusive boundary), earlier ones are not', async () => {
+    expect(await names({ dateFrom: '2040-03-10' })).toBe('AB');
     expect(await names({ dateFrom: '2040-03-21' })).toBe('B');
+    expect(await names({ dateFrom: '2040-03-22' })).toBe('');
   });
   test('Date To only: a record starting exactly on that day is included, later-starting ones are not', async () => {
     expect(await names({ dateTo: '2040-03-21' })).toBe('ABC');
     expect(await names({ dateTo: '2040-03-20' })).toBe('AC');
   });
-  test('both dates, and the same date in both fields, show the agreements running that day', async () => {
+  test('both dates, and the same date in both fields, show the agreements starting within that window', async () => {
     expect(await names({ dateFrom: '2040-03-01', dateTo: '2040-03-15' })).toBe('A');
-    expect(await names({ dateFrom: '2040-03-20', dateTo: '2040-03-20' })).toBe('A');
+    expect(await names({ dateFrom: '2040-03-10', dateTo: '2040-03-10' })).toBe('A');
     expect(await names({ dateFrom: '2040-03-21', dateTo: '2040-03-21' })).toBe('B');
   });
   test('a reversed range and a range with no agreements return a real empty result, never fabricated rows', async () => {
@@ -211,7 +212,7 @@ describe('Custom Report Builder — date boundaries against the real API (dispos
     expect(res.body.periodLabel).toContain('2040-03-01');
   });
   test('Group By still works with a date range (grouped result covers only the matching records)', async () => {
-    const res = await admin.get('/api/reports/custom/preview').query({ reportType: 'Summary', inst: TAG, dateFrom: '2040-03-20', groupBy: 'country' });
+    const res = await admin.get('/api/reports/custom/preview').query({ reportType: 'Summary', inst: TAG, dateFrom: '2040-03-10', groupBy: 'country' });
     expect(res.body.isComparison).toBe(true);
     const total = (res.body.comparisonData || []).reduce((n, r) => n + (r.Total || r.total || 0), 0);
     expect(total).toBe(2);

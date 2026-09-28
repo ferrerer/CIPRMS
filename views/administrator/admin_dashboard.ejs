@@ -17,6 +17,43 @@
     <link href="/velzon/assets/css/ciprms-bridge.css?v=20260925d" rel="stylesheet" />
     <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <style>
+        .top-country-row {
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+            border: 1px solid transparent;
+        }
+        .top-country-row:hover, .top-country-row:focus-visible {
+            background-color: var(--vz-light, rgba(var(--vz-secondary-rgb, 108, 117, 125), 0.08));
+            border-color: var(--vz-border-color, #e9ebec);
+            outline: none;
+        }
+        .top-country-row:hover .country-nav-arrow {
+            opacity: 1 !important;
+            color: var(--vz-primary, #405189) !important;
+            transform: translateX(2px);
+        }
+        .top-country-row.active-country-row {
+            background-color: var(--vz-primary-subtle, rgba(64, 81, 137, 0.12));
+            border-color: var(--vz-primary, #405189);
+        }
+        .top-country-row.active-country-row .country-nav-arrow {
+            opacity: 1 !important;
+            color: var(--vz-primary, #405189) !important;
+        }
+        .country-flag-img {
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+        }
+        @keyframes mapHighlightPulse {
+            0% { transform: scale(0.9); opacity: 0.9; }
+            50% { transform: scale(1.3); opacity: 0.35; }
+            100% { transform: scale(0.9); opacity: 0.9; }
+        }
+        .pulse-country-ring {
+            animation: mapHighlightPulse 1.8s infinite ease-in-out;
+            transform-origin: center;
+        }
+    </style>
 </head>
 
 <body>
@@ -343,7 +380,8 @@
                                                     onclick="flyToContinent(this,20,0,2)">World</button>
                                             </div>
                                         </div>
-                                        <div class="card-body p-0">
+                                        <div class="card-body p-0 position-relative">
+                                            <div id="map-country-alert" class="px-3 pt-2" style="display:none;" aria-live="polite"></div>
                                             <div id="partnership-map" style="height:360px;">
                                             </div>
                                         </div>
@@ -516,6 +554,8 @@
 
         // Markers live in their own layer so a live refresh can clear and redraw them.
         const markerLayer = L.layerGroup().addTo(map);
+        const countryHighlightLayer = L.layerGroup().addTo(map);
+        window.countryHighlightLayer = countryHighlightLayer;
 
         const STATUS_COLOR = { active: '#17c653', expiring: '#f7b84b', expired: '#f06548' };
         const STATUS_RING = { active: '#d1fae5', expiring: '#fef3c7', expired: '#fee2e2' };
@@ -616,14 +656,23 @@
     </div>`;
         }
 
+        let currentMapMarkers = [];
+        let allLoadedPartnerships = [];
+
         function renderMap(partnerships) {
             // Group by identical coordinates (exact and approximate kept apart) so several
             // partnerships in one place become ONE marker whose popup lists them all,
             // instead of markers stacked on top of each other.
+            allLoadedPartnerships = Array.isArray(partnerships) ? partnerships : [];
             markerLayer.clearLayers();
+            if (window.countryHighlightLayer) window.countryHighlightLayer.clearLayers();
+            currentMapMarkers = [];
+            const alertBox = document.getElementById('map-country-alert');
+            if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
+
             const groups = new Map();
             let unmapped = 0, approxCount = 0, onMap = 0;
-            partnerships.forEach(function (p) {
+            allLoadedPartnerships.forEach(function (p) {
                 if (!hasMapLocation(p)) { unmapped++; return; }
                 const approx = isApproximate(p);
                 onMap++;
@@ -647,14 +696,16 @@
                     marker = L.marker([g.lat, g.lng], { icon: makeGroupIcon(g.items.length, worst, g.approx) })
                         .bindPopup(groupPopupHtml(g.items, g.approx), { maxWidth: 280 });
                 }
+                marker._groupData = g;
                 marker.addTo(markerLayer);
+                currentMapMarkers.push(marker);
             });
 
             // Coverage note: what is on the map, what is approximate, and how many
             // partnerships have no resolved location (they get no marker at all).
             const note = document.getElementById('map-coverage-note');
-            if (note && partnerships.length) {
-                const parts = [`<span><i class="ri-map-pin-2-line me-1"></i>${onMap} of ${partnerships.length} partnerships on the map</span>`];
+            if (note && allLoadedPartnerships.length) {
+                const parts = [`<span><i class="ri-map-pin-2-line me-1"></i>${onMap} of ${allLoadedPartnerships.length} partnerships on the map</span>`];
                 if (approxCount) parts.push(`<span>${approxCount} approximate (dashed markers = country level)</span>`);
                 if (unmapped) parts.push(`<span class="text-warning-emphasis"><i class="ri-error-warning-line me-1"></i>${unmapped} not on map (location unresolved)</span>`);
                 note.innerHTML = parts.join('<span class="mx-2">&middot;</span>');
@@ -663,9 +714,17 @@
             setTimeout(function () { map.invalidateSize(); }, 300);
         }
 
+        function clearCountrySelectionVisuals() {
+            if (window.countryHighlightLayer) window.countryHighlightLayer.clearLayers();
+            document.querySelectorAll('.top-country-row').forEach(function (r) { r.classList.remove('active-country-row'); });
+            const alertBox = document.getElementById('map-country-alert');
+            if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
+        }
+
         function flyToContinent(btn, lat, lng, zoom) {
             document.querySelectorAll('.continent-tab').forEach(function (t) { t.classList.remove('active', 'btn-soft-primary'); t.classList.add('btn-soft-secondary'); });
             if (btn) { btn.classList.remove('btn-soft-secondary'); btn.classList.add('active', 'btn-soft-primary'); }
+            clearCountrySelectionVisuals();
             map.flyTo([lat, lng], zoom, { duration: 1.2 });
         }
 
@@ -683,7 +742,11 @@
             'Netherlands': 'nl', 'USA': 'us', 'US': 'us', 'United States': 'us', 'United States of America': 'us',
             'Germany': 'de', 'United Kingdom': 'gb', 'UK': 'gb', 'Canada': 'ca', 'France': 'fr',
             'Spain': 'es', 'Italy': 'it', 'India': 'in', 'Indonesia': 'id', 'Malaysia': 'my', 'Vietnam': 'vn',
-            'Taiwan': 'tw', 'Hong Kong': 'hk', 'Brazil': 'br', 'Mexico': 'mx'
+            'Taiwan': 'tw', 'Hong Kong': 'hk', 'Brazil': 'br', 'Mexico': 'mx',
+            'Russia': 'ru', 'Russian Federation': 'ru', 'Switzerland': 'ch', 'Sweden': 'se', 'Norway': 'no',
+            'Denmark': 'dk', 'Finland': 'fi', 'Belgium': 'be', 'Austria': 'at', 'Ireland': 'ie',
+            'Portugal': 'pt', 'Poland': 'pl', 'United Arab Emirates': 'ae', 'UAE': 'ae',
+            'Saudi Arabia': 'sa', 'Turkey': 'tr', 'Egypt': 'eg', 'South Africa': 'za'
         };
 
         // Lookups derived from COUNTRY_CODE. The FIRST name listed for a code is the one shown for it ("United Kingdom",
@@ -731,6 +794,112 @@
             }).sort((x, y) => y.count - x.count || x.country.localeCompare(y.country));
         }
 
+        function isCountryMatch(recordCountry, selectedCountry, selectedCode) {
+            if (!recordCountry) return false;
+            const rec = String(recordCountry).replace(/\s+/g, ' ').trim().toLowerCase();
+            const sel = String(selectedCountry || '').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (rec === sel) return true;
+            const recCode = countryCodeOf(rec);
+            if (selectedCode && recCode && recCode.toLowerCase() === String(selectedCode).toLowerCase()) return true;
+            return false;
+        }
+
+        function selectCountryForMap(countryName, countryCode) {
+            // 1. Highlight clicked row in the list
+            document.querySelectorAll('.top-country-row').forEach(function (row) {
+                if (row.getAttribute('data-country') === countryName) {
+                    row.classList.add('active-country-row');
+                } else {
+                    row.classList.remove('active-country-row');
+                }
+            });
+
+            // 2. Clear continent tab active states
+            document.querySelectorAll('.continent-tab').forEach(function (t) {
+                t.classList.remove('active', 'btn-soft-primary');
+                t.classList.add('btn-soft-secondary');
+            });
+
+            // 3. Clear previous highlight layer & alert
+            if (window.countryHighlightLayer) window.countryHighlightLayer.clearLayers();
+            const alertBox = document.getElementById('map-country-alert');
+            if (alertBox) { alertBox.style.display = 'none'; alertBox.innerHTML = ''; }
+
+            // 4. Smooth scroll to the Map section
+            const mapContainer = document.getElementById('partnership-map');
+            if (mapContainer) {
+                const mapCard = mapContainer.closest('.card') || mapContainer;
+                mapCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            // 5. Find markers matching this country
+            const matchingMarkers = currentMapMarkers.filter(function (m) {
+                return m._groupData && m._groupData.items && m._groupData.items.some(function (p) {
+                    return isCountryMatch(p.country, countryName, countryCode);
+                });
+            });
+
+            // 6. Handle case with matching markers
+            if (matchingMarkers.length > 0) {
+                const latLngs = [];
+                matchingMarkers.forEach(function (m) {
+                    const lat = m._groupData.lat;
+                    const lng = m._groupData.lng;
+                    latLngs.push([lat, lng]);
+
+                    // Add highlight pulse circle around the marker
+                    L.circleMarker([lat, lng], {
+                        radius: m._groupData.items.length > 1 ? 26 : 22,
+                        color: '#405189',
+                        weight: 3,
+                        dashArray: '4, 4',
+                        fillColor: '#405189',
+                        fillOpacity: 0.18,
+                        className: 'pulse-country-ring'
+                    }).addTo(countryHighlightLayer);
+                });
+
+                if (matchingMarkers.length === 1) {
+                    const single = matchingMarkers[0];
+                    map.flyTo([single._groupData.lat, single._groupData.lng], 6, { duration: 1.2 });
+                    setTimeout(function () {
+                        if (single && single.openPopup) single.openPopup();
+                    }, 1250);
+                } else {
+                    const bounds = L.latLngBounds(latLngs);
+                    map.flyToBounds(bounds, { padding: [50, 50], maxZoom: 6, duration: 1.2 });
+                }
+
+                // Show status notification bar above the map with reset option
+                if (alertBox) {
+                    alertBox.innerHTML = '<div class="alert alert-primary alert-dismissible d-flex align-items-center justify-content-between p-2 mb-2 fs-12" role="alert">' +
+                        '<span><i class="ri-map-pin-fill text-primary me-1"></i>Showing <strong>' + matchingMarkers.length + '</strong> partnership location' + (matchingMarkers.length > 1 ? 's' : '') + ' in <strong>' + esc(countryName) + '</strong></span>' +
+                        '<button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-underline ms-2" onclick="clearCountrySelection()">View All</button>' +
+                        '</div>';
+                    alertBox.style.display = '';
+                }
+            } else {
+                // 7. No valid coordinates on file for this country: show graceful empty state
+                const countryPartnerships = allLoadedPartnerships.filter(function (p) {
+                    return isCountryMatch(p.country, countryName, countryCode);
+                });
+                const total = countryPartnerships.length || 0;
+                if (alertBox) {
+                    alertBox.innerHTML = '<div class="alert alert-warning alert-dismissible d-flex align-items-center justify-content-between p-2 mb-2 fs-12" role="alert">' +
+                        '<span><i class="ri-information-line me-1"></i>No geographic coordinates on file for <strong>' + esc(countryName) + '</strong> (' + total + ' agreement' + (total === 1 ? '' : 's') + '). Locations will appear once coordinates are added.</span>' +
+                        '<button type="button" class="btn btn-sm btn-link text-warning-emphasis p-0 text-decoration-underline ms-2" onclick="clearCountrySelection()">Dismiss</button>' +
+                        '</div>';
+                    alertBox.style.display = '';
+                }
+            }
+        }
+
+        function clearCountrySelection() {
+            clearCountrySelectionVisuals();
+            const worldBtn = document.querySelector('.continent-tab[onclick*="20,0,2"]');
+            if (worldBtn) flyToContinent(worldBtn, 20, 0, 2);
+        }
+
         function renderTopCountries(partnerships) {
             const el = document.getElementById('top-countries-list');
             const list = Array.isArray(partnerships) ? partnerships : [];
@@ -741,21 +910,37 @@
             }
             const max = top[0].count;
             el.innerHTML = top.map(({ country, code, count }) => {
-                const flagEmoji = code ? String.fromCodePoint(...[...code.toUpperCase()].map(c => 127397 + c.charCodeAt(0))) : null;
-                const flag = flagEmoji
-                    ? `<span class="fs-3" style="line-height:1;" role="img" aria-label="${esc(country)} flag">${flagEmoji}</span>`
-                    : `<span class="fs-3" style="line-height:1;" role="img" aria-label="Unknown country">🌍</span>`;
+                const safeCountry = esc(country);
+                const flagHtml = code
+                    ? `<img src="https://flagcdn.com/w40/${code.toLowerCase()}.png"
+                            srcset="https://flagcdn.com/w80/${code.toLowerCase()}.png 2x"
+                            alt="${safeCountry} flag"
+                            class="rounded shadow-sm country-flag-img flex-shrink-0"
+                            loading="lazy"
+                            style="width:28px;height:19px;object-fit:cover;vertical-align:middle;border:1px solid rgba(0,0,0,0.12);"
+                            onerror="this.onerror=null;this.parentElement.innerHTML='<span class=\\'avatar-title bg-light text-muted rounded shadow-sm country-flag-fallback flex-shrink-0\\' style=\\'width:28px;height:19px;font-size:12px;display:inline-flex;align-items:center;justify-content:center;\\'><i class=\\'ri-earth-line\\'></i></span>';">`
+                    : `<span class="avatar-title bg-light text-muted rounded shadow-sm country-flag-fallback flex-shrink-0" style="width:28px;height:19px;font-size:12px;display:inline-flex;align-items:center;justify-content:center;"><i class="ri-earth-line"></i></span>`;
                 const pct = Math.round((count / max) * 100);
-                return `<div class="top-country-row d-flex align-items-center mb-3">
-        <div class="flex-shrink-0 me-3">${flag}</div>
+                return `<div class="top-country-row d-flex align-items-center p-2 rounded mb-2"
+        role="button"
+        tabindex="0"
+        data-country="${safeCountry}"
+        data-code="${code || ''}"
+        onclick="selectCountryForMap('${safeCountry}', '${code || ''}')"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCountryForMap('${safeCountry}', '${code || ''}');}"
+        title="View ${safeCountry} on map">
+        <div class="flex-shrink-0 me-3 country-flag-wrapper" style="width:28px;height:19px;display:flex;align-items:center;justify-content:center;">${flagHtml}</div>
         <div class="flex-grow-1" style="min-width:0;">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-1">
                 <span class="fs-13 fw-medium text-truncate" title="${esc(country)}" style="min-width:0;">${esc(country)}</span>
-                <span class="fs-12 fw-semibold flex-shrink-0">${count}</span>
+                <span class="fs-12 fw-semibold flex-shrink-0 text-muted">${count}</span>
             </div>
             <div class="progress" style="height:4px;">
                 <div class="progress-bar bg-primary" style="width:${pct}%"></div>
             </div>
+        </div>
+        <div class="flex-shrink-0 ms-2 text-muted country-nav-arrow" style="font-size:15px;line-height:1;opacity:0.5;">
+            <i class="ri-arrow-right-s-line"></i>
         </div>
     </div>`;
             }).join('');

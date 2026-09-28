@@ -623,53 +623,43 @@ describe('Custom Report Builder output correctness (Country case-sensitivity + D
   });
 
   test('Date Range dateFrom includes a record dated exactly on the boundary day', async () => {
-    // createdId's end date is 'Jan 1, 2030' — dateFrom=2030-01-01 must include it.
-    const res = await agent.get('/api/reports/custom/preview?dateFrom=2030-01-01&country=Testland');
+    // createdId's start date is 'Jan 1, 2026' — dateFrom=2026-01-01 must include it.
+    const res = await agent.get('/api/reports/custom/preview?dateFrom=2026-01-01&country=Testland');
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(true);
   });
 
   test('Date Range dateTo includes a record dated exactly on the boundary day', async () => {
-    const res = await agent.get('/api/reports/custom/preview?dateTo=2030-01-01&country=Testland');
+    const res = await agent.get('/api/reports/custom/preview?dateTo=2026-01-01&country=Testland');
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(true);
   });
 
   test('Date Range dateFrom excludes a record dated the day before the boundary', async () => {
-    const res = await agent.get('/api/reports/custom/preview?dateFrom=2030-01-02&country=Testland');
+    const res = await agent.get('/api/reports/custom/preview?dateFrom=2026-01-02&country=Testland');
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(false);
   });
 
   test('Same-day Date Range (dateFrom = dateTo) is inclusive of a record dated exactly that day', async () => {
-    const res = await agent.get('/api/reports/custom/preview?dateFrom=2030-01-01&dateTo=2030-01-01&country=Testland');
+    const res = await agent.get('/api/reports/custom/preview?dateFrom=2026-01-01&dateTo=2026-01-01&country=Testland');
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(true);
   });
 
-  // Regression: filterByDateRange() used to check only a partnership's `end`
-  // date against the Date From/Date To window. Since agreements here run
-  // several years, almost any realistic window an admin picks returned ZERO
-  // records — e.g. a partnership that started in 2026 and doesn't end until
-  // 2030 was excluded from a "2026" window entirely, even though it was
-  // clearly signed and active that year. Fixed with standard date-range
-  // OVERLAP semantics (start <= dateTo AND end >= dateFrom) in the one
-  // shared filterByDateRange() used by Preview, PDF, Excel, and Compare.
   test('A window matching only the START date (end is years later) still includes the record', async () => {
-    // createdId: start Jan 1, 2026 → end Jan 1, 2030. A "just 2026" window
-    // must include it — the old end-date-only check excluded it entirely.
+    // createdId: start Jan 1, 2026 → end Jan 1, 2030. A "just 2026" window includes it.
     const res = await agent.get('/api/reports/custom/preview?dateFrom=2026-01-01&dateTo=2026-12-31&country=Testland');
     expect(res.status).toBe(200);
     expect(res.body.records.some(p => p.id === createdId)).toBe(true);
   });
 
-  test('A window entirely CONTAINED within a longer partnership period still includes the record', async () => {
-    // expiredId: start Jan 1, 2010 → end Jan 1, 2015. Neither boundary of a
-    // 2012-2013 window matches either date, but the partnership was clearly
-    // active throughout it.
+  test('A window outside the partnership start date strictly excludes the record (no overlap leakage)', async () => {
+    // expiredId: start Jan 1, 2010 → end Jan 1, 2015. A 2012-2013 window strictly excludes it
+    // because its signing date was 2010 (not within the requested 2012-2013 boundary).
     const res = await agent.get('/api/reports/custom/preview?dateFrom=2012-01-01&dateTo=2013-01-01&country=Testland');
     expect(res.status).toBe(200);
-    expect(res.body.records.some(p => p.id === expiredId)).toBe(true);
+    expect(res.body.records.some(p => p.id === expiredId)).toBe(false);
   });
 
   test('A window with no overlap at all still correctly excludes both records', async () => {
@@ -1301,13 +1291,15 @@ describe('Mid-Year and Yearly Output Report — current-calendar-year-only (no h
   // exact record that must NOT appear in Mid-Year/Yearly (its start date is
   // in a prior year) yet SHOULD still appear here, proving the two filters
   // are genuinely independent and neither regressed the other.
-  test('generic Date From/To (reportType=Summary) still uses overlap semantics — unaffected by the Mid-Year/Yearly fix', async () => {
+  test('generic Date From/To (reportType=Summary) uses strict inclusive boundary filtering', async () => {
     const res = await agent.get(
       `/api/reports/custom/preview?reportType=Summary&country=DateTestland&dateFrom=${year}-01-01&dateTo=${year}-06-30`
     );
     expect(res.status).toBe(200);
     const returned = res.body.records.map(p => p.id);
-    expect(returned).toContain(ids.priorYearActive);
+    expect(returned).not.toContain(ids.priorYearActive);
+    expect(returned).toContain(ids.janFirst);
+    expect(returned).toContain(ids.juneThirty);
   });
 
   test('PDF and Excel exports for Mid-Year produce the same record set as Preview, and reject the client date-range bypass identically', async () => {
