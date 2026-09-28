@@ -937,11 +937,11 @@ function buildGrid() {
       {name:'End',width:'11%'},{name:'Days Left',width:'11%',sort:false},
       {name:'Status',width:'10%',sort:false},{name:'Actions',width:'10%',sort:false}
     ],
-    data:pageData, search:true, pagination:false, sort:true,
-    className:{table:'table table-hover align-middle mb-0',thead:'table-light',search:'mb-3'},
-    language:{search:{placeholder:''}}
+    data:pageData, search:false, pagination:false, sort:true,
+    className:{table:'table table-hover align-middle mb-0',thead:'table-light'}
   }).render(document.getElementById('reg-grid')));
 }
+
 
 // ── Modal helpers ────────────────────────────────────────────────────────────
 

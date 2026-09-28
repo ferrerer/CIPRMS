@@ -161,19 +161,16 @@ function buildGrid() {
             { name: 'Action',      width: '10%', sort: false }
         ],
         data: data,
-        search: true,
+        search: false,
         pagination: false,
         sort: true,
         className: {
             table:  'table table-hover align-middle mb-0',
-            thead:  'table-light',
-            search: 'mb-3'
-        },
-        language: {
-            search: { placeholder: '' }
+            thead:  'table-light'
         }
     }).render(document.getElementById('lc-grid')));
 }
+
 
 function setPill(type, val, btn) {
     var group = document.getElementById('pills-' + type);
