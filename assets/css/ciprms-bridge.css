@@ -600,7 +600,7 @@ a:focus-visible {
    overflow-y:auto is deterministic regardless of the element's visibility when
    the page loads, and needs no JS re-init when notifications are re-rendered. */
 .notif-scroll {
-    max-height: 280px;
+    max-height: 350px;
     overflow-y: auto;
 }
 [data-bs-theme="dark"] .notif-scroll {

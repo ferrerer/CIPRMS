@@ -9,7 +9,7 @@
    sentence stretches an item over several lines, pushing every notification below it far down the page. */
 
 .notif-scroll {
-    max-height: 280px;
+    max-height: 350px;
     overflow-y: auto;
 }
 [data-bs-theme="dark"] .notif-scroll {

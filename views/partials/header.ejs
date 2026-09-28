@@ -283,11 +283,6 @@ refreshNotifBadge();
         if (dest) window.location.href = dest;
     }
 
-    // Header dropdown shows only the newest 5 per tab — the full history
-    // (unbounded, same /api/notifications/mine ordering) stays one click away
-    // via "View All Notifications", which itself is never touched here.
-    const HEADER_NOTIF_LIMIT = 5;
-
     // Velzon's own app.js (H(), wired up on page load regardless of whether
     // this dropdown is even open yet) checks each tab-pane for existing
     // `.notification-item` elements and, finding none against the initial
@@ -328,7 +323,7 @@ refreshNotifBadge();
             .then(r => r.json())
             .then(data => {
                 notifCache = Array.isArray(data) ? data : [];
-                renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
+                renderList('notif-list', notifCache, 'No notifications yet.');
             })
             .catch(() => {
                 renderList('notif-list', [], 'Could not load notifications.');
@@ -336,7 +331,7 @@ refreshNotifBadge();
     }
 
     function rerenderFromCache() {
-        renderList('notif-list', notifCache.slice(0, HEADER_NOTIF_LIMIT), 'No notifications yet.');
+        renderList('notif-list', notifCache, 'No notifications yet.');
         paintNotifBadge(notifCache.filter(n => n.unread).length);
     }
 
