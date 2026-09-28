@@ -235,17 +235,19 @@
             opts = opts || {};
             const disabled = opts.disabled ? ' disabled' : '';
             const active = opts.active ? ' active' : '';
+            const isEllipsis = opts.ellipsis ? ' ellipsis-item' : '';
+            const isPrevNext = opts.isPrev ? ' page-link-prev' : (opts.isNext ? ' page-link-next' : '');
             const click = opts.disabled || opts.ellipsis ? '' : 'onclick="' + onClickFn + '(' + page + ')"';
-            return '<li class="page-item' + disabled + active + '"><a class="page-link" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
+            return '<li class="page-item' + disabled + active + isEllipsis + '"><a class="page-link' + isPrevNext + '" href="javascript:void(0)" ' + click + '>' + label + '</a></li>';
         };
-        let html = pageItem('<i class="ri-arrow-left-s-line"></i>', current - 1, { disabled: current === 1 });
+        let html = pageItem('&lsaquo; Previous', current - 1, { disabled: current === 1, isPrev: true });
         buildPageList(current, total).forEach(function (p) {
-            html += p === '…'
-                ? pageItem('…', null, { ellipsis: true, disabled: true })
+            html += (p === '…' || p === '...')
+                ? pageItem('&hellip;', null, { ellipsis: true, disabled: true })
                 : pageItem(p, p, { active: p === current });
         });
-        html += pageItem('<i class="ri-arrow-right-s-line"></i>', current + 1, { disabled: current === total });
-        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-sm m-0">' + html + '</ul></div>';
+        html += pageItem('Next &rsaquo;', current + 1, { disabled: current === total, isNext: true });
+        return '<div class="d-flex justify-content-end mb-3"><ul class="pagination pagination-custom align-items-center m-0">' + html + '</ul></div>';
     }
 
     function setPill(btn) {

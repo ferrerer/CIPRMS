@@ -472,21 +472,49 @@ function isActivated(userDoc) {
 // ── HELPER: profile picture ───────────────────────────────────────────────────
 // Which picture an account shows, in order: the photo its owner uploaded here (Settings → click the photo), else the
 // profile photo of their Google account (googleAvatarUrl — saved at every "Continue with Google" sign-in, so it also
-// shows after later email/password logins), else the default picture.
+// shows after later email/password logins), else an email avatar (Gravatar), else the default picture.
 const DEFAULT_AVATAR_URL = '/images/default-avatar.jpg';
 function avatarUrlFor(userDoc) {
-  return (userDoc && (userDoc.avatarUrl || userDoc.googleAvatarUrl)) || DEFAULT_AVATAR_URL;
+  if (!userDoc) return DEFAULT_AVATAR_URL;
+  if (userDoc.avatarUrl) return userDoc.avatarUrl;
+  if (userDoc.googleAvatarUrl) return userDoc.googleAvatarUrl;
+  if (userDoc.emailAvatarUrl) return userDoc.emailAvatarUrl;
+  if (userDoc.email && typeof userDoc.email === 'string') {
+    const cleanEmail = userDoc.email.trim().toLowerCase();
+    if (cleanEmail && !cleanEmail.endsWith('.example.com') && !cleanEmail.endsWith('@example.com') && !cleanEmail.includes('jesttest')) {
+      const hash = crypto.createHash('md5').update(cleanEmail).digest('hex');
+      return `https://www.gravatar.com/avatar/${hash}?d=404`;
+    }
+  }
+  return DEFAULT_AVATAR_URL;
 }
 // The profile photo URL from a Google sign-in, or null when the account has none. Only an https URL on Google's own
 // photo host is accepted, since it is written into <img src> on every page. Google hands out a 96px thumbnail
 // ("…=s96-c"); a 256px one is requested instead so it stays sharp on the Settings page.
 function googlePhotoUrlFrom(googleProfile) {
-  const raw = googleProfile && Array.isArray(googleProfile.photos) && googleProfile.photos[0] && googleProfile.photos[0].value;
+  if (!googleProfile) return null;
+  const raw = (Array.isArray(googleProfile.photos) && googleProfile.photos[0] && googleProfile.photos[0].value)
+    || (googleProfile._json && googleProfile._json.picture)
+    || (googleProfile._json && googleProfile._json.avatar_url)
+    || (typeof googleProfile.picture === 'string' ? googleProfile.picture : null);
   if (typeof raw !== 'string') return null;
   let url;
   try { url = new URL(raw); } catch (e) { return null; }
-  if (url.protocol !== 'https:' || !/(^|\.)googleusercontent\.com$/i.test(url.hostname)) return null;
-  return url.toString().replace(/=s\d+(-c)?$/, '=s256-c');
+  if (url.protocol !== 'https:') return null;
+  if (!/(^|\.)(googleusercontent\.com|ggpht\.com|google\.com|gravatar\.com)$/i.test(url.hostname)) return null;
+
+  let str = url.toString();
+  if (/=s\d+(-c)?$/i.test(url.pathname)) {
+    return url.origin + url.pathname.replace(/=s\d+(-c)?$/i, '=s256-c') + url.search;
+  }
+  if (/=s\d+(-c)?$/i.test(str)) {
+    return str.replace(/=s\d+(-c)?$/i, '=s256-c');
+  }
+  if (url.searchParams.has('sz')) {
+    url.searchParams.set('sz', '256');
+    return url.toString();
+  }
+  return str;
 }
 // Where a freshly signed-in user lands: the activation form until the account is activated, their home after.
 function landingFor(userDoc) {
@@ -4062,7 +4090,7 @@ function buildPartnershipExcel({ title, docs, periodLabel, generatedBy, customRe
   const sheet3 = workbook.addWorksheet('Applied Filters');
   mergedRow(sheet3, 'APPLIED REPORT FILTERS & PARAMETERS', { bold: true, size: 12, color: 'FF0A3D91', endCol: 'B' });
   sheet3.addRow([]);
-  
+
   const filterHeaderRow = sheet3.addRow(['Filter Parameter', 'Applied Value']);
   filterHeaderRow.height = 20;
   filterHeaderRow.eachCell(cell => {
@@ -4162,9 +4190,9 @@ function renderComparisonReportPdf(res, { title, groupA, groupB, groupADocs, gro
   const now = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   const cspcLogoPath = path.join(__dirname, 'public', 'images', 'cspc.PNG');
-  const pqaLogoPath  = path.join(__dirname, 'public', 'images', 'PQA.JPG');
-  const tuvLogoPath  = path.join(__dirname, 'public', 'images', 'TUV.png');
-  const qsLogoPath   = path.join(__dirname, 'public', 'images', 'QS.png');
+  const pqaLogoPath = path.join(__dirname, 'public', 'images', 'PQA.JPG');
+  const tuvLogoPath = path.join(__dirname, 'public', 'images', 'TUV.png');
+  const qsLogoPath = path.join(__dirname, 'public', 'images', 'QS.png');
 
   // ── Letterhead ──
   const LOGO_SIZE = 48;
@@ -4173,9 +4201,9 @@ function renderComparisonReportPdf(res, { title, groupA, groupB, groupADocs, gro
   try { doc.image(cspcLogoPath, left, top, { width: LOGO_SIZE, height: LOGO_SIZE }); } catch (e) { /* optional */ }
   const rLS = 28;
   const rLX = right - (rLS * 3 + 8);
-  try { doc.image(pqaLogoPath,  rLX,              top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
-  try { doc.image(tuvLogoPath,  rLX + rLS + 4,    top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
-  try { doc.image(qsLogoPath,   rLX + (rLS+4)*2,  top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
+  try { doc.image(pqaLogoPath, rLX, top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
+  try { doc.image(tuvLogoPath, rLX + rLS + 4, top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
+  try { doc.image(qsLogoPath, rLX + (rLS + 4) * 2, top + 10, { width: rLS, height: rLS }); } catch (e) { /* optional */ }
 
   const cX = left + LOGO_SIZE + 8;
   const cW = rLX - cX - 8;
@@ -4258,15 +4286,15 @@ function renderComparisonReportPdf(res, { title, groupA, groupB, groupADocs, gro
 
   // ── Records Tables ──
   const COL_DEFS = [
-    { key: 'inst',    label: 'Institution',  width: 175 },
-    { key: 'country', label: 'Country',      width: 80  },
-    { key: 'region',  label: 'Region',       width: 65  },
-    { key: 'type',    label: 'Type',         width: 45  },
-    { key: 'nature',  label: 'Nature',       width: 110 },
-    { key: 'unit',    label: 'Unit',         width: 50  },
-    { key: 'start',   label: 'Start',        width: 75  },
-    { key: 'end',     label: 'End',          width: 75  },
-    { key: 'status',  label: 'Status',       width: 85  }
+    { key: 'inst', label: 'Institution', width: 175 },
+    { key: 'country', label: 'Country', width: 80 },
+    { key: 'region', label: 'Region', width: 65 },
+    { key: 'type', label: 'Type', width: 45 },
+    { key: 'nature', label: 'Nature', width: 110 },
+    { key: 'unit', label: 'Unit', width: 50 },
+    { key: 'start', label: 'Start', width: 75 },
+    { key: 'end', label: 'End', width: 75 },
+    { key: 'status', label: 'Status', width: 85 }
   ];
 
   function drawTableSection(sectionTitle, sectionColor, sectionDocs) {
@@ -4536,33 +4564,33 @@ function buildComparisonExcel({ title, groupA, groupB, groupADocs, groupBDocs, p
  * two groups (A and B), and return all data needed for PDF/Excel/JSON.
  */
 async function computeComparisonReport(db, query, user) {
-  const compType    = query.compType || 'Active vs Inactive';
-  const reportType  = query.reportType || '';
-  const dateFrom    = query.dateFrom || '';
-  const dateTo      = query.dateTo   || '';
-  const unit        = query.unit     || '';
-  const agtype      = query.agtype   || '';
-  const nature      = query.nature   || '';
-  const region      = query.region   || '';
-  const country     = query.country  || '';
-  const inst        = query.inst     || '';
-  const cat         = query.cat      || '';
-  const statusQ     = query.status   || '';
-  const statusA     = query.statusA  || '';
-  const statusB     = query.statusB  || '';
+  const compType = query.compType || 'Active vs Inactive';
+  const reportType = query.reportType || '';
+  const dateFrom = query.dateFrom || '';
+  const dateTo = query.dateTo || '';
+  const unit = query.unit || '';
+  const agtype = query.agtype || '';
+  const nature = query.nature || '';
+  const region = query.region || '';
+  const country = query.country || '';
+  const inst = query.inst || '';
+  const cat = query.cat || '';
+  const statusQ = query.status || '';
+  const statusA = query.statusA || '';
+  const statusB = query.statusB || '';
 
   // Build MongoDB base filter (indexed fields)
   // typeof-guarded exactly like buildPartnershipFilter() / the identical fix
   // in computeCustomReportData above (2026-09-06 security hardening,
   // Finding #5) — see that function's comment for why this is needed.
   const filter = {};
-  if (typeof unit === 'string' && unit)     filter.unit    = unit;
+  if (typeof unit === 'string' && unit) filter.unit = unit;
   if (agtype && ['MOA', 'MOU'].includes(agtype)) filter.type = agtype;
-  if (typeof nature === 'string' && nature) filter.nature  = nature;
-  if (typeof region === 'string' && region) filter.region  = region;
+  if (typeof nature === 'string' && nature) filter.nature = nature;
+  if (typeof region === 'string' && region) filter.region = region;
   if (country) filter.country = buildExactCaseInsensitiveMatch(country);
-  if (typeof cat === 'string' && cat)       filter.cat     = cat;
-  if (inst)    filter.inst    = { $regex: escapeRegexLiteral(inst), $options: 'i' };
+  if (typeof cat === 'string' && cat) filter.cat = cat;
+  if (inst) filter.inst = { $regex: escapeRegexLiteral(inst), $options: 'i' };
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
@@ -4588,10 +4616,10 @@ async function computeComparisonReport(db, query, user) {
   // Optional single-status pre-filter (for narrowing scope before comparison)
   if (effectiveStatusQ) {
     docs = docs.filter(p => {
-      if (effectiveStatusQ === 'Active')        return p.status === 'Active';
+      if (effectiveStatusQ === 'Active') return p.status === 'Active';
       if (effectiveStatusQ === 'Expiring Soon') return p.status === 'Expiring Soon';
-      if (effectiveStatusQ === 'Expired')       return p.status === 'Expired';
-      if (effectiveStatusQ === 'Inactive')      return p.status === 'Expired' || p.status === 'Inactive';
+      if (effectiveStatusQ === 'Expired') return p.status === 'Expired';
+      if (effectiveStatusQ === 'Inactive') return p.status === 'Expired' || p.status === 'Inactive';
       return p.status === effectiveStatusQ;
     });
   }
@@ -4601,22 +4629,22 @@ async function computeComparisonReport(db, query, user) {
   let groupADocs, groupBDocs;
 
   function matchStatus(p, label) {
-    if (label === 'Active')        return p.status === 'Active';
-    if (label === 'Inactive')      return p.status === 'Expired' || p.status === 'Inactive' || p.status === 'Expiring Soon';
-    if (label === 'Expired')       return p.status === 'Expired';
+    if (label === 'Active') return p.status === 'Active';
+    if (label === 'Inactive') return p.status === 'Expired' || p.status === 'Inactive' || p.status === 'Expiring Soon';
+    if (label === 'Expired') return p.status === 'Expired';
     if (label === 'Expiring Soon') return p.status === 'Expiring Soon';
-    if (label === 'Renewed')       return p.isRenewed === true;
-    if (label === 'Non-Renewed')   return p.isRenewed === false;
+    if (label === 'Renewed') return p.isRenewed === true;
+    if (label === 'Non-Renewed') return p.isRenewed === false;
     return p.status === label;
   }
 
   if (compType === 'Active vs Inactive') {
-    groupALabel = 'Active';    groupBLabel = 'Inactive';
+    groupALabel = 'Active'; groupBLabel = 'Inactive';
     groupADocs = docs.filter(p => matchStatus(p, 'Active'));
     groupBDocs = docs.filter(p => matchStatus(p, 'Inactive'));
 
   } else if (compType === 'Active vs Expired') {
-    groupALabel = 'Active';    groupBLabel = 'Expired';
+    groupALabel = 'Active'; groupBLabel = 'Expired';
     groupADocs = docs.filter(p => matchStatus(p, 'Active'));
     groupBDocs = docs.filter(p => matchStatus(p, 'Expired'));
 
@@ -5392,9 +5420,11 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // owner supplies them on first sign-in through the activation form (/activate), so a new account always starts
     // with activated: false. They are still accepted here if sent, normalized to an empty string when blank; after
     // activation only User Management's Edit User can change them (not the owner's Settings).
-    const entry = { id: nextId, ...safeBody, name, email, role, status, activated: false, unit: (req.body.unit || '').trim(),
+    const entry = {
+      id: nextId, ...safeBody, name, email, role, status, activated: false, unit: (req.body.unit || '').trim(),
       institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
-      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
+      position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    };
     await db.collection('users').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
     const { password: _, ...safeEntry } = entry; // don't return the password hash
@@ -5616,9 +5646,9 @@ async function notifyUsers(db, emails, payload) {
   }));
   await db.collection('notifications').insertMany(docs);
   publishNewNotifications(db, docs).catch(err => console.error('realtime notification publish failed:', err.message));
-  // Request notifications (Partnership and Document Requests) also go to each recipient's e-mail. In the background:
+  // Request and calendar notifications also go to each recipient's e-mail. In the background:
   // a slow or failing mail server never delays or breaks the request action itself (services/emailService.js).
-  if (payload && payload.module === 'request') {
+  if (payload && (payload.module === 'request' || payload.module === 'calendar')) {
     emailService.sendNotificationEmails(targets, payload).catch(err => console.error('notification e-mail failed:', err.message));
   }
 }
@@ -5840,10 +5870,10 @@ function expandDocTypeLabel(shortCode) {
 // but an allow-listed path plus a numeric id, so it can neither point off-site nor at another user's request
 // (the destination pages still authorize every record they load).
 const NOTIFICATION_PAGES = {
-  'Administrator':     { fallback: '/notifications',          dashboard: '/dashboard',       requests: '/partnership-requests', calendar: '/calendar',          monitoring: '/lifecycle' },
-  'Staff':             { fallback: '/staff/notifications',    dashboard: '/staff/dashboard', requests: '/staff/requests',       calendar: '/staff/calendar',    monitoring: '/staff/lifecycle' },
-  'Auth. Personnel':   { fallback: '/personnel/monitoring',   requests: '/personnel/requests',   calendar: '/personnel/calendar', monitoring: '/personnel/monitoring' },
-  'potential_partner': { fallback: '/partner/monitoring',     requests: '/partner/requests',     calendar: '/partner/calendar',   monitoring: '/partner/monitoring' }
+  'Administrator': { fallback: '/notifications', dashboard: '/dashboard', requests: '/partnership-requests', calendar: '/calendar', monitoring: '/lifecycle' },
+  'Staff': { fallback: '/staff/notifications', dashboard: '/staff/dashboard', requests: '/staff/requests', calendar: '/staff/calendar', monitoring: '/staff/lifecycle' },
+  'Auth. Personnel': { fallback: '/personnel/monitoring', requests: '/personnel/requests', calendar: '/personnel/calendar', monitoring: '/personnel/monitoring' },
+  'potential_partner': { fallback: '/partner/monitoring', requests: '/partner/requests', calendar: '/partner/calendar', monitoring: '/partner/monitoring' }
 };
 const NOTIFICATION_LINK_KINDS = [
   [/^\/(?:staff\/|personnel\/|partner\/)?calendar$/, 'calendar'],
@@ -5864,8 +5894,8 @@ function notificationHref(role, n) {
   // overrides a link that points at a Dashboard (an old link, or another role's home) for a request/calendar item.
   const moduleKind = n.module === 'calendar' ? 'calendar'
     : (n.module === 'request' || n.module === 'requests') ? 'requests'
-    : ['lifecycle', 'registry'].includes(n.module) ? 'monitoring'
-    : n.module === 'dashboard' ? 'dashboard' : null;
+      : ['lifecycle', 'registry'].includes(n.module) ? 'monitoring'
+        : n.module === 'dashboard' ? 'dashboard' : null;
   if (!kind || (kind === 'dashboard' && moduleKind && moduleKind !== 'dashboard')) kind = moduleKind || kind;
   const rawId = params.get('id');
   const id = rawId && /^\d+$/.test(rawId) ? rawId : null;
@@ -6288,23 +6318,27 @@ function calendarFeedFilter(user) {
   if (user.role === 'Administrator') return {};
   if (INVITE_ONLY_CALENDAR_ROLES.includes(user.role)) {
     const mine = [...new Set([user.email, meetingTime.emailKey(user.email)].filter(Boolean))];
-    return { $or: [
-      { forEveryone: true },
-      { recipientEmails: { $in: mine } },
-      { participantEmails: { $in: mine } },
-      { googleAttendeeEmails: { $in: mine } },
-      { createdByEmail: { $in: mine } }
-    ] };
+    return {
+      $or: [
+        { forEveryone: true },
+        { recipientEmails: { $in: mine } },
+        { participantEmails: { $in: mine } },
+        { googleAttendeeEmails: { $in: mine } },
+        { createdByEmail: { $in: mine } }
+      ]
+    };
   }
   // ...plus the events the caller CREATED. CIRL Staff manage the calendar but are not the recipients of a
   // meeting they scope to other people, so without this their own event vanished from their calendar the
   // moment the feed reloaded (paging to another month, or a refresh) — after showing as a phantom until then.
   // ...plus every Meeting event (isMeetingEvent: no type, or the Meeting type): CIRL Staff facilitate the meetings
   // and can join any of them, invited or not, so they must be able to see them to click Join.
-  return { $or: [
-    { recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email },
-    { className: { $in: [null, ''] } }, { className: { $regex: 'bg-primary-subtle' } }
-  ] };
+  return {
+    $or: [
+      { recipientEmails: { $exists: false } }, { recipientEmails: user.email }, { createdByEmail: user.email },
+      { className: { $in: [null, ''] } }, { className: { $regex: 'bg-primary-subtle' } }
+    ]
+  };
 }
 app.get('/api/calendarevents', requireAuth, async (req, res) => {
   try {
@@ -6335,7 +6369,10 @@ app.get('/api/calendarevents', requireAuth, async (req, res) => {
  * match a registered user, otherwise it is reported as invalid.
  */
 async function resolveCalendarParticipants(db, recipients) {
-  const result = { users: [], emails: [], googleEmails: [], invalid: [] };
+  // mentionedEmails: valid addresses mentioned by the admin that are NOT registered
+  // CIPRMS users — they still receive a Google Calendar invite and a direct e-mail
+  // notification even though they have no in-app account.
+  const result = { users: [], emails: [], googleEmails: [], mentionedEmails: [], invalid: [] };
   if (!Array.isArray(recipients) || !recipients.length) return result;
   let users = [];
   if (recipients.includes('all')) {
@@ -6355,12 +6392,23 @@ async function resolveCalendarParticipants(db, recipients) {
       const foundKeys = new Set(found.map(u => meetingTime.emailKey(u.email)));
       for (const r of requested) {
         if (!foundKeys.has(meetingTime.emailKey(r))) {
-          result.invalid.push({ name: null, email: r, role: null, reason: 'Not a registered CIPRMS user' });
+          // If the admin typed a valid e-mail address for someone not yet in CIPRMS,
+          // treat them as an external invitee: Google Calendar invite + direct e-mail.
+          if (meetingTime.isValidEmail(r)) {
+            const key = meetingTime.emailKey(r);
+            if (!result.googleEmails.includes(key)) {
+              result.mentionedEmails.push(r);
+              result.emails.push(r);
+              result.googleEmails.push(key);
+            }
+          } else {
+            result.invalid.push({ name: null, email: r, role: null, reason: 'Not a registered CIPRMS user and not a valid e-mail address' });
+          }
         }
       }
     }
   }
-  const seen = new Set();
+  const seen = new Set(result.googleEmails.map(k => k)); // pre-seed with external emails already added
   for (const u of users) {
     const key = meetingTime.emailKey(u.email);
     if (!key) {
@@ -6443,7 +6491,7 @@ function validateCalendarEventFields(fields, merged) {
 // role actually has (mirrors prLinkForRole's per-role navigation for
 // Partnership Request notifications) so a click opens the event detail modal
 // immediately instead of landing on a blank calendar.
-async function notifyCalendarParticipants(db, entry, users, actorName) {
+async function notifyCalendarParticipants(db, entry, users, actorName, mentionedEmails) {
   const roleOfEmail = new Map(users.map(u => [u.email, u.role]));
   const CALENDAR_LINK_BY_ROLE = {
     'Administrator': '/calendar?id=' + entry.id,
@@ -6457,16 +6505,26 @@ async function notifyCalendarParticipants(db, entry, users, actorName) {
     if (!emailsByLink.has(link)) emailsByLink.set(link, []);
     emailsByLink.get(link).push(u.email);
   }
+  const basePayload = {
+    module: 'calendar',
+    tag: 'Calendar',
+    icon: 'ri-calendar-event-line',
+    color: 'primary',
+    title: `New event: ${entry.title}`,
+    desc: `${actorName} scheduled "${entry.title}"${entry.location ? ' at ' + entry.location : ''}.`
+  };
   for (const [link, emails] of emailsByLink) {
-    await notifyUsers(db, emails, {
-      module: 'calendar',
-      tag: 'Calendar',
-      icon: 'ri-calendar-event-line',
-      color: 'primary',
-      title: `New event: ${entry.title}`,
-      desc: `${actorName} scheduled "${entry.title}"${entry.location ? ' at ' + entry.location : ''}.`,
-      link
-    });
+    await notifyUsers(db, emails, { ...basePayload, link });
+  }
+  // External invitees (mentioned by admin but not registered in CIPRMS) — e-mail only,
+  // no in-app notification since they have no CIPRMS account.
+  const external = Array.isArray(mentionedEmails) ? mentionedEmails.filter(Boolean) : [];
+  if (external.length) {
+    emailService.sendNotificationEmails(external, {
+      ...basePayload,
+      link: null,
+      desc: `${actorName} scheduled "${entry.title}"${entry.location ? ' at ' + entry.location : ''}. This event was created in CIPRMS at Camarines Sur Polytechnic Colleges (CIRL).`
+    }).catch(err => console.error('calendar external invite e-mail failed:', err.message));
   }
 }
 
@@ -6591,7 +6649,7 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     }
     if (!entry) throw new Error('Could not allocate an id for the new event.');
 
-    await notifyCalendarParticipants(db, entry, participants.users, req.session.user.name);
+    await notifyCalendarParticipants(db, entry, participants.users, req.session.user.name, participants.mentionedEmails);
 
     // Google Calendar sync (2026-08-02) — best-effort, alongside (not instead
     // of) the in-app notification above. Only attempted when there's a real
@@ -6639,9 +6697,11 @@ app.patch('/api/calendarevents/:id', requireStaffAccess, announce('calendar'), a
     // e-mails them the invitation.
     let addedGoogleAttendees = false;
     let newlyInvited = [];
+    let patchParticipants = null;
     const rawRecipients = Array.isArray(req.body.recipients) ? req.body.recipients : [];
     if (rawRecipients.length) {
       const p = await resolveCalendarParticipants(db, rawRecipients);
+      patchParticipants = p;
       if (p.emails.length || p.invalid.length) {
         const already = eventParticipantKeys(existing);
         newlyInvited = p.users.filter(u => !already.has(meetingTime.emailKey(u.email)));
@@ -6660,7 +6720,12 @@ app.patch('/api/calendarevents/:id', requireStaffAccess, announce('calendar'), a
     await db.collection('calendarevents').updateOne({ id }, { $set: set });
     const updated = await db.collection('calendarevents').findOne({ id });
     if (!updated) return res.status(404).json({ error: 'Event not found.' });
-    if (newlyInvited.length) await notifyCalendarParticipants(db, updated, newlyInvited, req.session.user.name);
+    // Notify newly-added CIPRMS users and newly-mentioned external emails
+    const existingAttendeeKeys = new Set((existing.googleAttendeeEmails || []));
+    const newMentioned = patchParticipants
+      ? patchParticipants.mentionedEmails.filter(e => !existingAttendeeKeys.has(meetingTime.emailKey(e)))
+      : [];
+    if (newlyInvited.length || newMentioned.length) await notifyCalendarParticipants(db, updated, newlyInvited, req.session.user.name, newMentioned);
 
     // Google Calendar sync — an edit or a drag updates the SAME Google event
     // (patched by its id, never re-inserted), and Google e-mails the attendees
@@ -7729,10 +7794,10 @@ async function computeDashboardStats(db) {
   ]);
 
   // ── Stat counters ─────────────────────────────────────────────────────────
-  const dashActive   = allPartnerships.filter(p => p.status === 'Active').length;
+  const dashActive = allPartnerships.filter(p => p.status === 'Active').length;
   const dashExpiring = allPartnerships.filter(p => p.status === 'Expiring Soon').length;
-  const dashExpired  = allPartnerships.filter(p => p.status === 'Expired').length;
-  const dashTotal    = allPartnerships.length;
+  const dashExpired = allPartnerships.filter(p => p.status === 'Expired').length;
+  const dashTotal = allPartnerships.length;
 
   // ── Active Partnerships table rows (up to 6, most recently started) ─────
   // 2026-09-19: this widget was "Expiring Partnerships" (Expiring Soon +
@@ -8226,7 +8291,7 @@ async function saveAvatarUpload(req, res) {
       deleteUploadedAvatar(previous && previous.avatarUrl);
       res.json({ success: true, avatarUrl });
     } catch (e) {
-      fs.unlink(req.file.path, () => {});
+      fs.unlink(req.file.path, () => { });
       console.error('❌ Avatar upload error:', e);
       res.status(500).json({ error: 'Unable to save the uploaded photo right now. Please try again.' });
     }
@@ -8236,7 +8301,7 @@ async function saveAvatarUpload(req, res) {
 // Only files this app stored under /uploads/avatars/ are ever deleted — never the default image or any other path.
 function deleteUploadedAvatar(url) {
   const match = typeof url === 'string' && url.match(/^\/uploads\/avatars\/([A-Za-z0-9._-]+)$/);
-  if (match) fs.unlink(path.join(__dirname, 'uploads', 'avatars', match[1]), () => {});
+  if (match) fs.unlink(path.join(__dirname, 'uploads', 'avatars', match[1]), () => { });
 }
 
 // Partner photos uploaded before avatarUrl moved onto the users record were kept in profiles.profile.avatarUrl.

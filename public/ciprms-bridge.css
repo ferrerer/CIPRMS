@@ -442,3 +442,195 @@ table.table-custom {
     background: #4a61b8;
     color: #fff;
 }
+
+/* ============================================================
+   UNIFIED SYSTEM-WIDE PAGINATION STYLING
+   Matches the sleek modern design with circular active state
+   and "< Previous" / "Next >" controls across all pages.
+   ============================================================ */
+
+/* ── Standard Bootstrap & Custom Pagination ────────────────── */
+.pagination {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.pagination .page-item {
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+}
+
+.pagination .page-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--vz-body-color, #495057) !important;
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    border-radius: 50% !important;
+    transition: all 0.2s ease-in-out !important;
+    text-decoration: none !important;
+    box-shadow: none !important;
+}
+
+/* Active Page — Circular Blue Badge */
+.pagination .page-item.active .page-link,
+.pagination .page-link.active {
+    background-color: #5b73e8 !important;
+    color: #ffffff !important;
+    border-radius: 50% !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 6px rgba(91, 115, 232, 0.4) !important;
+}
+
+/* Hover for inactive page numbers */
+.pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+    background-color: rgba(91, 115, 232, 0.12) !important;
+    color: #5b73e8 !important;
+}
+
+/* Previous & Next Buttons */
+.pagination .page-link-prev,
+.pagination .page-link-next {
+    border-radius: 6px !important;
+    padding: 0 12px !important;
+    min-width: auto !important;
+    font-weight: 600 !important;
+}
+
+.pagination .page-item.disabled .page-link {
+    opacity: 0.35 !important;
+    cursor: not-allowed !important;
+    background: transparent !important;
+}
+
+/* Ellipsis Item */
+.pagination .page-item.ellipsis-item .page-link,
+.pagination .page-item.disabled.ellipsis-item .page-link {
+    opacity: 0.7 !important;
+    cursor: default !important;
+    background: transparent !important;
+    min-width: 24px !important;
+}
+
+
+/* ── Grid.js Pagination Overrides (Audit, Registry, Monitoring, Reports, etc.) ── */
+.gridjs-pagination {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+    padding: 12px 0 4px 0 !important;
+}
+
+.gridjs-summary {
+    font-size: 0.8125rem !important;
+    color: var(--vz-secondary-color, #878a99) !important;
+}
+
+.gridjs-pages {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+.gridjs-pages button,
+.gridjs-pages span.gridjs-spread {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 8px !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--vz-body-color, #495057) !important;
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    border-radius: 50% !important;
+    transition: all 0.2s ease-in-out !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Grid.js Active Page */
+.gridjs-pages button.gridjs-currentPage {
+    background-color: #5b73e8 !important;
+    color: #ffffff !important;
+    border-radius: 50% !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 6px rgba(91, 115, 232, 0.4) !important;
+}
+
+/* Grid.js Hover for inactive pages */
+.gridjs-pages button:not(.gridjs-currentPage):not(:disabled):hover {
+    background-color: rgba(91, 115, 232, 0.12) !important;
+    color: #5b73e8 !important;
+}
+
+/* Grid.js Disabled state */
+.gridjs-pages button:disabled {
+    opacity: 0.35 !important;
+    cursor: not-allowed !important;
+}
+
+/* Grid.js Previous & Next Buttons */
+.gridjs-pages button.gridjs-btn-prev,
+.gridjs-pages button.gridjs-btn-next,
+.gridjs-pages button[aria-label="Previous"],
+.gridjs-pages button[aria-label="Next"] {
+    border-radius: 6px !important;
+    padding: 0 10px !important;
+    min-width: auto !important;
+    font-weight: 600 !important;
+}
+
+.gridjs-pages button.gridjs-btn-prev::before,
+.gridjs-pages button[aria-label="Previous"]::before {
+    content: "‹ ";
+    font-weight: 700;
+    margin-right: 2px;
+}
+
+.gridjs-pages button.gridjs-btn-next::after,
+.gridjs-pages button[aria-label="Next"]::after {
+    content: " ›";
+    font-weight: 700;
+    margin-left: 2px;
+}
+
+.gridjs-pages span.gridjs-spread {
+    min-width: 24px !important;
+    opacity: 0.7 !important;
+}
+
+/* Dark Mode Specific Overrides for Pagination */
+[data-bs-theme="dark"] .pagination .page-link,
+[data-bs-theme="dark"] .gridjs-pages button,
+[data-bs-theme="dark"] .gridjs-pages span.gridjs-spread {
+    color: #e9ecef !important;
+}
+
+[data-bs-theme="dark"] .pagination .page-item.active .page-link,
+[data-bs-theme="dark"] .pagination .page-link.active,
+[data-bs-theme="dark"] .gridjs-pages button.gridjs-currentPage {
+    background-color: #5b73e8 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .pagination .page-item:not(.active):not(.disabled) .page-link:hover,
+[data-bs-theme="dark"] .gridjs-pages button:not(.gridjs-currentPage):not(:disabled):hover {
+    background-color: rgba(255, 255, 255, 0.12) !important;
+    color: #ffffff !important;
+}
