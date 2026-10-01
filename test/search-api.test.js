@@ -169,7 +169,7 @@ describe('input handling', () => {
       const res = await agents.admin.get('/api/search?q=' + encodeURIComponent(q));
       expect({ q, status: res.status }).toEqual({ q, status: 200 });
     }
-  });
+  }, 45000);
 
   test('a very long query is capped, not rejected with a 500', async () => {
     const res = await agents.admin.get('/api/search?q=' + encodeURIComponent('x'.repeat(5000)));

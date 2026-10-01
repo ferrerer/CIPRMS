@@ -696,6 +696,16 @@ a:focus-visible {
     word-break: break-word;
 }
 
+.search-badge-archived {
+    font-weight: 500;
+    vertical-align: middle;
+}
+[data-bs-theme="dark"] .search-badge-archived {
+    background-color: rgba(247, 184, 75, .18) !important;
+    color: #f7b84b !important;
+    border-color: rgba(247, 184, 75, .32) !important;
+}
+
 /* Audit Trail search placeholder ("Search action, record, performed by or date…"). Placeholders were removed
    system-wide and the rule above hides Grid.js's own fallback text on every Grid.js table; the Audit Trail is the one
    table that asks for a real placeholder, so these rules are scoped to #audit-grid (an id, so they win over the

@@ -6048,11 +6048,163 @@ async function recomputePartnershipStatuses(db) {
   return toNotify.length;
 }
 
+// ── PARTNERSHIP EXPIRATION EMAIL NOTIFICATION ENGINE ─────────────────────────
+const EXPIRATION_MILESTONES = [90, 60, 30, 15];
+
+function isExpirationNotificationDay(daysRemaining) {
+  if (typeof daysRemaining !== 'number' || isNaN(daysRemaining)) return false;
+  if (EXPIRATION_MILESTONES.includes(daysRemaining)) return true;
+  if (daysRemaining >= 0 && daysRemaining <= 15) return true;
+  return false;
+}
+
+function calculateDaysRemaining(endStr, now = new Date()) {
+  const parsedEnd = parseLocalDate(endStr, false);
+  if (!parsedEnd) return null;
+  const todayMidnight = parseLocalDate(now, false);
+  if (!todayMidnight) return null;
+  return Math.round((parsedEnd.getTime() - todayMidnight.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+async function getPartnershipEmailRecipients(db, partnership) {
+  const reviewers = await db.collection('users').find({
+    role: { $in: REQUEST_REVIEWER_ROLES },
+    status: { $ne: 'Inactive' }
+  }, { projection: { email: 1 } }).toArray();
+
+  const recipientEmails = new Set(reviewers.map(u => u.email).filter(Boolean));
+
+  if (partnership.partnerEmail) {
+    recipientEmails.add(partnership.partnerEmail);
+  }
+
+  if (partnership.coordinator && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnership.coordinator.trim())) {
+    recipientEmails.add(partnership.coordinator.trim());
+  }
+
+  if (partnership.inst) {
+    const pattern = new RegExp('^' + String(partnership.inst).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+    const owners = await db.collection('requests').find(
+      { status: 'Approved', isSubmission: { $ne: true }, institution: pattern },
+      { projection: { submittedByEmail: 1 } }
+    ).toArray();
+    for (const o of owners) {
+      if (o.submittedByEmail) recipientEmails.add(o.submittedByEmail);
+    }
+  }
+
+  return [...recipientEmails]
+    .map(e => String(e).trim().toLowerCase())
+    .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+}
+
+function formatExpirationEmailPayload(partnership, daysRemaining) {
+  const instName = partnership.inst || 'Partnership';
+  const type = partnership.type || 'MOA/MOU';
+  const natures = Array.isArray(partnership.nature) ? partnership.nature.join(', ') : (partnership.nature || 'N/A');
+  const endDate = partnership.end || 'N/A';
+
+  let title = '';
+  let desc = '';
+  let urgency = 'Notice';
+
+  if (daysRemaining === 0) {
+    urgency = 'Final Notice';
+    title = `[Final Notice] Partnership Expires Today: ${instName}`;
+    desc = `The ${type} agreement with ${instName} (${partnership.country ? partnership.country + ' · ' : ''}Nature: ${natures}) reaches its final expiration date TODAY (${endDate}). Immediate action is required for renewal or archival.`;
+  } else if (daysRemaining <= 15) {
+    urgency = 'Daily Reminder';
+    title = `[Urgent: ${daysRemaining} Day${daysRemaining === 1 ? '' : 's'} Remaining] Partnership Expiring: ${instName}`;
+    desc = `The ${type} agreement with ${instName} (${partnership.country ? partnership.country + ' · ' : ''}Nature: ${natures}) will expire in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} on ${endDate}. Daily reminders are now active until renewal or expiration.`;
+  } else {
+    urgency = 'Milestone Alert';
+    title = `[Milestone Alert: ${daysRemaining} Days Remaining] Partnership Expiring Soon: ${instName}`;
+    desc = `The ${type} agreement with ${instName} (${partnership.country ? partnership.country + ' · ' : ''}Nature: ${natures}) is approaching expiration in ${daysRemaining} days on ${endDate}. Please review the agreement and initiate renewal discussions if applicable.`;
+  }
+
+  const link = '/lifecycle?q=' + encodeURIComponent(instName);
+
+  return {
+    title,
+    desc,
+    link,
+    tag: `Partnership Expiration · ${urgency}`,
+    institution: instName,
+    partnershipId: partnership.id,
+    type,
+    nature: natures,
+    expirationDate: endDate,
+    daysRemaining,
+    urgency
+  };
+}
+
+async function checkPartnershipExpirationNotifications(db, nowOverride = null, filter = {}) {
+  const now = nowOverride ? new Date(nowOverride) : new Date();
+  const query = { status: { $ne: 'Inactive' }, ...filter };
+  const partnerships = await db.collection('partnerships').find(query).toArray();
+
+  let sentBatches = 0;
+  const todayStr = parseLocalDate(now, false).toISOString().slice(0, 10);
+
+  for (const p of partnerships) {
+    if (!p.end) continue;
+    const daysRemaining = calculateDaysRemaining(p.end, now);
+    if (daysRemaining === null || daysRemaining < 0) continue;
+
+    if (!isExpirationNotificationDay(daysRemaining)) continue;
+
+    const endKey = String(p.end).trim();
+
+    const existing = await db.collection('partnership_expiration_notifications').findOne({
+      partnershipId: p.id,
+      endKey,
+      milestone: daysRemaining
+    });
+
+    if (existing) continue;
+
+    const recipients = await getPartnershipEmailRecipients(db, p);
+    if (!recipients.length) continue;
+
+    const payload = formatExpirationEmailPayload(p, daysRemaining);
+
+    await emailService.sendNotificationEmails(recipients, payload);
+
+    await db.collection('partnership_expiration_notifications').insertOne({
+      partnershipId: p.id,
+      endKey,
+      milestone: daysRemaining,
+      sentDate: todayStr,
+      sentAt: new Date(),
+      recipients,
+      payload: {
+        title: payload.title,
+        desc: payload.desc,
+        daysRemaining,
+        link: payload.link
+      }
+    });
+
+    sentBatches++;
+  }
+
+  return sentBatches;
+}
+
+app.checkPartnershipExpirationNotifications = checkPartnershipExpirationNotifications;
+app.calculateDaysRemaining = calculateDaysRemaining;
+app.isExpirationNotificationDay = isExpirationNotificationDay;
+app.formatExpirationEmailPayload = formatExpirationEmailPayload;
+app.getPartnershipEmailRecipients = getPartnershipEmailRecipients;
+
 async function runLifecycleCheck() {
   try {
     const db = getDb();
     const count = await recomputePartnershipStatuses(db);
     if (count > 0) console.log(`✓ Lifecycle check: ${count} new notification(s) generated.`);
+    const emailBatches = await checkPartnershipExpirationNotifications(db);
+    if (emailBatches > 0) console.log(`✓ Expiration email check: ${emailBatches} notification batch(es) sent.`);
   } catch (err) {
     console.error('❌ Lifecycle check failed:', err.message);
   }
@@ -6064,7 +6216,8 @@ app.post('/api/lifecycle/recompute', requireAdmin, async (req, res) => {
   try {
     const db = getDb();
     const count = await recomputePartnershipStatuses(db);
-    res.json({ success: true, notificationsCreated: count });
+    const emailBatches = await checkPartnershipExpirationNotifications(db);
+    res.json({ success: true, notificationsCreated: count, expirationEmailsSent: emailBatches });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

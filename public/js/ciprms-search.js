@@ -41,19 +41,30 @@
 
   function resultRowHtml(item, q, big) {
     var title = highlight(escapeHtml(item.title), q);
-    var subtitle = item.subtitle ? '<div class="fs-12 text-muted">' + escapeHtml(item.subtitle) + '</div>' : '';
+    var subtitleParts = [];
+    if (item.subtitle) subtitleParts.push(escapeHtml(item.subtitle));
+    if (item.kind === 'document' && item.archived) {
+      subtitleParts.push('<span class="text-warning"><i class="ri-archive-line me-1"></i>Location: Archive</span>');
+    }
+    var subtitle = subtitleParts.length
+      ? '<div class="fs-12 text-muted">' + subtitleParts.join(' · ') + '</div>'
+      : '';
     var snippet = item.snippet
       ? '<div class="fs-12 text-muted fst-italic mt-1">' + highlight(escapeHtml(item.snippet), q) + '</div>'
       : '';
     var idBadge = item.id != null ? '<span class="badge bg-light text-muted fs-10 ms-1">#' + escapeHtml(String(item.id)) + '</span>' : '';
+    var archivedBadge = (item.kind === 'document' && item.archived)
+      ? '<span class="badge bg-warning-subtle text-warning border border-warning-subtle fs-10 ms-1 search-badge-archived"><i class="ri-archive-line me-1"></i>Archived</span>'
+      : '';
     var href = item.href ? escapeHtml(item.href) : '#';
     var target = item.kind === 'document' ? ' target="_blank" rel="noopener"' : '';
     // Rows wrap long text (see .search-result-item in ciprms-bridge.css) rather than truncating, but a `title`
     // still gives a native single-line tooltip with the full, unwrapped title+subtitle on hover/focus.
     var tipParts = [item.title, item.subtitle].filter(Boolean);
+    if (item.kind === 'document' && item.archived) tipParts.push('Location: Archive');
     var tip = tipParts.length ? ' title="' + escapeHtml(tipParts.join(' — ')) + '"' : '';
     return '<a href="' + href + '"' + target + tip + ' class="dropdown-item search-result-item' + (big ? ' py-3 border-bottom' : '') + '">' +
-      '<div class="fw-medium fs-13">' + title + idBadge + '</div>' + subtitle + snippet + '</a>';
+      '<div class="fw-medium fs-13 d-flex align-items-center flex-wrap gap-1"><span>' + title + '</span>' + idBadge + archivedBadge + '</div>' + subtitle + snippet + '</a>';
   }
 
   function groupHtml(key, label, icon, items, q, big) {

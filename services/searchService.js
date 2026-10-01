@@ -159,7 +159,8 @@ async function searchDocuments(db, q, pattern, limit) {
       subtitle: [d.type, d.institution].filter(Boolean).join(' · '),
       matchedField: metaField || (snippet ? 'ocrText' : null),
       snippet,
-      fileLink: d.fileLink || null
+      fileLink: d.fileLink || null,
+      archived: !!d.archived
     }));
 }
 

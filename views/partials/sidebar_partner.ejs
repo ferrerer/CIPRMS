@@ -60,19 +60,19 @@
 
                 <li class="menu-title"><span>Main Menu</span></li>
 
+                                <li class="nav-item">
+                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'monitoring') ? 'active' : '' %>"
+                        href="/partner/monitoring">
+                        <i class="ri-refresh-line"></i>
+                        <span>Monitoring</span>
+                    </a>
+                </li>
+
                 <li class="nav-item">
                     <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'requests') ? 'active' : '' %>"
                         href="/partner/requests">
                         <i class="ri-file-list-3-line"></i>
                         <span>Requests</span>
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link menu-link <%= (typeof activePage !== 'undefined' && activePage === 'monitoring') ? 'active' : '' %>"
-                        href="/partner/monitoring">
-                        <i class="ri-refresh-line"></i>
-                        <span>Monitoring</span>
                     </a>
                 </li>
 
