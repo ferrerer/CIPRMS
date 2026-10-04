@@ -26,9 +26,32 @@ const geocoding = require('./services/geocodingService');
 const uploadAvatar = require('./middleware/avatarUploadMiddleware');
 const uploadDoc = require('./middleware/uploadMiddleware');
 const verifyMagicBytes = require('./middleware/verifyMagicBytes');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ── SECURITY HEADERS (F-01, F-02) ────────────────────────────────────────────
+// helmet sets CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy,
+// Permissions-Policy and others. x-powered-by is explicitly disabled so the
+// framework identity is never disclosed even if helmet is later overridden.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "accounts.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
+      fontSrc: ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
+      imgSrc: ["'self'", "data:", "lh3.googleusercontent.com", "blob:"],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"]
+    }
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
+app.disable('x-powered-by');
 
 // ── PASSWORD SECURITY HELPERS ─────────────────────────────────────────────────
 const BCRYPT_SALT_ROUNDS = 12;
@@ -667,7 +690,10 @@ app.get('/auth/google/callback', (req, res, next) => {
 // ── FORM LOGIN ────────────────────────────────────────────────────────────────
 app.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) {
+  // F-04: reject non-string values (e.g. JSON objects with MongoDB operators)
+  // before any string method (.trim, .toLowerCase) is called, preventing a
+  // 500 crash and closing the NoSQL injection entry point simultaneously.
+  if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
     return res.render('index', { activePage: '', error: 'Please enter your email and password.' });
   }
 
