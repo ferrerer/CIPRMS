@@ -785,18 +785,21 @@
         <div class="modal-body">
           <div id="pr-draft-timeline" class="mb-3"></div>
           <div id="pr-draft-upload-wrap" class="border-top pt-3">
-            <p class="detail-label mb-2">Upload a New Version</p>
-            <div class="mb-2">
-              <label class="form-label fs-12 text-muted mb-1" for="pr-draft-file">Attachment (Optional)</label>
-              <input type="file" class="form-control form-control-sm" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+            <h6 class="fs-14 fw-bold text-dark mb-2"><i class="ri-upload-cloud-line me-1 text-primary"></i>Upload a New Version</h6>
+            <div class="mb-3">
+              <label class="form-label ocr-field-label fs-13 mb-1" for="pr-draft-file">Attachment (Optional)</label>
+              <div id="pr-draft-dropzone-wrap">
+                <input type="file" class="form-control" id="pr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+              </div>
             </div>
-            <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="pr-draft-note" rows="2"></textarea>
+            <div class="mb-3">
+              <label class="form-label ocr-field-label fs-13 mb-1" for="pr-draft-note">Version Note / Remarks</label>
+              <textarea class="form-control" id="pr-draft-note" rows="2" placeholder="Add a note or summary of changes for this version..."></textarea>
             </div>
-            <button type="button" class="btn btn-primary btn-sm" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
-              <i class="ri-upload-2-line me-1"></i>Upload
+            <button type="button" class="btn btn-primary px-3 fs-13" id="pr-draft-upload-btn" onclick="uploadDraftDocument()">
+              <i class="ri-upload-2-line me-1"></i>Upload Version
             </button>
-            <small class="text-muted d-block mt-2">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is saved to the Document Library; the other side is notified either way.</small>
+            <p class="text-muted fs-12 mt-2 mb-0">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is archived to the Document Library; collaborators are notified automatically.</p>
           </div>
           <div id="pr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
             <i class="ri-lock-line me-1"></i>This request has already been decided — no further documents can be added.
@@ -900,18 +903,21 @@
         <div class="modal-body">
           <div id="dr-draft-timeline" class="mb-3"></div>
           <div id="dr-draft-upload-wrap" class="border-top pt-3">
-            <p class="detail-label mb-2">Upload a New Version</p>
-            <div class="mb-2">
-              <label class="form-label fs-12 text-muted mb-1" for="dr-draft-file">Attachment (Optional)</label>
-              <input type="file" class="form-control form-control-sm" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+            <h6 class="fs-14 fw-bold text-dark mb-2"><i class="ri-upload-cloud-line me-1 text-primary"></i>Upload a New Version</h6>
+            <div class="mb-3">
+              <label class="form-label ocr-field-label fs-13 mb-1" for="dr-draft-file">Attachment (Optional)</label>
+              <div id="dr-draft-dropzone-wrap">
+                <input type="file" class="form-control" id="dr-draft-file" accept=".pdf,.jpg,.jpeg,.png">
+              </div>
             </div>
-            <div class="mb-2">
-              <textarea class="form-control form-control-sm" id="dr-draft-note" rows="2"></textarea>
+            <div class="mb-3">
+              <label class="form-label ocr-field-label fs-13 mb-1" for="dr-draft-note">Version Note / Remarks</label>
+              <textarea class="form-control" id="dr-draft-note" rows="2" placeholder="Add a note or summary of changes for this version..."></textarea>
             </div>
-            <button type="button" class="btn btn-primary btn-sm" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
-              <i class="ri-upload-2-line me-1"></i>Upload
+            <button type="button" class="btn btn-primary px-3 fs-13" id="dr-draft-upload-btn" onclick="uploadDRDraftDocument()">
+              <i class="ri-upload-2-line me-1"></i>Upload Version
             </button>
-            <small class="text-muted d-block mt-2">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is saved to the Document Library; the other side is notified either way.</small>
+            <p class="text-muted fs-12 mt-2 mb-0">A file, a note, or both — at least one is required. A file (PDF, JPG, or PNG, max 10MB) is archived to the Document Library; collaborators are notified automatically.</p>
           </div>
           <div id="dr-draft-closed-note" class="alert alert-secondary fs-13 mb-0" style="display:none;">
             <i class="ri-lock-line me-1"></i>This document request has already been decided — no further documents can be added.
@@ -1746,6 +1752,7 @@
       document.getElementById('dr-draft-upload-wrap').style.display = closed ? 'none' : '';
       document.getElementById('dr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('dr-draft-file').value = '';
+      if (window.drDraftDropzone) window.drDraftDropzone.removeFile();
       document.getElementById('dr-draft-note').value = '';
       setBreadcrumb(['Requests', 'Document Request', drRequestLabel(r), 'Draft Collaboration']);
       swapToModal('dr-draft-modal', 'dr-modal');
@@ -1777,6 +1784,7 @@
         renderDR();
         updateStats();
         fileInput.value = '';
+        if (window.drDraftDropzone) window.drDraftDropzone.removeFile();
         noteInput.value = '';
         showToast('<i class="ri-checkbox-circle-line me-1"></i>New draft version uploaded.', '#0ab39c');
       } catch (e) {
@@ -1798,6 +1806,7 @@
       document.getElementById('pr-draft-upload-wrap').style.display = closed ? 'none' : '';
       document.getElementById('pr-draft-closed-note').style.display = closed ? '' : 'none';
       document.getElementById('pr-draft-file').value = '';
+      if (window.prDraftDropzone) window.prDraftDropzone.removeFile();
       document.getElementById('pr-draft-note').value = '';
       setBreadcrumb(['Requests', 'Partnership Request', prRequestLabel(r), 'Draft Collaboration']);
       swapToModal('pr-draft-modal', 'pr-modal');
@@ -1829,6 +1838,7 @@
         renderPR();
         updateStats();
         fileInput.value = '';
+        if (window.prDraftDropzone) window.prDraftDropzone.removeFile();
         noteInput.value = '';
         showToast('<i class="ri-checkbox-circle-line me-1"></i>New draft version uploaded.', '#0ab39c');
       } catch (e) {
@@ -2172,6 +2182,22 @@
       updateStats();
       openFromQuery();
       applyStatusFromQuery();
+      if (window.CIPRMS && CIPRMS.initDropzone) {
+        window.prDraftDropzone = CIPRMS.initDropzone({
+          container: '#pr-draft-dropzone-wrap',
+          input: '#pr-draft-file',
+          compact: true,
+          title: 'Upload Document',
+          desc: 'PDF, JPG, JPEG, or PNG · Max 10MB'
+        });
+        window.drDraftDropzone = CIPRMS.initDropzone({
+          container: '#dr-draft-dropzone-wrap',
+          input: '#dr-draft-file',
+          compact: true,
+          title: 'Upload Document',
+          desc: 'PDF, JPG, JPEG, or PNG · Max 10MB'
+        });
+      }
       if (window.CIPRMS && CIPRMS.live) {
         CIPRMS.live(['request.updated', 'request.statusChanged', 'documentRequest.updated', 'documentRequest.statusChanged'], refreshLive, { debounce: 250 });
       }
@@ -2186,6 +2212,7 @@
   <script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
   <script src="/velzon/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
   <script src="/velzon/assets/js/plugins.js"></script>
+  <script src="/js/ciprms-uploader.js"></script>
   <script src="/velzon/assets/js/app.js"></script>
 </body>
 

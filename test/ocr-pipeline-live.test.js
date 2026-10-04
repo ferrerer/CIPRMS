@@ -104,14 +104,24 @@ async function extractAndWait(filePath, mimetype) {
     const res = await agent.get('/api/ocr/status/' + jobId);
     expect(res.status).toBe(200);
     last = res.body;
-    if (last.status === 'done' || last.status === 'error') return last;
+    if (last.status === 'done' || last.status === 'error') return { result: last, jobId };
     await new Promise(r => setTimeout(r, 300));
   }
   throw new Error('OCR job did not finish within the test deadline: ' + JSON.stringify(last));
 }
 
+// Helper: confirm a completed OCR job and return { documentId, fileLink }.
+async function confirmJob(jobId, overrides = {}) {
+  const res = await agent.post('/api/ocr/confirm')
+    .set('Content-Type', 'application/json')
+    .send({ jobId, ...overrides });
+  expect(res.status).toBe(200);
+  expect(res.body.success).toBe(true);
+  return res.body;
+}
+
 describe('JPG scan — real Tesseract OCR', () => {
-  let result;
+  let result, jobId;
   beforeAll(async () => {
     const img = tmpPath('moa.png'); // sharp always writes real PNG bytes regardless of the filename extension we give supertest
     await renderTextImage([
@@ -123,7 +133,7 @@ describe('JPG scan — real Tesseract OCR', () => {
     ], img, 2100);
     const jpg = tmpPath('moa.jpg');
     await sharp(img).jpeg().toFile(jpg);
-    result = await extractAndWait(jpg, 'image/jpeg');
+    ({ result, jobId } = await extractAndWait(jpg, 'image/jpeg'));
   });
 
   test('completes successfully with real recognized text (method: ocr)', () => {
@@ -143,8 +153,11 @@ describe('JPG scan — real Tesseract OCR', () => {
     expect(f.unit).toBe('CCS');
   });
 
-  test('the upload was archived to the Document Library with the extracted metadata and full OCR text stored', async () => {
-    const doc = await db.collection('documents').findOne({ id: result.result.documentId });
+  test('after calling /api/ocr/confirm, the upload is archived to the Document Library with the extracted metadata', async () => {
+    // OCR is done but nothing has been written to the DB yet — confirm triggers the archive.
+    const confirmed = await confirmJob(jobId);
+    expect(confirmed.documentId).toBeTruthy();
+    const doc = await db.collection('documents').findOne({ id: confirmed.documentId });
     expect(doc).toBeTruthy();
     expect(doc.type).toBe('MOA');
     expect(doc.institution).toMatch(/Camarines/i);
@@ -154,7 +167,7 @@ describe('JPG scan — real Tesseract OCR', () => {
 });
 
 describe('Text PDF — uses the embedded text layer, never runs OCR', () => {
-  let result;
+  let result, jobId;
   beforeAll(async () => {
     const pdf = tmpPath('mou-text.pdf');
     await buildTextPdf([
@@ -164,7 +177,9 @@ describe('Text PDF — uses the embedded text layer, never runs OCR', () => {
       'This MOU shall expire until March 2, 2031.',
       'Coordinated through CETE.'
     ], pdf);
-    result = await extractAndWait(pdf, 'application/pdf');
+    ({ result, jobId } = await extractAndWait(pdf, 'application/pdf'));
+    // Discard — this describe block only tests OCR fields, not the confirm flow.
+    await agent.post('/api/ocr/discard').send({ jobId }).catch(() => {});
   });
 
   test('completes via the text-layer fast path with full confidence', () => {
@@ -184,14 +199,16 @@ describe('Text PDF — uses the embedded text layer, never runs OCR', () => {
 });
 
 describe('Scanned (image-only) multi-page PDF — real rasterization + real OCR per page', () => {
-  let result;
+  let result, jobId;
   beforeAll(async () => {
     const page1 = tmpPath('page1.png'), page2 = tmpPath('page2.png');
     await renderTextImage(['MEMORANDUM OF AGREEMENT', 'Page 1 of 2 — between CSPC and Testland Institute of Technology.'], page1);
     await renderTextImage(['Effective Date: June 1, 2026', 'Valid Until: May 31, 2029', 'Coordinated through CNAS.'], page2);
     const pdf = tmpPath('scanned-moa.pdf');
     await buildScannedPdf([page1, page2], pdf);
-    result = await extractAndWait(pdf, 'application/pdf');
+    ({ result, jobId } = await extractAndWait(pdf, 'application/pdf'));
+    // Discard — this describe block tests multi-page OCR fields only.
+    await agent.post('/api/ocr/discard').send({ jobId }).catch(() => {});
   });
 
   test('falls back to real OCR (not the text layer) across both pages', () => {
@@ -219,21 +236,24 @@ describe('Low-confidence / unrecognizable content — fields stay null, never gu
   test('a real OCR of an unrelated short image still leaves every partnership field null (no invented values)', async () => {
     const img = tmpPath('unrelated.png');
     await renderTextImage(['Just a random note', 'with nothing about any agreement.'], img);
-    const result = await extractAndWait(img, 'image/png');
+    const { result, jobId } = await extractAndWait(img, 'image/png');
     expect(result.status).toBe('done');
     const f = result.result;
     expect(f.country).toBeNull();
     expect(f.nature).toBeNull();
     expect(f.unit).toBeNull();
     expect(f.startDate).toBeNull();
+    // Discard — nothing to confirm.
+    await agent.post('/api/ocr/discard').send({ jobId }).catch(() => {});
   });
 
   test('an image with no readable text at all is reported as a clean error, not a false success', async () => {
     const blank = tmpPath('blank.png');
     await sharp({ create: { width: 400, height: 200, channels: 3, background: { r: 255, g: 255, b: 255 } } }).png().toFile(blank);
-    const result = await extractAndWait(blank, 'image/png');
+    const { result } = await extractAndWait(blank, 'image/png');
     expect(result.status).toBe('error');
     expect(result.error).toMatch(/no readable text/i);
+    // On error, the temp file is already deleted server-side — nothing to discard.
   });
 });
 
@@ -243,12 +263,21 @@ describe('Duplicate detection survives a real second OCR of the same institution
     const img1 = tmpPath('dup1.png'), img2 = tmpPath('dup2.png');
     await renderTextImage(['MEMORANDUM OF AGREEMENT', `between CSPC and ${partner}.`], img1);
     await renderTextImage(['MEMORANDUM OF AGREEMENT', `between CSPC and ${partner}.`, 'A slightly different second copy.'], img2);
-    const first = await extractAndWait(img1, 'image/png');
+
+    const { result: first, jobId: jobId1 } = await extractAndWait(img1, 'image/png');
     expect(first.status).toBe('done');
-    const second = await extractAndWait(img2, 'image/png');
+    // Confirm the first document so it exists in the DB for duplicate detection.
+    const confirmed1 = await confirmJob(jobId1);
+    expect(confirmed1.documentId).toBeTruthy();
+
+    const { result: second, jobId: jobId2 } = await extractAndWait(img2, 'image/png');
     expect(second.status).toBe('done');
     expect(second.result.duplicateWarning.found).toBe(true);
-    expect(second.result.duplicateWarning.matches.some(m => m.id === first.result.documentId)).toBe(true);
+    expect(second.result.duplicateWarning.matches.some(m => m.id === confirmed1.documentId)).toBe(true);
+
+    // Discard the second job (duplicate flagged, user chose not to save).
+    await agent.post('/api/ocr/discard').send({ jobId: jobId2 }).catch(() => {});
+    // The first (confirmed) document is cleaned up by cleanupAll() in afterAll.
   });
 });
 
@@ -257,6 +286,7 @@ describe('RBAC: OCR extraction is not open to every authenticated role', () => {
     // requireUploader admits Administrator, Auth. Personnel, potential_partner and Staff — this just confirms the
     // route is reachable for another of those roles too, unchanged by anything in this task. Waited out to
     // completion (not just the 202) so no background job is still running past this file's own afterAll/closeDB.
+    // The job is discarded (not confirmed) — no DB record should be created.
     const college = await createTestUser({ role: 'Auth. Personnel', unit: 'CCS' });
     const collegeAgent = request.agent(app);
     await loginAs(collegeAgent, college);
@@ -270,6 +300,8 @@ describe('RBAC: OCR extraction is not open to every authenticated role', () => {
     do { await new Promise(r => setTimeout(r, 300)); last = (await collegeAgent.get('/api/ocr/status/' + jobId)).body; }
     while (last.status === 'processing' && Date.now() < deadline);
     expect(['done', 'error']).toContain(last.status);
+    // Discard — confirms that extract alone doesn't create records.
+    await collegeAgent.post('/api/ocr/discard').send({ jobId }).catch(() => {});
   });
 
   test('a signed-out request is refused', async () => {

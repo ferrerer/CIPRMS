@@ -19,6 +19,7 @@ const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary 
 const googleCalendarService = require('./services/googleCalendarService');
 const googleDocsService = require('./services/googleDocsService');
 const emailService = require('./services/emailService');
+const notificationService = require('./services/notificationService');
 const realtime = require('./services/realtime');
 const searchService = require('./services/searchService');
 const geocoding = require('./services/geocodingService');
@@ -2379,6 +2380,30 @@ app.patch('/api/documents/:id/organize', requireUploader, announce('document'), 
   } catch (err) {
     console.error('❌ Organize document error:', err);
     res.status(500).json({ error: 'Unable to update the document right now. Please try again.' });
+  }
+});
+
+// DELETE /api/documents/:id — allows an uploader or Administrator to discard a document (e.g. duplicate or unneeded upload)
+app.delete('/api/documents/:id', requireUploader, announce('document'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid document id.' });
+  try {
+    const db = getDb();
+    const doc = await db.collection('documents').findOne({ id });
+    if (!doc) return res.status(404).json({ error: 'Document not found.' });
+    if (doc.uploadedByEmail !== req.session.user.email && req.session.user.role !== 'Administrator') {
+      return res.status(403).json({ error: 'You can only delete your own documents.' });
+    }
+    if (doc.fileLink && doc.fileLink.startsWith('/uploads/documents/')) {
+      const filename = path.basename(doc.fileLink);
+      const filePath = path.join(__dirname, 'uploads', 'documents', filename);
+      fs.unlink(filePath, () => {});
+    }
+    await db.collection('documents').deleteOne({ id });
+    res.json({ success: true, message: 'Document deleted successfully.' });
+  } catch (err) {
+    console.error('❌ Delete document error:', err);
+    res.status(500).json({ error: 'Unable to delete the document right now. Please try again.' });
   }
 });
 
@@ -5421,6 +5446,15 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     };
     await db.collection('users').insertOne(entry);
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
+    await notifyUsers(db, [entry.email], {
+      module: 'user',
+      tag: 'Account',
+      icon: 'ri-user-star-line',
+      color: 'primary',
+      title: 'Welcome to CIPRMS',
+      desc: `Your CIPRMS account has been created with role "${entry.role}". You can now sign in and activate your account.`,
+      link: '/activate'
+    });
     const { password: _, ...safeEntry } = entry; // don't return the password hash
     // tempPassword is only ever returned this one time so the admin can relay it out-of-band.
     res.json({ success: true, user: safeEntry, tempPassword });
@@ -5533,6 +5567,17 @@ app.patch('/api/users/:id', requireStaffAccess, async (req, res) => {
     const updated = await db.collection('users').findOne({ id }, { projection: { password: 0 } });
     if (!updated) return res.status(404).json({ error: 'Not found.' });
     await logActivity(db, req.session.user, 'EDIT', `User updated: ${updated.name} — role: ${updated.role}, status: ${updated.status}`);
+    if (updateData.role !== undefined || updateData.status !== undefined) {
+      await notifyUsers(db, [updated.email], {
+        module: 'user',
+        tag: 'Account',
+        icon: 'ri-user-settings-line',
+        color: 'info',
+        title: 'CIPRMS Account Updated',
+        desc: `Your account details were updated by an administrator (Role: ${updated.role}, Status: ${updated.status}).`,
+        link: '/profile'
+      });
+    }
     res.json({ success: true, user: updated });
   } catch (err) {
     console.error('❌ Edit user error:', err);
@@ -5626,25 +5671,10 @@ function activityLogFilterFor(user) {
  * @param {object} payload - { module, tag, icon, color, title, desc, link, downloadLink }
  */
 async function notifyUsers(db, emails, payload) {
-  const targets = [...new Set((emails || []).filter(Boolean))];
-  if (!targets.length) return;
-  const last = await db.collection('notifications').find({}).sort({ id: -1 }).limit(1).toArray();
-  let nextId = last.length ? (last[0].id || 0) + 1 : 1;
-  const time = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const docs = targets.map(targetEmail => ({
-    id: nextId++,
-    targetEmail,
-    unread: true,
-    time,
-    ...payload
-  }));
-  await db.collection('notifications').insertMany(docs);
-  publishNewNotifications(db, docs).catch(err => console.error('realtime notification publish failed:', err.message));
-  // Request and calendar notifications also go to each recipient's e-mail. In the background:
-  // a slow or failing mail server never delays or breaks the request action itself (services/emailService.js).
-  if (payload && (payload.module === 'request' || payload.module === 'calendar')) {
-    emailService.sendNotificationEmails(targets, payload).catch(err => console.error('notification e-mail failed:', err.message));
-  }
+  return notificationService.createNotification(db, {
+    recipients: emails,
+    ...(payload || {})
+  });
 }
 
 // E-mail receipt to the person who just submitted a request, at the address they signed in with — e-mail only (the
@@ -5811,6 +5841,7 @@ async function publishNewNotifications(db, docs) {
     realtime.publish('notification.created', { notification: view }, realtime.audience.emails([d.targetEmail]));
   }
 }
+notificationService.setPublishNotificationsHandler(publishNewNotifications);
 
 // GET /api/realtime/stream — the browser's EventSource. Signed-in users only; it is bound to the account that opened it
 // (and the page says which account it believes it is, so a stale tab of another login is refused). It only ever RECEIVES.
@@ -6039,6 +6070,21 @@ async function recomputePartnershipStatuses(db) {
 
     await db.collection('notifications').insertMany(docs);
 
+    for (const item of toNotify) {
+      const isExpired = item.status === 'Expired';
+      await notifyUsers(db, REQUEST_REVIEWER_ROLES, {
+        module: 'lifecycle',
+        tag: 'Lifecycle',
+        icon: isExpired ? 'ri-close-circle-line' : 'ri-alarm-warning-line',
+        color: isExpired ? 'danger' : 'warning',
+        title: isExpired ? `Partnership Expired: ${item.partnership.inst}` : `Partnership Expiring Soon: ${item.partnership.inst}`,
+        desc: isExpired
+          ? `The agreement with ${item.partnership.inst}${item.partnership.country ? ' (' + item.partnership.country + ')' : ''} expired on ${item.partnership.end}. Renewal or archival action is needed.`
+          : `The agreement with ${item.partnership.inst}${item.partnership.country ? ' (' + item.partnership.country + ')' : ''} is expiring on ${item.partnership.end}. Consider initiating renewal.`,
+        link: '/lifecycle'
+      });
+    }
+
     const expiredCount = toNotify.filter(t => t.status === 'Expired').length;
     const expiringCount = toNotify.length - expiredCount;
     await logActivity(db, null, 'EDIT',
@@ -6169,7 +6215,15 @@ async function checkPartnershipExpirationNotifications(db, nowOverride = null, f
 
     const payload = formatExpirationEmailPayload(p, daysRemaining);
 
-    await emailService.sendNotificationEmails(recipients, payload);
+    await notifyUsers(db, recipients, {
+      module: 'lifecycle',
+      tag: payload.tag || 'Partnership Expiration',
+      icon: daysRemaining === 0 ? 'ri-close-circle-line' : 'ri-alarm-warning-line',
+      color: daysRemaining === 0 ? 'danger' : (daysRemaining <= 15 ? 'warning' : 'info'),
+      title: payload.title,
+      desc: payload.desc,
+      link: payload.link
+    });
 
     await db.collection('partnership_expiration_notifications').insertOne({
       partnershipId: p.id,
@@ -6880,6 +6934,25 @@ app.patch('/api/calendarevents/:id', requireStaffAccess, announce('calendar'), a
       : [];
     if (newlyInvited.length || newMentioned.length) await notifyCalendarParticipants(db, updated, newlyInvited, req.session.user.name, newMentioned);
 
+    // Notify existing participants if schedule details (title, start, end, location) changed
+    const scheduleChanged = ['title', 'start', 'end', 'location'].some(k => k in fields);
+    if (scheduleChanged) {
+      const newlyInvitedSet = new Set((newlyInvited || []).map(u => meetingTime.emailKey(u.email)));
+      const existingAttendees = eventParticipantList(existing).filter(e => !newlyInvitedSet.has(meetingTime.emailKey(e)));
+      if (existingAttendees.length) {
+        const actorName = req.session && req.session.user ? req.session.user.name : 'CIRL Staff';
+        await notifyUsers(db, existingAttendees, {
+          module: 'calendar',
+          tag: 'Calendar',
+          icon: 'ri-calendar-todo-line',
+          color: 'warning',
+          title: `Event Updated: ${updated.title}`,
+          desc: `${actorName} updated the event "${updated.title}"${updated.start ? ' (Schedule: ' + updated.start + ')' : ''}${updated.location ? ' at ' + updated.location : ''}.`,
+          link: '/calendar'
+        });
+      }
+    }
+
     // Google Calendar sync — an edit or a drag updates the SAME Google event
     // (patched by its id, never re-inserted), and Google e-mails the attendees
     // the change (sendUpdates: 'all'). Uses googleAttendeeEmails (the stable
@@ -6909,6 +6982,21 @@ app.delete('/api/calendarevents/:id', requireStaffAccess, announce('calendar', {
       await googleCalendarService.deleteGoogleEvent(db, existing.googleEventId);
     }
     await db.collection('calendarevents').deleteOne({ id });
+    if (existing) {
+      const attendees = eventParticipantList(existing);
+      if (attendees.length) {
+        const actorName = req.session && req.session.user ? req.session.user.name : 'CIRL Staff';
+        await notifyUsers(db, attendees, {
+          module: 'calendar',
+          tag: 'Calendar',
+          icon: 'ri-calendar-close-line',
+          color: 'danger',
+          title: `Event Cancelled: ${existing.title}`,
+          desc: `${actorName} cancelled the event "${existing.title}"${existing.start ? ' originally scheduled for ' + existing.start : ''}.`,
+          link: '/calendar'
+        });
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -29,4 +29,13 @@ router.post('/extract', (req, res) => {
 
 router.get('/status/:jobId', ocrController.status);
 
+// POST /api/ocr/confirm — permanently archive a completed OCR job to the
+// Document Library after the user explicitly reviews and confirms the upload.
+// No file upload here — just JSON body with jobId and any user-edited fields.
+router.post('/confirm', ocrController.confirm);
+
+// POST /api/ocr/discard — clean up the temp file without creating any DB record.
+// Called on modal close / "Discard" without saving.
+router.post('/discard', ocrController.discard);
+
 module.exports = router;

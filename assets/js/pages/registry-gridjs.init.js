@@ -1330,7 +1330,11 @@ function dismissOcrResult() {
   ocrExtractedResult = null;
   ocrShow('ocr-result-box', false);
   ocrShow('ocr-error-box', false);
-  document.getElementById('ocr-file-input').value = '';
+  var input = document.getElementById('ocr-file-input');
+  if (input) input.value = '';
+  if (window._monitoringOcrDropzone && typeof window._monitoringOcrDropzone.reset === 'function') {
+    window._monitoringOcrDropzone.reset();
+  }
 }
 
 // ── Approved-Request → Registry conversion ──────────────────────────────────

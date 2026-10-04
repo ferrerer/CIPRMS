@@ -12,12 +12,13 @@ if (!fs.existsSync(DOCUMENTS_DIR)) fs.mkdirSync(DOCUMENTS_DIR, { recursive: true
 // "Accreditation" type (and still show under All) — only its filter button was removed (2026-09-20).
 function shortDocType(documentType) {
   if (!documentType) return 'Other';
-  if (/agreement/i.test(documentType)) return 'MOA';
-  if (/understanding/i.test(documentType)) return 'MOU';
+  if (/agreement|\bmoa\b/i.test(documentType)) return 'MOA';
+  if (/understanding|\bmou\b/i.test(documentType)) return 'MOU';
   if (/accreditation|certification/i.test(documentType)) return 'Accreditation';
   if (/proposal/i.test(documentType)) return 'Proposal';
-  if (/letter of intent/i.test(documentType)) return 'LOI';
+  if (/letter of intent|\bloi\b/i.test(documentType)) return 'LOI';
   if (/contract/i.test(documentType)) return 'Contract';
+  if (/^jva$/i.test(documentType)) return 'JVA';
   return 'Other';
 }
 
@@ -28,46 +29,130 @@ async function nextDocumentId(db) {
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// IDP upgrade (2026-07-28): warns about likely-duplicate partnership
-// documents already in the Library. Never blocks the upload — the caller
-// (ocrService) always archives the file regardless; this only surfaces a
-// warning + candidate matches for the user to review (Continue / Cancel /
-// View Existing, handled client-side by archiving the new entry via the
-// existing PATCH /api/documents/:id/organize route if the user cancels).
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'were', 'which',
+  'shall', 'between', 'parties', 'herein', 'hereinafter', 'referred', 'agreement',
+  'memorandum', 'understanding', 'party', 'their', 'other', 'colleges', 'state'
+]);
+
+function computeTextSimilarity(textA, textB) {
+  if (!textA || !textB) return 0;
+  const wordsA = new Set(String(textA).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w)));
+  const wordsB = new Set(String(textB).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w)));
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  let overlap = 0;
+  for (const w of wordsA) {
+    if (wordsB.has(w)) overlap++;
+  }
+  const union = wordsA.size + wordsB.size - overlap;
+  return union > 0 ? (overlap / union) : 0;
+}
+
+// Multi-signal duplicate detection (filename, document type, institution, text similarity, file hash)
 async function findPossibleDuplicates(db, extraction, meta = {}) {
-  if (!extraction) return { found: false, matches: [] };
+  if (!extraction && !meta.fileHash && !meta.originalName) return { found: false, matches: [] };
 
   const orClauses = [];
-  if (extraction.institution) orClauses.push({ institution: { $regex: escapeRegex(extraction.institution), $options: 'i' } });
-  if (extraction.partner) orClauses.push({ partner: { $regex: escapeRegex(extraction.partner), $options: 'i' } });
-  if (meta.originalName) orClauses.push({ originalFilename: meta.originalName });
+  if (meta.fileHash) {
+    orClauses.push({ fileHash: meta.fileHash });
+  }
+  if (extraction && extraction.institution) {
+    orClauses.push({ institution: { $regex: escapeRegex(extraction.institution), $options: 'i' } });
+  }
+  if (extraction && extraction.partner) {
+    orClauses.push({ partner: { $regex: escapeRegex(extraction.partner), $options: 'i' } });
+  }
+  if (meta.originalName) {
+    orClauses.push({ originalFilename: { $regex: escapeRegex(meta.originalName), $options: 'i' } });
+  }
   if (orClauses.length === 0) return { found: false, matches: [] };
 
-  const candidates = await db.collection('documents').find({ $or: orClauses }).limit(20).toArray();
-  const type = shortDocType(extraction.documentType);
+  const candidates = await db.collection('documents').find({ $or: orClauses }).limit(30).toArray();
+  const type = extraction ? shortDocType(extraction.documentType) : null;
+  const rawText = extraction ? extraction.rawText : null;
 
-  const scored = candidates.map((c) => {
+  const scored = [];
+  for (const c of candidates) {
     let score = 0;
     const reasons = [];
-    const instMatch = extraction.institution && c.institution
-      && c.institution.toLowerCase() === extraction.institution.toLowerCase();
-    const partnerMatch = extraction.partner && c.partner
-      && c.partner.toLowerCase() === extraction.partner.toLowerCase();
-    if (instMatch || partnerMatch) { score += 2; reasons.push('same institution'); }
-    if (type && c.type === type) { score += 1; reasons.push('same document type'); }
-    if (extraction.endDate && c.validity && c.validity.includes(extraction.endDate)) { score += 1; reasons.push('overlapping validity'); }
-    if (meta.originalName && c.originalFilename === meta.originalName) { score += 1; reasons.push('same filename'); }
-    return { c, score, reasons };
-  })
-    .filter((x) => x.score >= 2) // institution match alone already meets this — filename match alone does not (secondary signal, per spec)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+    let exactHash = false;
+    let textSim = 0;
+
+    // 1. File Hash Match (Exact file identity)
+    if (meta.fileHash && c.fileHash && meta.fileHash === c.fileHash) {
+      score += 10;
+      reasons.push('Identical file content (exact SHA-256 hash match)');
+      exactHash = true;
+    }
+
+    // 2. Extracted text / content similarity
+    const candidateText = c.ocrText || c.rawText;
+    if (rawText && candidateText) {
+      textSim = computeTextSimilarity(rawText, candidateText);
+      if (textSim >= 0.70) {
+        score += 5;
+        reasons.push(`High text content similarity (${Math.round(textSim * 100)}%)`);
+      } else if (textSim >= 0.45) {
+        score += 2;
+        reasons.push(`Moderate text content similarity (${Math.round(textSim * 100)}%)`);
+      }
+    }
+
+    // 3. Institution / Partner Match
+    const cInst = (c.institution || c.partner || '').trim().toLowerCase();
+    const eInst = (extraction && (extraction.institution || extraction.partner) || '').trim().toLowerCase();
+    if (eInst && cInst && (cInst === eInst || cInst.includes(eInst) || eInst.includes(cInst))) {
+      score += 3;
+      reasons.push(`Same institution (${c.institution || c.partner})`);
+    }
+
+    // 4. Document Type Match
+    if (type && c.type === type) {
+      score += 2;
+      reasons.push(`Same document type (${c.type})`);
+    }
+
+    // 5. Filename Match
+    if (meta.originalName && c.originalFilename && meta.originalName.trim().toLowerCase() === c.originalFilename.trim().toLowerCase()) {
+      score += 2;
+      reasons.push(`Same filename (${c.originalFilename})`);
+    }
+
+    // 6. Validity Date Overlap
+    if (extraction && extraction.endDate && c.validity && c.validity.includes(extraction.endDate)) {
+      score += 1;
+      reasons.push('Overlapping validity dates');
+    }
+
+    // False positive threshold: exact hash OR score >= 4
+    if (exactHash || score >= 4) {
+      const matchPercentage = exactHash
+        ? 100
+        : Math.min(99, Math.round(textSim > 0 ? textSim * 100 : (score / 8) * 100));
+      scored.push({ c, score, reasons, exactHash, matchPercentage });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  const topMatches = scored.slice(0, 5);
 
   return {
-    found: scored.length > 0,
-    matches: scored.map(({ c, reasons }) => ({
-      id: c.id, title: c.title, institution: c.institution, fileLink: c.fileLink,
-      uploadedAt: c.uploadedAt, reason: reasons.join(', ')
+    found: topMatches.length > 0,
+    matches: topMatches.map(({ c, reasons, score, matchPercentage }) => ({
+      id: c.id,
+      title: c.title || 'Untitled Document',
+      type: c.type || 'Other',
+      institution: c.institution || c.partner || 'N/A',
+      partner: c.partner || c.institution || 'N/A',
+      validity: c.validity || 'N/A',
+      originalFilename: c.originalFilename || 'Unknown',
+      uploadedAt: c.uploadedAt || c.date || 'N/A',
+      uploadedBy: c.uploadedBy || 'Unknown',
+      fileLink: c.fileLink || '#',
+      reasons: reasons,
+      reason: reasons.join(' · '),
+      score: score,
+      matchPercentage: matchPercentage
     }))
   };
 }
@@ -164,6 +249,7 @@ async function archiveToDocumentLibrary(tempFilePath, originalName, extraction, 
       ? extraction.imageQuality.warnings.map((w) => w.message) : [],
     possibleDuplicateIds: (extraction && extraction.duplicateWarning && extraction.duplicateWarning.found)
       ? extraction.duplicateWarning.matches.map((m) => m.id) : [],
+    fileHash: meta.fileHash || null,
     // Links a document back to the Partnership/Document Request it was
     // uploaded during review of, when applicable (undefined for the OCR
     // registry-upload path, which doesn't set these).

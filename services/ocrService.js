@@ -12,6 +12,8 @@ const { archiveToDocumentLibrary, findPossibleDuplicates } = require('./document
 const { analyzeImageQuality } = require('./imageQualityService');
 const { getDb } = require('../db');
 const realtime = require('./realtime');
+// confirmJob is exported so ocrController can archive a completed job to the
+// Document Library only after the user explicitly clicks "Save".
 
 const OCR_TIMEOUT_MS = 90 * 1000;
 const LOW_CONFIDENCE_THRESHOLD = 45;
@@ -200,26 +202,11 @@ async function processImage(filePath, jobId) {
   return { text, confidence, method: 'ocr', pages: 1, imageQuality };
 }
 
-// Archives the uploaded file to the Document Library — always, regardless of
-// whether OCR extraction succeeded, so nothing a user uploads is ever quietly
-// thrown away. Failures here are logged but never fail the OCR job itself.
-async function archiveUpload(jobId, filePath, meta, extraction) {
-  try {
-    const archived = await archiveToDocumentLibrary(filePath, meta.originalName, extraction, meta);
-    updateJob(jobId, { documentId: archived.documentId, fileLink: archived.fileLink });
-    // Own-uploads-only, same as GET /api/documents — lets the uploader's own already-open Document Library page
-    // (e.g. its Nature-of-Partnership filter buttons) pick up the new record without a manual refresh.
-    if (meta.uploadedByEmail) {
-      realtime.publish('document.updated', { id: archived.documentId, action: 'created' }, realtime.audience.emails([meta.uploadedByEmail]));
-    }
-    return archived;
-  } catch (archiveErr) {
-    console.error('Document library archiving failed:', archiveErr.message);
-    return null;
-  }
-}
-
 // ── Orchestration for a single uploaded file, tracked by jobId ───────────────
+// NOTE: This function deliberately does NOT persist anything to the database.
+// The uploaded file is kept in the temp uploads directory while the job is
+// live; permanent archiving to the Document Library only happens when the user
+// explicitly confirms via POST /api/ocr/confirm (handled in ocrController).
 async function runJob(jobId, filePath, mimetype, meta = {}) {
   const startedAt = Date.now();
   try {
@@ -239,8 +226,15 @@ async function runJob(jobId, filePath, mimetype, meta = {}) {
     updateJob(jobId, { progress: 95, stage: 'extracting-fields' });
     const fields = extractFields(rawText);
 
-    // Duplicate detection (section 6) — best-effort, never fails the job; an
-    // unavailable DB just means no duplicate warning is shown.
+    // Compute file hash for duplicate detection and document identity
+    try {
+      const fileBuffer = await fsp.readFile(filePath);
+      meta.fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    } catch (hashErr) {
+      console.warn('Unable to compute file hash for duplicate detection:', hashErr && hashErr.message);
+    }
+
+    // Duplicate detection — best-effort, never fails the job.
     let duplicateWarning = { found: false, matches: [] };
     try {
       duplicateWarning = await findPossibleDuplicates(getDb(), fields, meta);
@@ -262,19 +256,56 @@ async function runJob(jobId, filePath, mimetype, meta = {}) {
       ...fields
     };
 
-    const archived = await archiveUpload(jobId, filePath, meta, result);
-    if (archived) { result.documentId = archived.documentId; result.fileLink = archived.fileLink; }
-
-    updateJob(jobId, { status: 'done', progress: 100, stage: 'done', result });
+    // Store the temp file path and meta on the job so confirmJob() can archive it later.
+    updateJob(jobId, { status: 'done', progress: 100, stage: 'done', result, tempFilePath: filePath, meta });
   } catch (err) {
-    // Even on OCR failure, the raw upload is still a real document — archive it
-    // (with no extracted metadata) rather than discarding it.
-    await archiveUpload(jobId, filePath, meta, null);
-    updateJob(jobId, { status: 'error', progress: 100, stage: 'error', error: err.message || 'OCR processing failed.' });
-  } finally {
-    // No-op if archiveUpload already moved the file out of the temp folder.
+    // On failure, clean up the temp file and mark the job as errored.
+    // Nothing is saved to the Document Library — the user simply sees an error.
     fs.unlink(filePath, () => {});
+    updateJob(jobId, { status: 'error', progress: 100, stage: 'error', error: err.message || 'OCR processing failed.', tempFilePath: null });
   }
+}
+
+// ── Confirm: permanently archive a completed OCR job to the Document Library ──
+// Called by POST /api/ocr/confirm after the user reviews and explicitly saves.
+// `overrides` contains any field values the user edited in the results form.
+async function confirmJob(jobId, overrides = {}, session = {}) {
+  const job = jobs.get(jobId);
+  if (!job) throw new Error('Job not found or has expired.');
+  if (job.status !== 'done') throw new Error('Job is not in a completed state.');
+  if (!job.tempFilePath) throw new Error('Temporary file is no longer available (already confirmed or timed out).');
+
+  // Merge user edits into the extracted result before archiving.
+  const extraction = Object.assign({}, job.result, overrides);
+  const meta = Object.assign({}, job.meta, {
+    uploadedBy: session.name || job.meta.uploadedBy || 'Unknown',
+    uploadedByEmail: session.email || job.meta.uploadedByEmail || null
+  });
+
+  try {
+    const archived = await archiveToDocumentLibrary(job.tempFilePath, meta.originalName, extraction, meta);
+    // Mark the job as confirmed so it cannot be confirmed again and its temp path is cleared.
+    updateJob(jobId, { confirmed: true, tempFilePath: null, documentId: archived.documentId, fileLink: archived.fileLink });
+    // Notify the uploader's open Document Library tab so it can refresh.
+    if (meta.uploadedByEmail) {
+      realtime.publish('document.updated', { id: archived.documentId, action: 'created' }, realtime.audience.emails([meta.uploadedByEmail]));
+    }
+    return archived;
+  } catch (err) {
+    throw new Error('Failed to save the document to the library: ' + err.message);
+  }
+}
+
+// ── Discard: delete the temporary file without creating any DB record ──────────
+// Called by POST /api/ocr/discard when the user cancels or closes the modal.
+async function discardJob(jobId) {
+  const job = jobs.get(jobId);
+  if (!job) return; // already expired or never existed — nothing to do
+  if (job.confirmed) return; // already confirmed — don't delete the archived file
+  if (job.tempFilePath) {
+    fs.unlink(job.tempFilePath, () => {});
+  }
+  jobs.delete(jobId);
 }
 
 function startJob(filePath, mimetype, meta) {
@@ -283,4 +314,4 @@ function startJob(filePath, mimetype, meta) {
   return jobId;
 }
 
-module.exports = { startJob, getJob };
+module.exports = { startJob, getJob, confirmJob, discardJob };

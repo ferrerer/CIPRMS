@@ -438,14 +438,16 @@
         <div class="card border border-primary-subtle mb-4" id="ocr-panel">
           <div class="card-body">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-              <h6 class="mb-0"><i class="ri-scan-2-line text-primary me-1"></i>Auto-fill from Document (OCR)</h6>
-              <span class="badge bg-primary-subtle text-primary">Optional</span>
+              <h6 class="mb-0 fs-15 fw-semibold"><i class="ri-scan-2-line text-primary me-2"></i>Auto-fill from Document (OCR)</h6>
+              <span class="badge bg-primary-subtle text-primary fs-12 px-2 py-1">Optional</span>
             </div>
             <% var docLibraryHref = (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel') ? '/personnel/documents' : '/documents'; %>
-            <p class="text-muted fs-13 mb-3">Upload the MOA, MOU, Contract, Partnership Proposal, or Letter of Intent (PDF, JPG, or PNG — max 10MB). The system extracts the text, suggests a document type, and pre-fills matching fields below. The file itself is automatically archived to the <a href="<%= docLibraryHref %>" target="_blank">Document Library</a>. Form fields are never saved until you review and click <strong>Save Partnership</strong> yourself.</p>
+            <p class="text-muted fs-13 mb-3">Upload a MOA, MOU, Contract, Partnership Proposal, or Letter of Intent. The system extracts text, suggests values, and pre-fills the form fields below. The file is safely archived to the <a href="<%= docLibraryHref %>" target="_blank" class="fw-medium text-decoration-underline">Document Library</a>.</p>
+            <div id="monitoring-ocr-dropzone-wrap" class="mb-3">
+              <input type="file" class="form-control" id="ocr-file-input" accept=".pdf,.jpg,.jpeg,.png">
+            </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
-              <input type="file" class="form-control" id="ocr-file-input" accept=".pdf,.jpg,.jpeg,.png" style="max-width:360px">
-              <button type="button" class="btn btn-primary text-nowrap" id="ocr-extract-btn" onclick="startOcrExtraction()">
+              <button type="button" class="btn btn-primary px-3 text-nowrap" id="ocr-extract-btn" onclick="startOcrExtraction()">
                 <i class="ri-magic-line me-1"></i>Extract using OCR
               </button>
             </div>
@@ -954,6 +956,22 @@
 <script src="/velzon/assets/js/pages/registry-gridjs.init.js"></script>
 <!-- App js -->
 <script src="/velzon/assets/js/app.js"></script>
+<script src="/js/ciprms-uploader.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (window.CIPRMS && typeof window.CIPRMS.initDropzone === 'function') {
+      window._monitoringOcrDropzone = window.CIPRMS.initDropzone({
+        container: '#monitoring-ocr-dropzone-wrap',
+        input: '#ocr-file-input',
+        accept: '.pdf,.jpg,.jpeg,.png',
+        maxSize: 10 * 1024 * 1024,
+        compact: true,
+        title: 'Upload Document',
+        desc: 'PDF, JPG, JPEG, or PNG · Max 10MB'
+      });
+    }
+  });
+</script>
 
 </body>
 </html>

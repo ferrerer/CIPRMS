@@ -33,6 +33,104 @@
         .tag-pills-container { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
         .tag-pill { margin-right: 8px; cursor: pointer; }
 
+        /* ── Document Library — Upload & OCR Extraction Modal Sizing ──
+           Substantially enlarged modal matching CIPRMS Monitoring (Add New Partnership modal-xl)
+           and Requests (Partnership & Document Requests Review / Draft View modals).
+           Spacious, centered, responsive width/height, body scrolling, never full-screen. */
+        @media (min-width: 992px) {
+            #uploadModal .modal-dialog {
+                --vz-modal-width: 960px;
+                max-width: 960px;
+            }
+        }
+        @media (min-width: 1200px) {
+            #uploadModal .modal-dialog {
+                --vz-modal-width: 1080px;
+                max-width: 1080px;
+            }
+        }
+        @media (min-width: 1400px) {
+            #uploadModal .modal-dialog {
+                --vz-modal-width: 1140px;
+                max-width: 1140px;
+            }
+        }
+        #uploadModal .modal-content {
+            max-height: calc(100vh - 3.5rem);
+            display: flex;
+            flex-direction: column;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        #uploadModal .modal-header {
+            padding: 1.1rem 1.75rem;
+            flex-shrink: 0;
+            border-bottom: 1px solid var(--vz-border-color, #e9ebec);
+        }
+        #uploadModal .modal-title {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        #uploadModal .modal-header .btn-close {
+            flex-shrink: 0;
+        }
+        #uploadModal .modal-body {
+            padding: 1.5rem 1.75rem;
+            overflow-y: auto;
+            overflow-wrap: anywhere;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+        #uploadModal .modal-footer {
+            padding: 1rem 1.75rem;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            border-top: 1px solid var(--vz-border-color, #e9ebec);
+        }
+        #uploadModal .upload-modal-body {
+            min-height: 420px;
+        }
+        #uploadModal #doc-library-dropzone-wrap .ciprms-dropzone {
+            padding: 2.25rem 1.5rem;
+            min-height: 200px;
+        }
+        #uploadModal .duplicate-matches-list {
+            max-height: 240px;
+            overflow-y: auto;
+        }
+        #uploadModal .ocr-raw-pre {
+            min-height: 120px;
+            max-height: 220px;
+        }
+
+        /* Responsive Mobile / Small screen adjustments */
+        @media (max-width: 575.98px) {
+            #uploadModal .modal-dialog {
+                margin: 0.75rem auto;
+                max-width: calc(100vw - 1.5rem);
+            }
+            #uploadModal .modal-content {
+                max-height: calc(100vh - 1.5rem);
+            }
+            #uploadModal .modal-header {
+                padding: 0.85rem 1rem;
+            }
+            #uploadModal .modal-body {
+                padding: 1rem;
+            }
+            #uploadModal .modal-footer {
+                padding: 0.75rem 1rem;
+            }
+            #uploadModal #doc-library-dropzone-wrap .ciprms-dropzone {
+                padding: 1.5rem 1rem;
+                min-height: 160px;
+            }
+            #uploadModal .upload-modal-body {
+                min-height: 340px;
+            }
+        }
+
         /* ── Dark mode ──────────────────────────────────────────────────────
            The rules above hardcode light surfaces (folder hover/active fills,
            card and stat borders) and leave text on Bootstrap's defaults, which
@@ -82,6 +180,13 @@
         [data-bs-theme="dark"] .btn-soft-info:focus-visible { background-color: #299cdb; color: #ffffff; }
         [data-bs-theme="dark"] .btn-soft-secondary { background-color: rgba(255,255,255,.1); color: #dee2e6; }
         [data-bs-theme="dark"] .btn-soft-secondary:hover { background-color: rgba(255,255,255,.2); color: #ffffff; }
+        [data-bs-theme="dark"] #uploadModal .modal-content { background-color: var(--vz-card-bg, #212529); border-color: var(--vz-border-color, #32383e); }
+        [data-bs-theme="dark"] #uploadModal .modal-header,
+        [data-bs-theme="dark"] #uploadModal .modal-footer { background-color: #1a1d21 !important; border-color: #32383e !important; }
+        [data-bs-theme="dark"] #uploadModal .modal-title { color: #f1f3f5 !important; }
+        [data-bs-theme="dark"] #uploadModal .card.border-primary-subtle { background-color: #1e2533 !important; border-color: rgba(112, 148, 245, 0.25) !important; }
+        [data-bs-theme="dark"] #uploadModal #res-file-name { color: #f1f3f5 !important; }
+        [data-bs-theme="dark"] #uploadModal .duplicate-match-card { background-color: #1a1d21 !important; border-color: #3b3323 !important; }
     </style>
 </head>
 
@@ -268,66 +373,129 @@
 <% var canUploadDocuments = typeof user !== 'undefined' && user && (user.role === 'Administrator' || user.role === 'Staff'); %>
 <% if (canUploadDocuments) { %>
 <div class="modal fade zoomIn" id="uploadModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content">
-      <div class="modal-header bg-light-subtle p-3">
-        <h5 class="modal-title">Upload Document & OCR Extraction</h5>
+  <div class="modal-dialog modal-dialog-centered modal-xl" id="upload-modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light-subtle border-bottom">
+        <h5 class="modal-title fs-16 fw-bold"><i class="ri-scan-2-line text-primary me-2"></i>Upload Document &amp; OCR Extraction</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" id="close-upload"></button>
       </div>
-      <div class="modal-body">
-        <div id="upload-stage">
-            <div class="text-center p-5 border border-dashed rounded">
-                <i class="ri-upload-cloud-2-line fs-1 text-primary"></i>
-                <h5 class="mt-3">Drop file here or click to upload</h5>
-                <p class="text-muted">Supports PDF, JPG, JPEG, PNG (max 10MB). The system automatically extracts text and archives the file to this library.</p>
-                <input type="file" id="fileInput" class="form-control mt-3" accept=".pdf,.jpg,.jpeg,.png" onchange="startOcr()">
+      <div class="modal-body upload-modal-body">
+        <!-- Stage 1: Upload Dropzone Area -->
+        <div id="upload-stage" class="upload-modal-stage">
+            <div class="mb-3 text-center">
+                <p class="ocr-helper-text mb-0 fs-13 text-muted">Upload an agreement, proposal, contract, or accreditation document. The system extracts text, suggests metadata, detects duplicates, and archives the file to the Document Library.</p>
+            </div>
+            <div id="doc-library-dropzone-wrap">
+                <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png">
+            </div>
+            <div class="d-flex align-items-center justify-content-center gap-3 mt-3 flex-wrap fs-12 text-muted">
+                <span><i class="ri-checkbox-circle-fill text-success me-1"></i>Automatic OCR Extraction</span>
+                <span><i class="ri-shield-check-fill text-primary me-1"></i>Duplicate Detection</span>
+                <span><i class="ri-archive-fill text-info me-1"></i>Auto Archival</span>
             </div>
         </div>
 
-        <div id="ocr-stage" class="text-center ocr-spinner">
-            <div class="spinner-border text-success" style="width: 3rem; height: 3rem;" role="status"></div>
-            <h5 class="mt-3" id="ocr-stage-heading">Extracting metadata via OCR...</h5>
-            <p class="text-muted fs-13" id="ocr-stage-detail">Analyzing document text. Please wait.</p>
-            <div class="progress mx-auto" style="height:6px;max-width:320px">
-                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" id="ocr-modal-progress-bar" style="width:0%"></div>
+        <!-- Stage 2: OCR Processing Spinner & Progress -->
+        <div id="ocr-stage" class="upload-modal-stage text-center py-4 ocr-spinner">
+            <div class="spinner-border text-primary mb-3" style="width: 3.5rem; height: 3.5rem;" role="status"></div>
+            <h5 class="ocr-section-title fs-16 fw-bold mb-1" id="ocr-stage-heading">Analyzing Document with OCR...</h5>
+            <p class="ocr-helper-text fs-13 mb-3" id="ocr-stage-detail">Extracting metadata and analyzing content. Please wait.</p>
+            <div class="progress mx-auto mb-3" style="height:8px;max-width:420px;border-radius:4px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" id="ocr-modal-progress-bar" style="width:0%"></div>
             </div>
+            <div class="fs-12 text-muted" id="ocr-stage-subtext">Step 1 of 2: Uploading &amp; processing text</div>
         </div>
 
+        <!-- Stage 3: Extracted Results, Metadata & Duplicate Alerts -->
         <div id="result-stage" class="extracted-data">
-            <div class="alert alert-success"><i class="ri-checkbox-circle-line me-2"></i> <span id="result-alert-text">Extraction complete. This document has already been added to the library — edit anything below if needed.</span></div>
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Document Title</label>
-                    <input type="text" class="form-control" id="res-title">
+            <!-- Document Meta Header Pill -->
+            <div class="card border border-primary-subtle bg-light-subtle mb-3 p-3 shadow-none">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2 text-truncate me-2">
+                        <div class="avatar-xs flex-shrink-0">
+                            <span class="avatar-title rounded bg-primary-subtle text-primary fs-4">
+                                <i class="ri-file-text-line"></i>
+                            </span>
+                        </div>
+                        <div class="text-truncate">
+                            <div class="fw-semibold text-dark fs-14 text-truncate" id="res-file-name">Uploaded Document</div>
+                            <div class="fs-12 text-muted" id="res-file-meta">Saved to Document Library</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                        <span class="badge bg-success-subtle text-success fs-12 py-1 px-2" id="res-confidence-badge"><i class="ri-sparkling-fill me-1"></i>Confidence: —</span>
+                        <span class="badge bg-warning-subtle text-warning fs-12 py-1 px-2" id="res-warning-badge" style="display:none;"><i class="ri-alert-line me-1"></i>Low Confidence</span>
+                    </div>
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Extracted Type</label>
-                    <input type="text" class="form-control" id="res-type">
+            </div>
+
+            <!-- Duplicate Warning Alert Box -->
+            <div id="duplicate-warning-box" class="alert alert-warning border border-warning-subtle shadow-sm mb-3" style="display:none;">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="ri-alert-fill fs-3 text-warning flex-shrink-0 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <h6 class="alert-heading text-warning-emphasis fw-bold fs-15 mb-1">Possible Duplicate Detected</h6>
+                        <p class="fs-13 text-muted mb-2">The system detected that this document may already exist in the Document Library. Review the matching record(s) below:</p>
+                        
+                        <div class="duplicate-matches-list mb-3" id="duplicate-matches-container" style="max-height: 240px; overflow-y: auto;"></div>
+
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <button type="button" class="btn btn-warning btn-sm fs-13" id="btn-continue-duplicate" onclick="acknowledgeDuplicateAndContinue()">
+                                <i class="ri-check-line me-1"></i>Continue Anyway &amp; Save
+                            </button>
+                            <button type="button" class="btn btn-outline-danger btn-sm fs-13" id="btn-discard-duplicate" onclick="discardDuplicateUpload()">
+                                <i class="ri-delete-bin-line me-1"></i>Discard Upload
+                            </button>
+                            <button type="button" class="btn btn-light btn-sm ms-auto fs-13" id="btn-toggle-matches" onclick="toggleDuplicateDetails()">
+                                <i class="ri-arrow-up-s-line me-1" id="toggle-matches-icon"></i><span id="toggle-matches-text">Hide Matches</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Extracted Institution</label>
-                    <input type="text" class="form-control" id="res-inst">
+            </div>
+
+            <div class="alert alert-success border-success-subtle py-2 px-3 fs-13 mb-3" id="result-success-alert">
+                <i class="ri-checkbox-circle-fill me-2"></i><span id="result-alert-text">Extraction complete. Document has been archived to the library — verify or edit any field below.</span>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label ocr-field-label" for="res-title">Document Title <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control ocr-field-input" id="res-title" placeholder="Document Title">
                 </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Validity Period</label>
-                    <input type="text" class="form-control" id="res-validity">
+                <div class="col-md-6">
+                    <label class="form-label ocr-field-label" for="res-type">Document Type</label>
+                    <input type="text" class="form-control ocr-field-input" id="res-type" placeholder="e.g. MOA, MOU, Contract">
                 </div>
-                <div class="col-12 mb-2">
-                    <span class="badge bg-success-subtle text-success" id="res-confidence-badge">Confidence: —</span>
-                    <span class="badge bg-warning-subtle text-warning ms-1" id="res-warning-badge" style="display:none">Low confidence — verify carefully</span>
+                <div class="col-md-6">
+                    <label class="form-label ocr-field-label" for="res-inst">Institution / Partner</label>
+                    <input type="text" class="form-control ocr-field-input" id="res-inst" placeholder="Institution Name">
                 </div>
-                <div class="col-12 mb-3">
-                    <label class="form-label">Full OCR Text (Preview)</label>
-                    <textarea class="form-control bg-light" rows="4" readonly id="res-rawtext"></textarea>
+                <div class="col-md-6">
+                    <label class="form-label ocr-field-label" for="res-validity">Validity Period</label>
+                    <input type="text" class="form-control ocr-field-input" id="res-validity" placeholder="Start Date – End Date">
+                </div>
+                <div class="col-12">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <label class="form-label ocr-field-label mb-0" for="res-rawtext">Extracted OCR Text Preview</label>
+                        <button type="button" class="btn btn-sm btn-ghost-secondary text-primary fs-12 p-0" data-bs-toggle="collapse" data-bs-target="#ocr-text-collapse">
+                            <i class="ri-eye-line me-1"></i>Toggle Text Preview
+                        </button>
+                    </div>
+                    <div class="collapse show" id="ocr-text-collapse">
+                        <textarea class="form-control ocr-raw-pre bg-light" rows="5" readonly id="res-rawtext" placeholder="Extracted text preview..."></textarea>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div id="ocr-error-stage" class="alert alert-danger" style="display:none"></div>
+        <div id="ocr-error-stage" class="alert alert-danger py-2 px-3 fs-13 mb-0" style="display:none"></div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer border-top bg-light-subtle">
         <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="saveDocBtn" style="display:none;" onclick="saveDocument()">Save Edits</button>
+        <button type="button" class="btn btn-primary px-3" id="saveDocBtn" style="display:none;" onclick="saveDocument()">
+            <i class="ri-save-line me-1"></i>Save Edits
+        </button>
       </div>
     </div>
   </div>
@@ -339,6 +507,7 @@
 <script src="/velzon/assets/libs/node-waves/waves.min.js"></script>
 <script src="/velzon/assets/libs/feather-icons/feather.min.js"></script>
 <script src="/velzon/assets/js/app.js"></script>
+<script src="/js/ciprms-uploader.js"></script>
 <script>
     let allDocs = [];
     let allFolders = [];
@@ -369,16 +538,44 @@
             renderFiltered();
         });
 
+
+
         var uploadModalEl = document.getElementById('uploadModal');
         if (uploadModalEl) {
             uploadModalEl.addEventListener('hidden.bs.modal', function () {
-                currentDocId = null;
+                // If the user closes the modal without saving, discard the temp file.
+                if (currentJobId) {
+                    fetch('/api/ocr/discard', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jobId: currentJobId })
+                    }).catch(function () {}); // best-effort, fire-and-forget
+                    currentJobId = null;
+                }
                 document.getElementById('fileInput').value = '';
                 document.getElementById('upload-stage').style.display = 'block';
                 document.getElementById('ocr-stage').style.display = 'none';
                 document.getElementById('result-stage').style.display = 'none';
                 document.getElementById('ocr-error-stage').style.display = 'none';
                 document.getElementById('saveDocBtn').style.display = 'none';
+                var dupBox = document.getElementById('duplicate-warning-box');
+                if (dupBox) dupBox.style.display = 'none';
+                var dzPreview = document.querySelector('#doc-library-dropzone-wrap .ciprms-dropzone-preview');
+                var dzPrompt = document.querySelector('#doc-library-dropzone-wrap .ciprms-dropzone-prompt');
+                if (dzPreview) dzPreview.style.display = 'none';
+                if (dzPrompt) dzPrompt.style.display = 'flex';
+            });
+        }
+
+        if (window.CIPRMS && CIPRMS.initDropzone) {
+            CIPRMS.initDropzone({
+                container: '#doc-library-dropzone-wrap',
+                input: '#fileInput',
+                title: 'Upload Document',
+                desc: 'PDF, JPG, JPEG, or PNG · Maximum 10MB',
+                onFileSelected: function (file) {
+                    startOcr();
+                }
             });
         }
     });
@@ -739,12 +936,18 @@
         }).join('');
     }
 
-    var currentDocId = null;
+    // currentJobId tracks the in-flight OCR job. Nothing is persisted to the DB
+    // until the user clicks "Save to Document Library" — the variable is set in
+    // the modal-shown handler above and mirrored here for use by the functions below.
+    var currentJobId = null;
 
     function startOcr() {
         var input = document.getElementById('fileInput');
         var file = input.files[0];
         if (!file) return;
+
+        // Reset any previously pending job.
+        currentJobId = null;
 
         document.getElementById('upload-stage').style.display = 'none';
         document.getElementById('result-stage').style.display = 'none';
@@ -771,6 +974,8 @@
                 docOcrFail((data && data.error) || 'Failed to start OCR processing.');
                 return;
             }
+            // Store the jobId — used by saveDocument() and the modal-close handler.
+            currentJobId = data.jobId;
             document.getElementById('ocr-stage-heading').textContent = 'OCR Processing…';
             document.getElementById('ocr-stage-detail').textContent = 'Extracting text and metadata. Please wait.';
             pollDocOcrStatus(data.jobId);
@@ -787,64 +992,165 @@
                 document.getElementById('ocr-modal-progress-bar').style.width = (data.progress || 0) + '%';
 
                 if (data.status === 'error') {
-                    // The file is still archived to the library even when OCR extraction fails.
-                    docOcrFail(data.error || 'OCR processing failed.', data.documentId);
+                    // OCR failed — the temp file has been deleted server-side; nothing was saved.
+                    docOcrFail(data.error || 'OCR processing failed.');
                     return;
                 }
-                if (data.status === 'done') { docOcrSucceed(data.result); return; }
+                if (data.status === 'done') { docOcrSucceed(data.result, jobId); return; }
                 setTimeout(function () { pollDocOcrStatus(jobId); }, 700);
             })
             .catch(function () { docOcrFail('Lost connection while checking OCR progress.'); });
     }
 
-    function docOcrFail(message, documentId) {
+    function docOcrFail(message) {
         document.getElementById('ocr-stage').style.display = 'none';
         var box = document.getElementById('ocr-error-stage');
-        box.textContent = documentId
-            ? message + ' The original file was still saved to the library — you can fill in its details manually.'
-            : message;
+        box.textContent = message;
         box.style.display = 'block';
-        loadDocuments();
+        // Nothing was saved — no need to reload the document list.
     }
 
-    function docOcrSucceed(result) {
-        currentDocId = result.documentId || null;
+    function docOcrSucceed(result, jobId) {
+        // Store the jobId (NOT a documentId — nothing has been saved yet).
+        currentJobId = jobId;
         document.getElementById('ocr-stage').style.display = 'none';
         document.getElementById('result-stage').style.display = 'block';
-        document.getElementById('saveDocBtn').style.display = currentDocId ? 'inline-block' : 'none';
+        // Always show the Save button — the user must explicitly confirm to save.
+        document.getElementById('saveDocBtn').style.display = 'inline-block';
 
         document.getElementById('res-title').value = result.title || '';
         document.getElementById('res-type').value = result.documentType || '';
         document.getElementById('res-inst').value = result.institution || result.partner || result.issuingBody || '';
         document.getElementById('res-validity').value = [result.startDate, result.endDate].filter(Boolean).join(' – ');
         document.getElementById('res-rawtext').value = result.rawText || '';
-        document.getElementById('res-confidence-badge').textContent = 'Confidence: ' + Math.round(result.confidence) + '%';
+        document.getElementById('res-confidence-badge').innerHTML = '<i class="ri-sparkling-fill me-1"></i>Confidence: ' + Math.round(result.confidence) + '%';
         document.getElementById('res-warning-badge').style.display = result.warning ? '' : 'none';
 
-        loadDocuments();
+        var fileNameEl = document.getElementById('res-file-name');
+        if (fileNameEl) fileNameEl.textContent = result.originalFilename || result.title || 'Uploaded Document';
+        var fileMetaEl = document.getElementById('res-file-meta');
+        // Document is NOT yet saved — make this clear to the user.
+        if (fileMetaEl) fileMetaEl.textContent = 'Ready to save' + (result.documentType ? ' · ' + result.documentType : '');
+
+        var dup = result.duplicateWarning;
+        var dupBox = document.getElementById('duplicate-warning-box');
+        var dupContainer = document.getElementById('duplicate-matches-container');
+        var successAlert = document.getElementById('result-success-alert');
+
+        if (dup && dup.found && dup.matches && dup.matches.length > 0) {
+            dupBox.style.display = 'block';
+            if (successAlert) successAlert.style.display = 'none';
+            dupContainer.innerHTML = dup.matches.map(function (m) {
+                return `
+                    <div class="card mb-2 border border-warning-subtle duplicate-match-card">
+                        <div class="card-body p-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="text-truncate" style="max-width: 72%;">
+                                <div class="fw-semibold text-truncate">
+                                    <span class="badge bg-primary-subtle text-primary me-1">${escHtml(m.type || 'Document')}</span>
+                                    ${escHtml(m.title || 'Untitled Document')}
+                                </div>
+                                <div class="fs-12 text-muted text-truncate mt-1">
+                                    <span><i class="ri-building-line me-1"></i>${escHtml(m.institution || '—')}</span> ·
+                                    <span><i class="ri-calendar-line me-1"></i>${escHtml(m.validity || '—')}</span> ·
+                                    <span class="text-warning fw-medium"><i class="ri-information-line me-1"></i>${escHtml(m.reason || 'Match')}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <a href="${escHtml(m.fileLink || '#')}" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary" title="Preview Existing Document">
+                                    <i class="ri-eye-line me-1"></i>Compare / Preview
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            dupBox.style.display = 'none';
+            if (successAlert) successAlert.style.display = 'block';
+        }
+        // Do NOT call loadDocuments() here — nothing has been saved yet.
     }
 
-    function saveDocument() {
-        if (!currentDocId) {
+    function discardDuplicateUpload() {
+        if (!currentJobId) {
             bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
             return;
         }
-        fetch('/api/documents/' + currentDocId, {
-            method: 'PATCH',
+        // Discard the temp file server-side without creating any DB record.
+        fetch('/api/ocr/discard', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                title: document.getElementById('res-title').value.trim(),
-                institution: document.getElementById('res-inst').value.trim(),
-                partner: document.getElementById('res-inst').value.trim()
-            })
+            body: JSON.stringify({ jobId: currentJobId })
         })
             .then(function (r) { return r.json(); })
             .then(function () {
+                currentJobId = null;
+                bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+                showToast('<i class="ri-information-line me-1"></i>Upload discarded.');
+            })
+            .catch(function () {
+                currentJobId = null;
+                bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+            });
+    }
+
+    function acknowledgeDuplicateAndContinue() {
+        document.getElementById('duplicate-warning-box').style.display = 'none';
+        var successAlert = document.getElementById('result-success-alert');
+        if (successAlert) successAlert.style.display = 'block';
+        saveDocument();
+    }
+
+    function toggleDuplicateDetails() {
+        var container = document.getElementById('duplicate-matches-container');
+        var text = document.getElementById('toggle-matches-text');
+        var icon = document.getElementById('toggle-matches-icon');
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            text.textContent = 'Hide Matches';
+            icon.className = 'ri-arrow-up-s-line me-1';
+        } else {
+            container.style.display = 'none';
+            text.textContent = 'Show Matches (' + container.children.length + ')';
+            icon.className = 'ri-arrow-down-s-line me-1';
+        }
+    }
+
+    function saveDocument() {
+        if (!currentJobId) {
+            bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
+            return;
+        }
+        var saveBtn = document.getElementById('saveDocBtn');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+
+        // POST /api/ocr/confirm — permanently archives the temp file and creates
+        // the Document Library record, with any user-edited field values merged in.
+        fetch('/api/ocr/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jobId: currentJobId,
+                title: document.getElementById('res-title').value.trim(),
+                institution: document.getElementById('res-inst').value.trim()
+            })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save to Document Library'; }
+                if (!data.success) {
+                    showToast('<i class="ri-error-warning-line me-1"></i>' + (data.error || 'Failed to save. Please try again.'), '#f06548');
+                    return;
+                }
+                currentJobId = null;
                 bootstrap.Modal.getInstance(document.getElementById('uploadModal'))?.hide();
                 loadDocuments();
-                showToast('<i class="ri-checkbox-circle-line me-1"></i>Document updated successfully.');
+                showToast('<i class="ri-checkbox-circle-line me-1"></i>Document saved to the library successfully.');
             })
-            .catch(function () { showToast('Failed to save edits — please try again.', '#f06548'); });
+            .catch(function () {
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save to Document Library'; }
+                showToast('<i class="ri-error-warning-line me-1"></i>Failed to save — please try again.', '#f06548');
+            });
     }
 
     // ── Toast (shared pattern used across CIPRMS pages) ──────────────────

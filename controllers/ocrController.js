@@ -5,6 +5,9 @@ const ocrService = require('../services/ocrService');
 // and immediately returns a jobId. The heavy work (rasterizing PDF pages,
 // running Tesseract) happens after the response so the client can poll for
 // real progress instead of blocking on one long request.
+// NOTE: This endpoint does NOT save anything to the Document Library. The file
+// is held in the temp uploads directory until the user either confirms (via
+// POST /api/ocr/confirm) or discards (via POST /api/ocr/discard).
 function extract(req, res) {
   if (!req.file) {
     return res.status(400).json({ success: false, error: 'No file was uploaded.' });
@@ -45,4 +48,70 @@ function status(req, res) {
   });
 }
 
-module.exports = { extract, status };
+// POST /api/ocr/confirm — called after the user reviews the OCR result and
+// explicitly clicks "Save to Document Library". Merges any user edits (title,
+// institution) with the extracted fields, then permanently archives the file.
+// Only the session owner of the job may confirm it.
+async function confirm(req, res) {
+  const { jobId, title, institution } = req.body || {};
+  if (!jobId) {
+    return res.status(400).json({ success: false, error: 'jobId is required.' });
+  }
+
+  const job = ocrService.getJob(jobId);
+  if (!job) {
+    return res.status(404).json({ success: false, error: 'Job not found or has expired. Please re-upload the document.' });
+  }
+  const sessionEmail = req.session && req.session.user && req.session.user.email;
+  if (job.uploadedByEmail && job.uploadedByEmail !== sessionEmail) {
+    return res.status(403).json({ success: false, error: 'You do not have access to this job.' });
+  }
+  if (job.confirmed) {
+    return res.status(409).json({ success: false, error: 'This upload has already been saved to the Document Library.' });
+  }
+
+  // User-supplied edits take precedence over OCR-extracted values.
+  const overrides = {};
+  if (title && title.trim()) overrides.title = title.trim();
+  if (institution && institution.trim()) {
+    overrides.institution = institution.trim();
+    overrides.partner = institution.trim();
+  }
+
+  try {
+    const session = (req.session && req.session.user) || {};
+    const archived = await ocrService.confirmJob(jobId, overrides, session);
+    res.json({ success: true, documentId: archived.documentId, fileLink: archived.fileLink });
+  } catch (err) {
+    console.error('❌ OCR confirm error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to save the document. Please try again.' });
+  }
+}
+
+// POST /api/ocr/discard — called when the user closes the modal without saving,
+// or clicks "Discard". Deletes the temporary file; nothing is written to the DB.
+async function discard(req, res) {
+  const { jobId } = req.body || {};
+  if (!jobId) {
+    // No jobId means nothing was uploaded — nothing to do.
+    return res.json({ success: true });
+  }
+
+  const job = ocrService.getJob(jobId);
+  if (job) {
+    const sessionEmail = req.session && req.session.user && req.session.user.email;
+    if (job.uploadedByEmail && job.uploadedByEmail !== sessionEmail) {
+      return res.status(403).json({ success: false, error: 'You do not have access to this job.' });
+    }
+  }
+
+  try {
+    await ocrService.discardJob(jobId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ OCR discard error:', err);
+    res.status(500).json({ success: false, error: 'Failed to discard upload.' });
+  }
+}
+
+module.exports = { extract, status, confirm, discard };
