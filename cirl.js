@@ -3581,6 +3581,16 @@ const REPORT_TYPE_IMPLIED_STATUS = {
   'Expiring Soon': 'Expiring Soon'
 };
 
+// Report Types that already encode a specific partnership status in their name.
+// When one of these is selected the implied status is AUTHORITATIVE — a
+// client-supplied status filter (stale DOM value, bookmarked URL, or a
+// manipulated query string) is ignored so it can never create a contradictory
+// result (e.g. reportType=Active Partnerships & status=Expired returning
+// zero records with a confusing "Active Partnerships" title).
+// For Summary (and any other type not in this set) the explicit status filter
+// is fully respected — the user controls which status subset to show.
+const STATUS_TYPED_REPORT_TYPES = new Set(Object.keys(REPORT_TYPE_IMPLIED_STATUS));
+
 async function computeCustomReportData(db, query, user) {
   const reportType = query.reportType || query.type || 'Summary';
   const cat = query.cat || '';
@@ -3628,9 +3638,15 @@ async function computeCustomReportData(db, query, user) {
 
   let docs = await db.collection('partnerships').find(filter).sort({ id: 1 }).toArray();
 
-  // Explicit Status filter always wins; otherwise fall back to whatever
-  // status the Report Type implies (see REPORT_TYPE_IMPLIED_STATUS above).
-  const effectiveStatusFilter = statusFilter || REPORT_TYPE_IMPLIED_STATUS[reportType] || '';
+  // Status resolution — two cases:
+  // 1. Status-typed Report Type (Active Partnerships, Expired Partnerships, etc.):
+  //    The implied status is AUTHORITATIVE. A client-supplied status value is
+  //    ignored so a stale/manipulated filter cannot contradict the Report Type.
+  // 2. Summary (or any non-status-typed type):
+  //    The user's explicit Status filter is respected; no implied status exists.
+  const effectiveStatusFilter = STATUS_TYPED_REPORT_TYPES.has(reportType)
+    ? REPORT_TYPE_IMPLIED_STATUS[reportType]
+    : (statusFilter || '');
 
   // Mid-Year/Yearly Output Report: strictly the CURRENT calendar year/half-
   // year, computed server-side from the server's own clock — a client-

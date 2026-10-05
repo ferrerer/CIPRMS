@@ -39,6 +39,27 @@
       [data-bs-theme="dark"] .cr-country-dropdown { background: #2a2f3c; border-color: #3a4053; box-shadow: 0 10px 28px rgba(0,0,0,.4); }
       [data-bs-theme="dark"] .cr-country-option { color: #d3d5db; }
       [data-bs-theme="dark"] .cr-country-option:hover { background: #363c4c; color: #a9bcf5; }
+
+      /* ── Status field disabled state (Report Type encodes the status) ─────── */
+      #cr-status:disabled,
+      .cr-status-disabled select:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      .cr-status-disabled label {
+        opacity: 0.55;
+      }
+      .cr-status-disabled .form-text {
+        font-style: italic;
+      }
+      /* dark-mode parity */
+      [data-bs-theme="dark"] #cr-status:disabled,
+      [data-bs-theme="dark"] .cr-status-disabled select:disabled {
+        background-color: #2a2f3c;
+        border-color: #3a4053;
+        color: #6c757d;
+      }
     </style>
 </head>
 
@@ -343,8 +364,8 @@
                                                             <option>MOU</option>
                                                         </select>
                                                     </div>
-                                                    <div class="col-xl-3 col-md-6">
-                                                        <label class="form-label fw-semibold">Status</label>
+                                                    <div class="col-xl-3 col-md-6" id="cr-status-col">
+                                                        <label class="form-label fw-semibold" for="cr-status">Status</label>
                                                         <select class="form-select" id="cr-status">
                                                             <option value="">All</option>
                                                             <option>Active</option>
@@ -352,6 +373,7 @@
                                                             <option>Expired</option>
                                                             <option>Inactive</option>
                                                         </select>
+                                                        <div class="form-text" id="cr-status-hint" style="display:none;">Controlled by the selected Report Type.</div>
                                                     </div>
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">Country</label>
@@ -877,12 +899,16 @@
             window.open('/api/reports/activitylog/excel', '_blank');
         }
 
-        // Report Type options that name a status ("Active Partnerships", etc.)
-        // imply that status server-side even if the Status filter is left at
-        // "All" (see computeCustomReportData's REPORT_TYPE_IMPLIED_STATUS) —
-        // sync the Status filter to match so the builder never silently shows
-        // a status the admin didn't ask for. An explicit Status filter choice
-        // still always wins if the admin changes it afterward.
+        // Report Type options that name a specific status ("Active Partnerships",
+        // "Inactive Partnerships", etc.) make the Status field redundant and
+        // potentially conflicting. When one of these types is selected:
+        //   - The Status dropdown is disabled and visually dimmed.
+        //   - Its value is cleared so it cannot accidentally reach the backend.
+        //   - The hint below the field explains why it is disabled.
+        // When "Summary" (or any non-status-typed type) is selected, the Status
+        // field is re-enabled and reset to "All", matching the default state.
+        // This mirrors REPORT_TYPE_IMPLIED_STATUS / STATUS_TYPED_REPORT_TYPES in
+        // cirl.js — keep the two lists in sync if new report types are added.
         var REPORT_TYPE_IMPLIED_STATUS = {
             'Active Partnerships': 'Active',
             'Active List': 'Active',
@@ -891,11 +917,35 @@
             'Expired List': 'Expired',
             'Expiring Soon': 'Expiring Soon'
         };
-        function onReportTypeChange() {
-            var reportType = document.getElementById('cr-type').value;
-            var implied = REPORT_TYPE_IMPLIED_STATUS[reportType];
-            if (implied) document.getElementById('cr-status').value = implied;
+        var STATUS_TYPED_REPORT_TYPES = Object.keys(REPORT_TYPE_IMPLIED_STATUS);
+
+        // Apply the disable/enable rule to a report-type select + status select pair.
+        // statusHintId is optional — if supplied the hint text is shown/hidden too.
+        function applyStatusFieldState(reportTypeEl, statusEl, statusHintId, colId) {
+            if (!reportTypeEl || !statusEl) return;
+            var isStatusTyped = STATUS_TYPED_REPORT_TYPES.indexOf(reportTypeEl.value) !== -1;
+            statusEl.disabled = isStatusTyped;
+            if (isStatusTyped) statusEl.value = '';
+            // Toggle disabled class on the parent column for visual dimming
+            var col = colId ? document.getElementById(colId) : statusEl.closest('[class*="col-"]');
+            if (col) col.classList.toggle('cr-status-disabled', isStatusTyped);
+            if (statusHintId) {
+                var hint = document.getElementById(statusHintId);
+                if (hint) hint.style.display = isStatusTyped ? '' : 'none';
+            }
         }
+
+        function onReportTypeChange() {
+            var typeEl   = document.getElementById('cr-type');
+            var statusEl = document.getElementById('cr-status');
+            applyStatusFieldState(typeEl, statusEl, 'cr-status-hint', 'cr-status-col');
+        }
+
+        // Apply the state once on DOMContentLoaded so the correct initial state
+        // is set even if the page is loaded with a pre-selected report type.
+        document.addEventListener('DOMContentLoaded', function () {
+            onReportTypeChange();
+        });
 
         // From later than To can never match anything, and used to come back as an unexplained empty report. Flagged on the
         // fields instead, and nothing is requested. Empty dates never filter, and one bound alone is fine.
@@ -957,6 +1007,9 @@
             document.getElementById('cr-date-to').value = '';
             document.getElementById('cr-date-from').classList.remove('is-invalid');
             document.getElementById('cr-date-to').classList.remove('is-invalid');
+            // Re-enable and reset the Status field whenever filters are reset,
+            // since Summary (the default) never disables Status.
+            onReportTypeChange();
         }
 
         function exportReport(format, params) {
@@ -1335,8 +1388,20 @@
         // agtype/status/country/unit) plus Group By — every input id follows the
         // cmpcfg-{id}-{field} convention so each card's state lives independently
         // in the DOM and is never shared with any other card.
+        //
+        // Mid-Year and Yearly Output Report are intentionally omitted from the
+        // Comparison Report Type dropdown: they are not present in the primary
+        // Custom Report Builder's Report Type field (they are fixed tile exports,
+        // not user-configurable report types) and having them only in the
+        // Comparison section created an inconsistent and confusing UX.
         function renderConfigCardHtml(id, index, prefill) {
             prefill = prefill || {};
+            var sel = function (field, val) {
+                return prefill[field] === val ? ' selected' : '';
+            };
+            var isStatusTyped = STATUS_TYPED_REPORT_TYPES.indexOf(prefill.reportType || 'Summary') !== -1;
+            var statusDisabledAttr = isStatusTyped ? ' disabled' : '';
+            var statusHintStyle    = isStatusTyped ? '' : 'display:none;';
             return '' +
                 '<div class="card border mb-3" data-cmp-id="' + id + '">' +
                 '  <div class="card-body">' +
@@ -1351,28 +1416,28 @@
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Report Type</label>' +
-                '        <select class="form-select" id="cmpcfg-' + id + '-reportType">' +
-                '          <option value="Summary"' + (prefill.reportType === 'Summary' || !prefill.reportType ? ' selected' : '') + '>Summary</option>' +
-                '          <option value="Active Partnerships"' + (prefill.reportType === 'Active Partnerships' ? ' selected' : '') + '>Active Partnerships</option>' +
-                '          <option value="Expiring Soon"' + (prefill.reportType === 'Expiring Soon' ? ' selected' : '') + '>Expiring Soon</option>' +
-                '          <option value="Expired Partnerships"' + (prefill.reportType === 'Expired Partnerships' ? ' selected' : '') + '>Expired Partnerships</option>' +
-                '          <option value="Mid-Year"' + (prefill.reportType === 'Mid-Year' ? ' selected' : '') + '>Mid-Year Report</option>' +
-                '          <option value="Yearly"' + (prefill.reportType === 'Yearly' ? ' selected' : '') + '>Yearly Output Report</option>' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-reportType" onchange="onCmpReportTypeChange(' + id + ')">' +
+                '          <option value="Summary"'      + sel('reportType', 'Summary')      + '>Summary</option>' +
+                '          <option value="Active Partnerships"' + sel('reportType', 'Active Partnerships') + '>Active Partnerships</option>' +
+                '          <option value="Inactive Partnerships"' + sel('reportType', 'Inactive Partnerships') + '>Inactive Partnerships</option>' +
+                '          <option value="Expiring Soon"' + sel('reportType', 'Expiring Soon') + '>Expiring Soon</option>' +
+                '          <option value="Expired Partnerships"' + sel('reportType', 'Expired Partnerships') + '>Expired Partnerships</option>' +
                 '        </select>' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Category</label>' +
                 '        <input type="text" class="form-control" id="cmpcfg-' + id + '-cat" value="' + escapeHtml(prefill.cat || '') + '">' +
                 '      </div>' +
-                '      <div class="col-xl-3 col-md-6">' +
+                '      <div class="col-xl-3 col-md-6' + (isStatusTyped ? ' cr-status-disabled' : '') + '">' +
                 '        <label class="form-label fw-semibold">Status</label>' +
-                '        <select class="form-select" id="cmpcfg-' + id + '-status">' +
+                '        <select class="form-select" id="cmpcfg-' + id + '-status"' + statusDisabledAttr + '>' +
                 '          <option value="">All</option>' +
-                '          <option value="Active"' + (prefill.status === 'Active' ? ' selected' : '') + '>Active</option>' +
+                '          <option value="Active"'        + (prefill.status === 'Active'        ? ' selected' : '') + '>Active</option>' +
                 '          <option value="Expiring Soon"' + (prefill.status === 'Expiring Soon' ? ' selected' : '') + '>Expiring Soon</option>' +
-                '          <option value="Expired"' + (prefill.status === 'Expired' ? ' selected' : '') + '>Expired</option>' +
-                '          <option value="Inactive"' + (prefill.status === 'Inactive' ? ' selected' : '') + '>Inactive</option>' +
+                '          <option value="Expired"'       + (prefill.status === 'Expired'       ? ' selected' : '') + '>Expired</option>' +
+                '          <option value="Inactive"'      + (prefill.status === 'Inactive'      ? ' selected' : '') + '>Inactive</option>' +
                 '        </select>' +
+                '        <div class="form-text" id="cmpcfg-' + id + '-status-hint" style="' + statusHintStyle + '">Controlled by the selected Report Type.</div>' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Date From</label>' +
@@ -1401,7 +1466,7 @@
                 '        <label class="form-label fw-semibold">College / Unit</label>' +
                 '        <select class="form-select" id="cmpcfg-' + id + '-unit">' +
                 '          <option value="">All Units</option>' +
-                '          <option value="CCS"' + (prefill.unit === 'CCS' ? ' selected' : '') + '>CCS</option>' +
+                '          <option value="CCS"'  + (prefill.unit === 'CCS'  ? ' selected' : '') + '>CCS</option>' +
                 '          <option value="CILS"' + (prefill.unit === 'CILS' ? ' selected' : '') + '>CILS</option>' +
                 '          <option value="CETE"' + (prefill.unit === 'CETE' ? ' selected' : '') + '>CETE</option>' +
                 '          <option value="CNAS"' + (prefill.unit === 'CNAS' ? ' selected' : '') + '>CNAS</option>' +
@@ -1414,17 +1479,32 @@
                 '        <select class="form-select" id="cmpcfg-' + id + '-groupBy">' +
                 '          <option value="">None</option>' +
                 '          <option value="country"' + (prefill.groupBy === 'country' ? ' selected' : '') + '>Country</option>' +
-                '          <option value="inst"' + (prefill.groupBy === 'inst' ? ' selected' : '') + '>Institution</option>' +
-                '          <option value="unit"' + (prefill.groupBy === 'unit' ? ' selected' : '') + '>College / Unit</option>' +
-                '          <option value="region"' + (prefill.groupBy === 'region' ? ' selected' : '') + '>Region</option>' +
-                '          <option value="type"' + (prefill.groupBy === 'type' ? ' selected' : '') + '>Agreement Type</option>' +
-                '          <option value="nature"' + (prefill.groupBy === 'nature' ? ' selected' : '') + '>Nature of Partnership</option>' +
-                '          <option value="cat"' + (prefill.groupBy === 'cat' ? ' selected' : '') + '>Category</option>' +
+                '          <option value="inst"'    + (prefill.groupBy === 'inst'    ? ' selected' : '') + '>Institution</option>' +
+                '          <option value="unit"'    + (prefill.groupBy === 'unit'    ? ' selected' : '') + '>College / Unit</option>' +
+                '          <option value="region"'  + (prefill.groupBy === 'region'  ? ' selected' : '') + '>Region</option>' +
+                '          <option value="type"'    + (prefill.groupBy === 'type'    ? ' selected' : '') + '>Agreement Type</option>' +
+                '          <option value="nature"'  + (prefill.groupBy === 'nature'  ? ' selected' : '') + '>Nature of Partnership</option>' +
+                '          <option value="cat"'     + (prefill.groupBy === 'cat'     ? ' selected' : '') + '>Category</option>' +
                 '        </select>' +
                 '      </div>' +
                 '    </div>' +
                 '  </div>' +
                 '</div>';
+        }
+
+        // Called by each comparison card's Report Type <select onchange>.
+        // Applies the same disable/enable/clear rule as the primary builder.
+        function onCmpReportTypeChange(id) {
+            var typeEl   = document.getElementById('cmpcfg-' + id + '-reportType');
+            var statusEl = document.getElementById('cmpcfg-' + id + '-status');
+            if (!typeEl || !statusEl) return;
+            var isStatusTyped = STATUS_TYPED_REPORT_TYPES.indexOf(typeEl.value) !== -1;
+            statusEl.disabled = isStatusTyped;
+            if (isStatusTyped) statusEl.value = '';
+            var hint = document.getElementById('cmpcfg-' + id + '-status-hint');
+            if (hint) hint.style.display = isStatusTyped ? '' : 'none';
+            var col = statusEl.closest('[class*="col-"]');
+            if (col) col.classList.toggle('cr-status-disabled', isStatusTyped);
         }
 
         function renumberComparisonConfigTitles() {

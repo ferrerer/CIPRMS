@@ -56,7 +56,8 @@ describe('Custom Report Builder — backend Report Type / filter / Group By beha
     adminAgent = request.agent(app);
     await loginAs(adminAgent, await createTestUser({ role: 'Administrator' }));
 
-    const last = (await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray())[0].id;
+    const lastDoc = (await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray())[0];
+    const last = lastDoc ? lastDoc.id : 0;
     const fixtures = [
       { id: last + 1, inst: `${TAG} Active`, country: 'Japan', type: 'MOA', cat: 'International', unit: ['CCS'], nature: ['Research'], region: 'Asia', status: 'Active', start: fmt(daysFromNow(-30)), end: fmt(daysFromNow(365)) },
       { id: last + 2, inst: `${TAG} ExpiringSoon`, country: 'Japan', type: 'MOU', cat: 'International', unit: ['CETE'], nature: ['Training'], region: 'Asia', status: 'Active', start: fmt(daysFromNow(-300)), end: fmt(daysFromNow(30)) },
@@ -104,16 +105,30 @@ describe('Custom Report Builder — backend Report Type / filter / Group By beha
     expect(own(res.body.records).length).toBe(3);
   });
 
-  test('an explicit Status filter overrides whatever the Report Type implies', async () => {
+  // Behavior change (2026-10-05): STATUS_TYPED_REPORT_TYPES — when the Report
+  // Type already encodes a specific status (Active Partnerships, Expired
+  // Partnerships, etc.), the implied status is now AUTHORITATIVE.  A
+  // conflicting explicit status filter is ignored so it can never produce a
+  // contradictory result (e.g. "Active Partnerships" title with Expired records).
+  // The old assertion (explicit status always wins) tested the behaviour that
+  // was the root cause of the conflicting-filter bug; it is intentionally
+  // replaced here to match the new correct expectation.
+  test('for a status-typed Report Type, the implied status is authoritative — a conflicting explicit status filter is ignored', async () => {
     const res = await adminAgent.get('/api/reports/custom/preview').query({ reportType: 'Active Partnerships', status: 'Expired', inst: TAG });
     const mine = own(res.body.records);
-    expect(mine.length).toBe(1);
-    expect(mine[0].status).toBe('Expired');
+    // Only Active records should be returned; the stale status=Expired is ignored
+    expect(mine.every(p => p.status === 'Active')).toBe(true);
+    expect(res.body.filters.status).toBe('Active');
   });
 
+  // filterByDateRange uses getRelevantPartnershipDate which returns doc.start
+  // for non-expiry-centric reports (Summary / no status).  dateFrom therefore
+  // filters by START date: include only partnerships whose start >= dateFrom.
+  // Using dateFrom = 100 days ago puts it between Expired (start = -800 days,
+  // excluded) and Active (start = -30 days, included) — the correct boundary.
   test('Date From with no Date To still correctly bounds the result (an ended record before it is excluded)', async () => {
-    const farFuture = new Date(); farFuture.setDate(farFuture.getDate() + 200);
-    const res = await adminAgent.get('/api/reports/custom/preview').query({ dateFrom: farFuture.toISOString().slice(0, 10), inst: TAG });
+    const boundaryDate = new Date(); boundaryDate.setDate(boundaryDate.getDate() - 100); // between -800 (Expired) and -30 (Active)
+    const res = await adminAgent.get('/api/reports/custom/preview').query({ dateFrom: boundaryDate.toISOString().slice(0, 10), inst: TAG });
     const mine = own(res.body.records);
     expect(mine.some(p => p.inst === `${TAG} Expired`)).toBe(false);
     expect(mine.some(p => p.inst === `${TAG} Active`)).toBe(true);
