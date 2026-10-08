@@ -119,7 +119,11 @@ describe('Reports — Custom Report Builder date filter UI and Audit Trail searc
   });
 
   test('the builder explains what the dates mean, and Reset clears any date error', () => {
-    expect(src).toContain('overlaps the dates you choose');
+    // 2026-10-08: this text used to describe period-overlap semantics ("overlaps the dates you choose"),
+    // which was never what the backend date filter (computeCustomReportData()/filterByDateRange(), cirl.js)
+    // actually does — corrected to describe the real strict inclusive-boundary behavior instead.
+    // See test/custom-report-date-range.test.js for the backend behavior this text now matches.
+    expect(src).toContain('on or between Date From and Date To');
     expect(src).toContain("document.getElementById('cr-date-from').classList.remove('is-invalid');");
   });
 
@@ -130,12 +134,14 @@ describe('Reports — Custom Report Builder date filter UI and Audit Trail searc
   });
 
   test('the Audit Trail search placeholder names only what the search really matches', () => {
-    expect(src).toContain("language: { search: { placeholder: 'Search action, record, performed by or date…' } }");
-    // the searchable columns of the grid are exactly: #, Action, Record / Details, Performed By, Role, Date & Time
+    // 2026-10-21 login-attempt audit logging investigation: the grid gained Category/Status/IP Address
+    // columns, so the placeholder was widened to match — it must still name only real, searchable columns.
+    expect(src).toContain("language: { search: { placeholder: 'Search action, category, record, performed by, IP or date…' } }");
+    // the searchable columns of the grid are exactly: #, Action, Category, Status, Record / Details, Performed By, Role, IP Address, Date & Time
     expect(src).toContain("{ name: 'Record / Details'");
-    expect(src).toContain("{ name: 'Performed By' }");
+    expect(src).toContain("{ name: 'Performed By'");
     expect(src).toContain("{ name: 'Date & Time' }");
-    expect(src).not.toMatch(/placeholder: 'Search[^']*(institution|partner|country|status)/i);
+    expect(src).not.toMatch(/placeholder: 'Search[^']*(institution|partner|country)/i);
   });
 
   test('the placeholder is readable in both themes and ellipsised, scoped to the Audit Trail so other tables keep the system-wide hidden placeholder (version bumped)', () => {

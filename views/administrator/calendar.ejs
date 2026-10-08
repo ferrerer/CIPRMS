@@ -308,7 +308,11 @@
                                                 <tbody id="attendance-body"></tbody>
                                             </table>
                                         </div>
-                                        <p class="text-muted fs-12 mt-3 mb-0">Invited means the user was added to the meeting; Joined means they clicked Join once the meeting started. The join time is recorded by the server.</p>
+                                        <%- /* 2026-10-08: Google Meet access-tracking investigation — the only join event CIPRMS can ever see is a
+                                             click on its own Join button (the one thing that reaches this server); someone who opens the Google
+                                             Calendar invitation e-mail's own Meet button, or opens the meeting link directly, joins without CIPRMS
+                                             knowing. Said plainly here instead of letting "Joined" read as a verified Google Meet attendance count. */ %>
+                                        <p class="text-muted fs-12 mt-3 mb-0">Invited means the user was added to the meeting; Joined means they clicked this app's Join button once the meeting started — the time shown is recorded by the server. CIPRMS can only see joins through that button: someone who opened the Google Meet link directly (e.g. from the Google Calendar invitation e-mail) without clicking it here will not appear as Joined.</p>
                                     </div>
                                 </div>
                             </div>
@@ -600,16 +604,19 @@ function openAttendance(){
   fetch('/api/calendarevents/' + id + '/attendance').then(function(r){ return r.json(); }).then(function(d){
     if(d.error){ showToast(d.error, '#f06548'); return; }
     document.getElementById('attendance-title').textContent = d.event.title + ' \u2014 Attendance';
-    document.getElementById('attendance-meta').textContent = (d.event.startsAtDisplay ? 'Starts ' + d.event.startsAtDisplay + ' (' + d.timeZone + '). ' : '') + d.summary.joined + ' of ' + d.summary.invited + ' invited participant' + (d.summary.invited === 1 ? '' : 's') + ' joined.';
+    document.getElementById('attendance-meta').textContent = (d.event.startsAtDisplay ? 'Starts ' + d.event.startsAtDisplay + ' (' + d.timeZone + '). ' : '') + d.summary.joined + ' of ' + d.summary.invited + ' invited participant' + (d.summary.invited === 1 ? '' : 's') + ' joined via CIPRMS.';
     var warn = [];
     if(d.google.status !== 'sent') warn.push(d.google.status === 'not_connected' ? 'Google Calendar is not connected \u2014 no invitation e-mails were sent.' : d.google.status === 'failed' ? 'Google Calendar did not send the invitation: ' + esc(d.google.error || 'unknown error') : 'No Google Calendar invitation was sent for this event.');
     (d.skipped || []).forEach(function(s){ warn.push('Not e-mailed: ' + esc(s.name || s.email || 'Unknown user') + (s.name && s.email ? ' (' + esc(s.email) + ')' : '') + ' \u2014 ' + esc(s.reason)); });
     var w = document.getElementById('attendance-warning'); w.innerHTML = warn.join('<br>'); w.classList.toggle('d-none', !warn.length);
     document.getElementById('attendance-body').innerHTML = d.participants.length ? d.participants.map(function(p){
       var joined = p.status === 'Joined';
+      // A re-open (clicked Join again later, e.g. after dropping off and coming back) shows a small note next
+      // to the first join time instead of a whole extra column \u2014 nothing to say when it never happened.
+      var reaccess = joined && p.lastAccessDisplay ? ' <span class="text-muted fs-11">(reopened ' + esc(p.lastAccessDisplay) + ')</span>' : '';
       return '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.role) + '</td><td class="text-break">' + esc(p.email) + '</td><td>' + esc(p.invitation) + '</td>'
-        + '<td><span class="badge ' + (joined ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary') + '">' + esc(p.status) + '</span></td>'
-        + '<td' + (joined ? ' title="' + esc(p.joinedDateDisplay) + ' (' + esc(d.timeZone) + ')"' : '') + '>' + (joined ? esc(p.joinedAtDisplay) : '\u2014') + '</td></tr>';
+        + '<td><span class="badge ' + (joined ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary') + '" title="' + (joined ? 'Joined via CIPRMS\u2019 own Join button \u2014 not a Google Meet participation record' : 'No CIPRMS Join click was recorded for this person') + '">' + esc(p.status) + '</span></td>'
+        + '<td' + (joined ? ' title="' + esc(p.joinedDateDisplay) + ' (' + esc(d.timeZone) + ')"' : '') + '>' + (joined ? esc(p.joinedAtDisplay) : '\u2014') + reaccess + '</td></tr>';
     }).join('') : '<tr><td colspan="6" class="text-muted text-center">Nobody was invited to this event.</td></tr>';
     setBreadcrumb(['Calendar', d.event.title, 'Attendance']);
     swappingToAttendance = true;

@@ -48,7 +48,11 @@ describe('Login', () => {
   test('rejects an invalid password with a generic error', async () => {
     const user = await createTestUser({ role: 'Staff' });
     const res = await request(app).post('/login').type('form').send({ username: user.email, password: 'WrongPassword1' });
-    expect(res.status).toBe(200);
+    // 401 (2026-10-28 brute-force-protection investigation): a real, non-200 status on every failed login is
+    // what lets the rate limiter's skipSuccessfulRequests correctly count this as a failure instead of
+    // silently treating every login outcome (success or failure) as "successful" — see cirl.js's own comment
+    // on this at the top of the /login route.
+    expect(res.status).toBe(401);
     expect(res.text).toMatch(/invalid email or password/i);
   });
 

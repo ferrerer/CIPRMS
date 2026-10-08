@@ -217,7 +217,9 @@ describe('Audit trail: stored text is raw; every DISPLAY of it uses the new name
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(res.body);
     const rows = [];
-    wb.worksheets[0].eachRow(row => rows.push({ record: String(row.getCell(2).value || ''), by: String(row.getCell(3).value || ''), role: String(row.getCell(4).value || '') }));
+    // Column positions shifted (2026-10-21 login-audit-logging investigation added Category/Status columns
+    // between Action and Record/Details): Action=1, Category=2, Status=3, Record/Details=4, Performed By=5, Role=6.
+    wb.worksheets[0].eachRow(row => rows.push({ record: String(row.getCell(4).value || ''), by: String(row.getCell(5).value || ''), role: String(row.getCell(6).value || '') }));
     return rows;
   };
 

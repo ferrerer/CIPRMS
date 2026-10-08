@@ -1473,8 +1473,10 @@ describe('Audit Trail: Staff sees only their own records (privacy boundary)', ()
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(excelRes.body);
     let sawOwnEntry = false, sawOtherStaffEntry = false;
+    // Record/Details moved to column 4 (2026-10-21 login-audit-logging investigation added Category/Status
+    // columns between Action and Record/Details: Action=1, Category=2, Status=3, Record/Details=4).
     workbook.worksheets[0].eachRow(row => {
-      const text = String(row.getCell(2).value || '');
+      const text = String(row.getCell(4).value || '');
       if (text.includes('jesttest Staff A private report')) sawOwnEntry = true;
       if (text.includes('jesttest Staff B private report')) sawOtherStaffEntry = true;
     });

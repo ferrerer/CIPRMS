@@ -39,11 +39,30 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "accounts.google.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "accounts.google.com", "unpkg.com"],
+      // helmet's own CSP defaults (applied underneath whatever this object overrides — see
+      // https://github.com/helmetjs/helmet#content-security-policy) set script-src-attr to 'none'
+      // regardless of scriptSrc above, which disables every inline onclick="..." attribute in the
+      // app (almost every button site-wide uses that pattern) even though inline <script> tags
+      // (governed by scriptSrc, 'unsafe-inline' already allowed there) kept working. Confirmed live
+      // in a real browser: "Executing inline event handler violates ... 'script-src-attr 'none''"
+      // on every onclick click. Explicitly matching scriptSrc's existing 'unsafe-inline' here closes
+      // that gap without loosening anything the directive above didn't already allow.
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"],
       fontSrc: ["'self'", "fonts.gstatic.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
-      imgSrc: ["'self'", "data:", "lh3.googleusercontent.com", "blob:"],
-      connectSrc: ["'self'"],
+      // tile.openstreetmap.org: the dashboard map's OSM raster-tile fallback loads actual <img> tiles
+      // (Leaflet's L.tileLayer), governed by img-src, not connect-src. flagcdn.com: the Top Partner
+      // Countries flag icons (admin_dashboard.ejs) — a plain <img src>, also img-src.
+      imgSrc: ["'self'", "data:", "lh3.googleusercontent.com", "blob:", "tile.openstreetmap.org", "flagcdn.com"],
+      // tiles.openfreemap.org: the dashboard map's normal vector basemap (MapLibre GL) fetches its style
+      // JSON, vector tiles (.pbf) and font glyphs via fetch()/XHR, governed by connect-src.
+      connectSrc: ["'self'", "unpkg.com", "tiles.openfreemap.org"],
+      // MapLibre GL runs its own tile/style processing on a Worker it spins up from a blob: URL — with no
+      // worker-src directive this falls back to script-src, which doesn't allow blob:, so every worker
+      // creation was silently rejected (confirmed live: "Creating a worker from 'blob:...' violates ...
+      // script-src") and the map never finished loading. A dedicated worker-src covers exactly that case.
+      workerSrc: ["'self'", "blob:"],
       frameSrc: ["'none'"],
       objectSrc: ["'none'"]
     }
@@ -105,7 +124,11 @@ function generateTempPassword() {
 // live during Roadmap v2 Phase G2 verification: probing /api/institutions to
 // confirm its limiter worked left zero budget for a same-IP admin password
 // change moments later, using an earlier draft that shared one instance.
-function makeRateLimiter(jsonMessage, htmlHandler) {
+// `extraOptions` (2026-10-28 brute-force-protection investigation) merges straight into the rateLimit()
+// config — currently only the two login limiters below use it (skipSuccessfulRequests, and the per-account
+// one's own keyGenerator/skip). Every other limiter built by this factory keeps its exact previous behavior:
+// an omitted 3rd argument spreads as {}.
+function makeRateLimiter(jsonMessage, htmlHandler, extraOptions) {
   if (process.env.NODE_ENV === 'test') return (req, res, next) => next();
   return rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -113,16 +136,63 @@ function makeRateLimiter(jsonMessage, htmlHandler) {
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: jsonMessage },
-    ...(htmlHandler ? { handler: htmlHandler } : {})
+    ...(htmlHandler ? { handler: htmlHandler } : {}),
+    ...(extraOptions || {})
   });
 }
 
+// Shared by both login limiters below (IP-keyed and account-keyed) so a blocked request always produces
+// exactly one LOGIN_BLOCKED row — whichever limiter actually tripped calls express-rate-limit's own handler
+// instead of next(), so the /login route body never runs for that request and the other limiter never even
+// gets a chance to also fire; see the two call sites for why this can't double-log. `scope` is never shown to
+// the client (the response text is identical either way, by design — never reveal internal rate-limit
+// configuration) but is kept in the audit record's own `details` for whoever reviews the Audit Trail
+// afterward: "many IPs hammering one account" and "one IP hammering many accounts" are different incidents.
+function makeLoginBlockedHandler(scope) {
+  return async (req, res) => {
+    await logActivity(getDb(), null, 'LOGIN_BLOCKED', `Login rate-limited${req.body && typeof req.body.username === 'string' && req.body.username ? ' for ' + req.body.username.trim().slice(0, 200) : ''}`,
+      { category: 'Authentication', status: 'blocked', targetType: 'login_attempt', targetId: safeLoginIdentifier(req.body && req.body.username), ip: getClientIp(req), userAgent: getClientUserAgent(req), requestId: req.sessionID || null, details: { reason: 'rate_limited', scope } });
+    res.status(429).render('index', {
+      activePage: '',
+      error: 'Too many login attempts. Please wait 15 minutes and try again.'
+    });
+  };
+}
+
+// Per-IP: unchanged threshold/window from before this investigation (10 attempts / 15 minutes — the project's
+// existing login-security posture, reused rather than inventing a new number). `skipSuccessfulRequests: true`
+// is new: a login that actually succeeds no longer eats into this budget, so a normal user who mistypes their
+// password a couple of times and then gets in is not left sitting closer to a lockout for the rest of the
+// day purely for having succeeded. This only works correctly because the /login route below now answers a
+// failed attempt with a real 4xx/5xx status (previously always 200) — see 2026-10-28 brute-force-protection
+// investigation in the final report: skipSuccessfulRequests decides "successful" as statusCode < 400, so
+// against the old all-200 responses it would have silently skipped counting FAILURES too, not just successes.
 const loginLimiter = makeRateLimiter(
   'Too many login attempts. Please wait 15 minutes and try again.',
-  (req, res) => res.status(429).render('index', {
-    activePage: '',
-    error: 'Too many login attempts. Please wait 15 minutes and try again.'
-  })
+  makeLoginBlockedHandler('ip'),
+  { skipSuccessfulRequests: true }
+);
+
+// Per-account: new. The IP limiter alone protects the network it's watching, but does nothing for ONE
+// targeted account being brute-forced from many different IPs (a botnet, or just an attacker who isn't
+// behind a single stable address) — and a shared office/NAT IP already fully protects every account behind
+// it from a stranger outside it, but offers no protection between two users ON that same IP, including one
+// deliberately attacking a co-worker's account from a desk down the hall. Keyed by the exact string the
+// client submitted (normalized the same way the login lookup itself normalizes it — trim + lowercase), NOT
+// by whether that string turns out to be a real account: keying on "is this a real email" would need a DB
+// read before the rate limiter can even run, and would itself leak existence through timing; keying on the
+// raw input avoids both. Same 10/15-minute budget as the IP limiter, for the same "don't invent a new
+// number" reason. `skip` deliberately excludes a request with no usable identifier at all (empty/non-string
+// username) — that case has no real account to protect and already can't drain anyone else's budget; it is
+// still fully covered by the IP limiter above either way.
+const loginIdentifierLimiter = makeRateLimiter(
+  'Too many login attempts. Please wait 15 minutes and try again.',
+  makeLoginBlockedHandler('account'),
+  {
+    skipSuccessfulRequests: true,
+    skip: (req) => !(req.body && typeof req.body.username === 'string' && req.body.username.trim()),
+    keyGenerator: (req) => req.body.username.trim().toLowerCase()
+  }
 );
 
 // Closes S11 (Roadmap v2 Phase G2, docs/SYSTEM_AUDIT_2026-07-16.md) — /signup,
@@ -338,6 +408,25 @@ passport.deserializeUser(function (user, done) {
  * Every other caller — page navigation, tests, anything else — keeps the redirect exactly as before.
  */
 function denyAccess(req, res, status, redirectTo) {
+  // Audit only the 403 (logged in, but this role is not allowed to do this) case, not every plain 401 — a 401
+  // fires on ANY visit to a protected URL before signing in at all (a bookmark, a stale tab, a session that
+  // expired during normal use), which is routine and would flood the Audit Trail with noise rather than
+  // security-relevant signal (see the 2026-10-21 audit-logging investigation: "do not audit every harmless
+  // request"). A 403 is a signed-in account actually attempting something its role forbids — the genuinely
+  // actionable "forbidden RBAC action" case the Audit Trail should surface. Fire-and-forget: this guard runs
+  // on the hot path of nearly every request, and must never add a database round-trip to an already-denied
+  // request's latency or make the deny itself depend on the audit write succeeding.
+  if (status === 403 && req.session && req.session.user) {
+    // Extra try/catch beyond logActivity's own (rather than relying on it alone): denyAccess is a hot path hit
+    // by nearly every forbidden request app-wide, and getDb() itself — called here, not inside logActivity —
+    // throws synchronously if the DB handle somehow isn't ready; that must never propagate out of a guard
+    // whose only job is to finish denying the request.
+    try {
+      const user = req.session.user;
+      logActivity(getDb(), user, 'FORBIDDEN', `Forbidden: ${user.email} (${user.role}) attempted ${req.method} ${req.originalUrl}`,
+        { category: 'Security', status: 'blocked', targetType: 'route', targetId: req.originalUrl, ip: getClientIp(req), userAgent: getClientUserAgent(req), requestId: req.sessionID || null, details: { method: req.method } });
+    } catch (e) { console.error('denyAccess audit error:', e.message); }
+  }
   if (req.get('X-Requested-With') === 'ciprms') {
     return res.status(status).json(status === 401
       ? { error: 'Your session has expired. Please sign in again.', code: 'UNAUTHENTICATED' }
@@ -688,50 +777,89 @@ app.get('/auth/google/callback', (req, res, next) => {
 });
 
 // ── FORM LOGIN ────────────────────────────────────────────────────────────────
-app.post('/login', loginLimiter, async (req, res) => {
+// Login-attempt audit logging (2026-10-21 investigation): every branch below now writes exactly one
+// LOGIN_SUCCESS/LOGIN_FAILED entry, server-side only — nothing client-side reports a login outcome, closing
+// the actual root cause this was investigated for: this route previously called logActivity() precisely
+// nowhere, so neither a successful nor a failed sign-in ever reached the Audit Trail at all. Three attempts
+// (fail, fail, succeed) write three real rows — none of the branches below share state or short-circuit a
+// later one, so there is nothing here that could coalesce or suppress a legitimate attempt. The category is
+// always 'Authentication'; the `reason` in `details` uses the safe, non-enumerating categories this
+// investigation's brief asked for — never a message that would tell an attacker whether a given email is
+// actually registered (the *response* text already didn't; the audit `reason` below is for the Administrator
+// reviewing the trail, not shown to the person attempting to log in).
+app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {
   const { username, password } = req.body;
+  const db = getDb();
+  const ip = getClientIp(req);
+  const userAgent = getClientUserAgent(req);
+  const requestId = req.sessionID || null;
+  const attemptedId = safeLoginIdentifier(username);
+  const audit = (status, reason, user, extraDetails) => logActivity(db, user || null, status === 'success' ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
+    status === 'success' ? `Successful login: ${user.email}` : `Failed login attempt${attemptedId ? ' for ' + attemptedId : ''} (${reason})`,
+    { category: 'Authentication', status, targetType: 'login_attempt', targetId: user ? user.email : attemptedId, ip, userAgent, requestId, details: { reason, ...extraDetails } });
+
   // F-04: reject non-string values (e.g. JSON objects with MongoDB operators)
   // before any string method (.trim, .toLowerCase) is called, preventing a
   // 500 crash and closing the NoSQL injection entry point simultaneously.
+  // Real, non-200 status codes on every failure branch below (2026-10-28 brute-force-protection
+  // investigation) — previously EVERY outcome of this route, success or failure, answered 200 (only a
+  // successful login's res.redirect was ever <400, via its 302). That accidentally neutered
+  // skipSuccessfulRequests on the limiters above: express-rate-limit decides "successful" purely by
+  // response.statusCode < 400, so against an all-200 route it would have skipped counting FAILED attempts
+  // too, not just real successes — the exact opposite of what brute-force protection needs. 400 for a
+  // malformed request (not even a real attempt against any account), 401 for every "this did not
+  // authenticate" outcome (never more specific than that to the client — see each branch's own audit `reason`
+  // for the detail an Administrator can see), 500 for a genuine server-side failure after the password had
+  // already verified correct.
   if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
-    return res.render('index', { activePage: '', error: 'Please enter your email and password.' });
+    await audit('failure', 'validation_error', null);
+    return res.status(400).render('index', { activePage: '', error: 'Please enter your email and password.' });
   }
 
   try {
-    const db = getDb();
     // Look up user by email (the "username" field on the login form is the email)
     const user = await db.collection('users').findOne({
       email: username.trim().toLowerCase()
     });
 
     if (!user) {
-      return res.render('index', { activePage: '', error: 'Invalid email or password.' });
+      await audit('failure', 'account_not_found', null);
+      return res.status(401).render('index', { activePage: '', error: 'Invalid email or password.' });
     }
 
     if (user.status === 'Inactive') {
-      return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
+      await audit('failure', 'account_disabled', user);
+      return res.status(401).render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
     }
 
     if (!user.password) {
       // Google-only account (no local password set) — must sign in via "Continue with Google".
-      return res.render('index', { activePage: '', error: 'This account signs in with Google. Please use "Continue with Google".' });
+      await audit('failure', 'google_account_only', user);
+      return res.status(401).render('index', { activePage: '', error: 'This account signs in with Google. Please use "Continue with Google".' });
     }
 
     if (!isBcryptHash(user.password)) {
       // Legacy plain-text account that predates the password migration.
-      return res.render('index', { activePage: '', error: 'Your account needs a password reset. Please contact the Administrator.' });
+      await audit('failure', 'legacy_account_needs_reset', user);
+      return res.status(401).render('index', { activePage: '', error: 'Your account needs a password reset. Please contact the Administrator.' });
     }
 
     const passwordMatches = await verifyPassword(password, user.password);
     if (!passwordMatches) {
-      return res.render('index', { activePage: '', error: 'Invalid email or password.' });
+      await audit('failure', 'invalid_credentials', user);
+      return res.status(401).render('index', { activePage: '', error: 'Invalid email or password.' });
     }
 
-    // Regenerate session to prevent fixation, then store user data
-    req.session.regenerate((regenErr) => {
+    // Regenerate session to prevent fixation, then store user data. Both callbacks below are async (and
+    // awaited by nothing — express-session itself just invokes them) specifically so the audit write for
+    // this attempt's final outcome can be awaited BEFORE the response is sent: login is exactly the one place
+    // in this file where "the row must already be visible to anyone reading the Audit Trail immediately
+    // after" matters more than saving a few milliseconds (see logActivity()'s own comment on this tradeoff).
+    req.session.regenerate(async (regenErr) => {
       if (regenErr) {
         console.error('❌ Session regenerate error:', regenErr);
-        return res.render('index', { activePage: '', error: 'Session error. Please try again.' });
+        await audit('failure', 'system_error', user, { stage: 'session_regenerate' });
+        return res.status(500).render('index', { activePage: '', error: 'Session error. Please try again.' });
       }
       req.session.user = {
         id: user.id,
@@ -743,16 +871,19 @@ app.post('/login', loginLimiter, async (req, res) => {
         avatarUrl: avatarUrlFor(user)
       };
 
-      req.session.save((saveErr) => {
+      req.session.save(async (saveErr) => {
         if (saveErr) {
           console.error('❌ Session save error:', saveErr);
-          return res.render('index', { activePage: '', error: 'Session error. Please try again.' });
+          await audit('failure', 'system_error', user, { stage: 'session_save' });
+          return res.status(500).render('index', { activePage: '', error: 'Session error. Please try again.' });
         }
 
-        // Update last login timestamp (fire-and-forget)
+        // Update last login timestamp (fire-and-forget — unaffected by this change: this is a convenience
+        // field, not a security/accountability record, so it keeps its original non-blocking semantics).
         const loginDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         getDb().collection('users').updateOne({ email: user.email }, { $set: { login: loginDate } }).catch(() => { });
 
+        await audit('success', null, user);
         console.log(`✓ Login: ${user.name} (${user.role})`);
         res.redirect(landingFor(user));
       });
@@ -760,7 +891,8 @@ app.post('/login', loginLimiter, async (req, res) => {
 
   } catch (err) {
     console.error('❌ Login error:', err);
-    res.render('index', { activePage: '', error: 'A server error occurred. Please try again.' });
+    await audit('failure', 'system_error', null);
+    res.status(500).render('index', { activePage: '', error: 'A server error occurred. Please try again.' });
   }
 });
 
@@ -792,9 +924,21 @@ app.post('/signup', signupLimiter, async (req, res) => {
 // only the one concretely reachable gap.
 app.post('/logout', (req, res) => {
   const endingSession = req.sessionID;
-  req.session.destroy((err) => {
+  // Captured before destroy() clears req.session.user — this is who is logging out, for the audit record below.
+  // Not logged for an already-logged-out session (nothing meaningful happened) or for /logout hit with no
+  // session at all; both leave `who` null/undefined.
+  const who = req.session && req.session.user;
+  const ip = getClientIp(req);
+  const userAgent = getClientUserAgent(req);
+  req.session.destroy(async (err) => {
     realtime.disconnectSession(endingSession);
     if (err) console.error('❌ Logout session destroy error:', err);
+    if (who) {
+      // Awaited, same reasoning as the login route above: a security/accountability record should already
+      // be visible to anyone checking the Audit Trail the moment this response comes back.
+      await logActivity(getDb(), who, 'LOGOUT', `Logout: ${who.email}`,
+        { category: 'Authentication', status: 'success', targetType: 'session', targetId: who.email, ip, userAgent, requestId: endingSession });
+    }
     // Clear the session cookie from the browser so it cannot reuse the old ID
     res.clearCookie('connect.sid', { path: '/' });
     res.json({ success: true });
@@ -5293,11 +5437,14 @@ app.get('/api/reports/activitylog/pdf', requireStaffAccess, async (req, res) => 
       title: isOwnTrailOnly ? 'My Activity Trail' : 'Activity / Audit Trail', filename: 'Activity_Audit_Log',
       subtitle: `Generated ${now} · ${logs.length} entries`,
       columns: [
-        { key: 'action', label: 'Action', width: 70 },
-        { key: 'record', label: 'Record / Details', width: 330 },
-        { key: 'by', label: 'Performed By', width: 130 },
-        { key: 'role', label: 'Role', width: 110 },
-        { key: 'date', label: 'Date & Time', width: 120 }
+        { key: 'action', label: 'Action', width: 50 },
+        { key: 'category', label: 'Category', width: 70 },
+        { key: 'status', label: 'Status', width: 55 },
+        { key: 'record', label: 'Record / Details', width: 200 },
+        { key: 'by', label: 'Performed By', width: 100 },
+        { key: 'role', label: 'Role', width: 80 },
+        { key: 'ip', label: 'IP Address', width: 75 },
+        { key: 'date', label: 'Date & Time', width: 100 }
       ],
       rows: logs.map(l => ({ ...l, role: formatRole(l.role), record: displayRoleText(l.record) }))
     });
@@ -5320,8 +5467,8 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
     const sheet = workbook.addWorksheet('Audit Trail', {
       pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
     });
-    const auditCols = 5;
-    const auditLastCol = 'E';
+    const auditCols = 8;
+    const auditLastCol = 'H';
     function auditMergedRow(text, { bold = false, size = 10, color = 'FF000000', height = 16, align = 'center' } = {}) {
       const r = sheet.addRow([]);
       r.height = height;
@@ -5342,15 +5489,18 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
     auditMergedRow(`Generated ${auditNow}  ·  ${logs.length} entries`, { size: 9, color: 'FF444444' });
     sheet.addRow([]);
     sheet.columns = [
-      { header: 'Action', key: 'action', width: 12 },
-      { header: 'Record / Details', key: 'record', width: 55 },
-      { header: 'Performed By', key: 'by', width: 22 },
-      { header: 'Role', key: 'role', width: 18 },
-      { header: 'Date & Time', key: 'date', width: 22 }
+      { header: 'Action', key: 'action', width: 14 },
+      { header: 'Category', key: 'category', width: 16 },
+      { header: 'Status', key: 'status', width: 10 },
+      { header: 'Record / Details', key: 'record', width: 48 },
+      { header: 'Performed By', key: 'by', width: 20 },
+      { header: 'Role', key: 'role', width: 16 },
+      { header: 'IP Address', key: 'ip', width: 16 },
+      { header: 'Date & Time', key: 'date', width: 20 }
     ];
     // Re-add merged header rows since setting sheet.columns resets row structure;
     // instead, manually set the column header row after the letterhead rows.
-    const auditHeaderRow = sheet.addRow(['Action', 'Record / Details', 'Performed By', 'Role', 'Date & Time']);
+    const auditHeaderRow = sheet.addRow(['Action', 'Category', 'Status', 'Record / Details', 'Performed By', 'Role', 'IP Address', 'Date & Time']);
     auditHeaderRow.height = 18;
     auditHeaderRow.eachCell(cell => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -5358,9 +5508,12 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = { top: { style: 'thin', color: { argb: 'FFB7C0CC' } }, left: { style: 'thin', color: { argb: 'FFB7C0CC' } }, bottom: { style: 'thin', color: { argb: 'FFB7C0CC' } }, right: { style: 'thin', color: { argb: 'FFB7C0CC' } } };
     });
-    const auditDataKeys = ['action', 'record', 'by', 'role', 'date'];
+    // 2026-10-21: category/status/ip are absent on every pre-existing record — `|| ''` keeps those cells
+    // blank (ExcelJS already renders an undefined cell value as blank) rather than printing the literal
+    // string "undefined", exactly as every other optional field in this export already behaves.
+    const auditDataKeys = ['action', 'category', 'status', 'record', 'by', 'role', 'ip', 'date'];
     logs.forEach((l, idx) => {
-      const row = sheet.addRow(auditDataKeys.map(k => k === 'role' ? formatRole(l[k]) : k === 'record' ? displayRoleText(l[k]) : l[k]));
+      const row = sheet.addRow(auditDataKeys.map(k => k === 'role' ? formatRole(l[k]) : k === 'record' ? displayRoleText(l[k]) : (l[k] || '')));
       const fill = idx % 2 === 1 ? 'FFF5F7FA' : 'FFFFFFFF';
       row.eachCell({ includeEmpty: true }, cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
@@ -5662,21 +5815,54 @@ app.delete('/api/users/:id', requireStaffAccess, async (req, res) => {
 
 /**
  * logActivity — server-side helper to write an audit entry.
+ *
+ * `extra` (2026-10-21, login-attempt audit logging investigation) adds the richer, structured fields the
+ * Authentication/Security events below need — category, status, machine-readable `details`, actor/target
+ * separation for an attempt where the actor isn't (yet, or ever) a known account, IP and user-agent, and a
+ * request-correlation id — WITHOUT changing the shape every existing call site already relies on (`action`,
+ * `record`, `by`, `role`, `email`, `date` all stay exactly as they were; every pre-existing caller that omits
+ * `extra` gets rows identical to before, and the Audit Trail UI/PDF/Excel exports keep reading those fields
+ * unchanged). `timestamp` is new and unconditional: `date` is a locale-formatted STRING (by design, for
+ * display), which cannot be sorted or range-filtered as a real date — every date-range filter in this app
+ * (Custom Report Builder, Audit Trail) needs an actual Date field, and this collection never had one.
  * @param {object} db   - Mongo db handle
- * @param {object} user - req.session.user
- * @param {string} action - ADD | EDIT | DELETE | APPROVE | REJECT | RENEW | VIEW
- * @param {string} record - human-readable description
+ * @param {object|null} user - req.session.user, or null when no account could be identified (e.g. a failed
+ *   login attempt for an email that isn't registered) — never fabricate a user id/name/role for one.
+ * @param {string} action - ADD | EDIT | DELETE | APPROVE | REJECT | RENEW | VIEW | LOGIN_SUCCESS | LOGIN_FAILED
+ *   | LOGIN_BLOCKED | LOGOUT | FORBIDDEN | ...
+ * @param {string} record - human-readable description (unchanged meaning/format from before this change)
+ * @param {object} [extra]
+ * @param {string} [extra.category] - Authentication | User Management | Partnership | Partnership Request |
+ *   Document | Calendar | Report | Security | System
+ * @param {string} [extra.status] - success | failure | blocked
+ * @param {string} [extra.targetType] - what the action was done to, e.g. 'login_attempt' | 'user' | 'session'
+ * @param {string|number} [extra.targetId] - the target's id/email/identifier; for an unresolved login attempt
+ *   this is the raw e-mail/username the client submitted, which is safe to store (it's the attempt's own
+ *   input, not a confirmation that the account exists) but is NEVER fabricated into a real account reference.
+ * @param {object} [extra.details] - small structured context safe to store — e.g. { reason: 'invalid_credentials' }.
+ *   NEVER a password, password hash, session secret, or OAuth/API token — nothing in this file ever passes one.
+ * @param {string|null} [extra.ip] - see getClientIp(); null when it genuinely could not be determined.
+ * @param {string|null} [extra.userAgent] - see getClientUserAgent().
+ * @param {string|null} [extra.requestId] - req.sessionID when available; this app has no separate per-request
+ *   correlation id, and the session id is already a stable, available way to tie together the few log lines
+ *   (e.g. a failed attempt followed by the eventual successful one) one visit produces.
  */
-async function logActivity(db, user, action, record) {
+async function logActivity(db, user, action, record, extra) {
   try {
     const last = await db.collection('activitylogs').find({}).sort({ id: -1 }).limit(1).toArray();
     const nextId = last.length ? (last[0].id || 0) + 1 : 1;
+    const e = extra || {};
+    // 'System' (the pre-existing, unchanged fallback for every other null-actor call site — an automatic
+    // process acted, not a person) would be actively misleading for an Authentication event with no resolved
+    // account: nobody and nothing "System" did anything — an unidentified visitor's login attempt failed.
+    // Display-only distinction; the real actor is still correctly absent (no id, email or role fabricated).
+    const noActorLabel = e.category === 'Authentication' ? 'Unknown' : 'System';
     await db.collection('activitylogs').insertOne({
       id: nextId,
       action,
       record,
-      by: user ? user.name : 'System',
-      role: user ? user.role : 'System',
+      by: user ? user.name : noActorLabel,
+      role: user ? user.role : noActorLabel,
       // Added 2026-08-27 (View-Only → Staff migration) so the Audit Trail can
       // scope Staff to their own records by a stable identifier rather than
       // by display name (which is not guaranteed unique). Entries logged
@@ -5686,11 +5872,54 @@ async function logActivity(db, user, action, record) {
       date: new Date().toLocaleString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
-      })
+      }),
+      timestamp: new Date(),
+      // The fields below are only ever present when a caller passes `extra` — an existing call site that
+      // doesn't is completely unaffected (every property here is simply undefined, which the MongoDB driver
+      // never writes as a key at all).
+      category: e.category,
+      status: e.status,
+      targetType: e.targetType,
+      targetId: e.targetId,
+      details: e.details,
+      ip: e.ip,
+      userAgent: e.userAgent,
+      requestId: e.requestId
     });
-  } catch (e) {
-    console.error('logActivity error:', e.message);
+  } catch (err) {
+    // Deliberately unchanged from the pre-existing behavior every one of the other ~30 call sites already
+    // relies on: fail OPEN (console-logged, never thrown) so a transient audit-write hiccup can never block
+    // the real user action it's describing — including, now, login itself. This is a considered tradeoff,
+    // not an oversight: failing closed on a MongoDB blip would turn a logging outage into a full outage of
+    // every login in the building, which is a worse security posture than an occasional missed audit row.
+    // See the chat response for this tradeoff spelled out for login specifically.
+    console.error('logActivity error:', err.message);
   }
+}
+
+// Client IP for audit records. `app.set('trust proxy', 1)` (see near the top of this file) tells Express to
+// trust exactly the one hop in front of it (this app's own reverse proxy / platform load balancer) and parse
+// `X-Forwarded-For` only up to that hop — req.ip then already resolves to the real originating client address
+// rather than a header any client could forge by sending their own X-Forwarded-For directly. Using req.ip here
+// (instead of re-reading the header directly) is exactly what that trust-proxy setting exists for.
+function getClientIp(req) {
+  return (req && req.ip) || null;
+}
+
+// Capped to a sane length — User-Agent is client-supplied and unbounded; a hostile or malformed client
+// sending a huge one should not be able to bloat an audit record.
+function getClientUserAgent(req) {
+  const ua = req && req.get && req.get('user-agent');
+  return typeof ua === 'string' && ua ? ua.slice(0, 300) : null;
+}
+
+// A login attempt's own submitted identifier is safe to store (it's the attempt's input, not proof an account
+// exists), but must never be more than a short, plain string — never the object a NoSQL-injection attempt
+// would submit instead of a string, and never unbounded.
+function safeLoginIdentifier(value) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 200) : null;
 }
 
 // Audit Trail visibility boundary: Administrator sees every record
@@ -6512,6 +6741,7 @@ function buildMyInvite(ev, user, now) {
     joined: !!record,
     joinedAt: record ? new Date(record.joinedAt).toISOString() : null,
     joinedAtDisplay: record ? meetingTime.formatDateTimeInTz(new Date(record.joinedAt)) : null,
+    lastAccessAt: record ? new Date(record.lastAccessAt || record.joinedAt).toISOString() : null,
     startsAt: win ? win.start.toISOString() : null,
     endsAt: win ? win.end.toISOString() : null,
     serverNow: now.toISOString(),
@@ -7089,11 +7319,32 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
 
     // Atomic and duplicate-proof: the filter only matches while nobody with
     // this address has an attendance entry yet, so any number of simultaneous
-    // or repeated clicks record exactly one join — the first.
+    // or repeated clicks record exactly one join — the first. `joinedAt` is
+    // that first join and is never touched again; `lastAccessAt` starts equal
+    // to it and is advanced below on every later click, so a person who opens
+    // the meeting again hours later is reflected without ever duplicating or
+    // moving their original join time. `source` records how this attendance
+    // entry was created — today that is always this in-app button, the only
+    // join event CIPRMS can actually observe (see the 2026-10-08 Google Meet
+    // access tracking investigation: the integration's OAuth scope is
+    // calendar.events only, so a participant who opens the meeting straight
+    // from the Google Calendar invitation e-mail or the raw Meet link never
+    // reaches this server at all and cannot be recorded here) — kept as its
+    // own field rather than assumed so a future, separately-scoped detection
+    // method can add its own value without reshaping this record.
     const result = await db.collection('calendarevents').updateOne(
       { id, 'attendance.emailKey': { $ne: key } },
-      { $push: { attendance: { email: user.email, emailKey: key, userId: user.id, name: user.name, role: user.role, joinedAt: now } } }
+      { $push: { attendance: { email: user.email, emailKey: key, userId: user.id, name: user.name, role: user.role, joinedAt: now, lastAccessAt: now, source: 'cirl-button' } } }
     );
+    if (result.modifiedCount === 0) {
+      // Already joined earlier: this is a later open of the same meeting, not a new join — advance only
+      // lastAccessAt (arrayFilters targets this one attendee's entry so nobody else's record is touched).
+      await db.collection('calendarevents').updateOne(
+        { id },
+        { $set: { 'attendance.$[a].lastAccessAt': now } },
+        { arrayFilters: [{ 'a.emailKey': key }] }
+      );
+    }
     const fresh = await db.collection('calendarevents').findOne({ id });
 
     // The Google Meet room the person is sent to. Google can attach it a moment after the event is created, so when
@@ -7134,15 +7385,23 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       const u = userByKey.get(meetingTime.emailKey(email));
       const record = attendanceRecordFor(ev, email);
       const joinedAt = record ? new Date(record.joinedAt) : null;
+      // lastAccessAt falls back to joinedAt for attendance recorded before this field existed, so an older
+      // record never reads as "last accessed" before it was even first joined.
+      const lastAccessAt = record ? new Date(record.lastAccessAt || record.joinedAt) : null;
       return {
         name: u ? u.name : email,
         role: u ? displayRoleName(u.role) : '—',
         email,
         invitation: emailed && googleKeys.has(meetingTime.emailKey(email)) ? 'Emailed via Google Calendar' : 'In-app only',
         status: record ? 'Joined' : 'Not Joined',
+        source: record ? (record.source || 'cirl-button') : null,
         joinedAt: joinedAt ? joinedAt.toISOString() : null,
         joinedAtDisplay: joinedAt ? meetingTime.formatTimeInTz(joinedAt) : null,
-        joinedDateDisplay: joinedAt ? meetingTime.formatDateTimeInTz(joinedAt) : null
+        joinedDateDisplay: joinedAt ? meetingTime.formatDateTimeInTz(joinedAt) : null,
+        lastAccessAt: lastAccessAt ? lastAccessAt.toISOString() : null,
+        // Only worth a second display string when it actually differs from the first join — a single click
+        // has nothing new to say beyond "Time Joined".
+        lastAccessDisplay: lastAccessAt && joinedAt && lastAccessAt.getTime() !== joinedAt.getTime() ? meetingTime.formatDateTimeInTz(lastAccessAt) : null
       };
     }).sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name));
 
@@ -7153,16 +7412,20 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       .filter(a => !invitedKeys.has(a.emailKey))
       .map(a => {
         const joinedAt = new Date(a.joinedAt);
+        const lastAccessAt = new Date(a.lastAccessAt || a.joinedAt);
         return {
           name: a.name || a.email,
           role: displayRoleName(a.role) || '—',
           email: a.email,
           invitation: 'Facilitator (not invited)',
           status: 'Joined',
+          source: a.source || 'cirl-button',
           facilitator: true,
           joinedAt: joinedAt.toISOString(),
           joinedAtDisplay: meetingTime.formatTimeInTz(joinedAt),
-          joinedDateDisplay: meetingTime.formatDateTimeInTz(joinedAt)
+          joinedDateDisplay: meetingTime.formatDateTimeInTz(joinedAt),
+          lastAccessAt: lastAccessAt.toISOString(),
+          lastAccessDisplay: lastAccessAt.getTime() !== joinedAt.getTime() ? meetingTime.formatDateTimeInTz(lastAccessAt) : null
         };
       });
 

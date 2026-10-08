@@ -421,7 +421,14 @@
                                                         <div class="invalid-feedback" id="cr-date-error">Date To cannot be earlier than Date From.</div>
                                                     </div>
                                                 </div>
-                                                <div class="form-text mt-2" id="cr-date-help">Includes every partnership whose agreement period (start to end) overlaps the dates you choose, so an agreement that began earlier but is still running in that window is included. Leave a date empty for no limit on that side; the same date in both fields shows the agreements running on that day.</div>
+                                                <%- /* 2026-10-08: this text used to describe period-OVERLAP semantics ("an agreement that began
+                                                     earlier but is still running in that window is included"), which is not what
+                                                     computeCustomReportData()/filterByDateRange() (cirl.js) actually do and never have for
+                                                     this generic filter — they keep only partnerships whose own signing date (or, for an
+                                                     Expired/Expiring Soon report, expiration date) falls on or between Date From and Date To,
+                                                     inclusive of both boundaries. Corrected to describe the real, strict behavior instead of
+                                                     silently diverging from it. */ %>
+                                                <div class="form-text mt-2" id="cr-date-help">Keeps only partnerships dated on or between Date From and Date To (both boundary dates included) — the signing date for most reports, or the expiration date for an Expired/Expiring Soon report. Leave a date empty for no limit on that side; the same date in both fields shows only partnerships dated exactly that day.</div>
 
                                                 <div class="mt-4 d-flex gap-2 flex-wrap">
                                                     <button class="btn btn-primary" id="btn-cr-preview" onclick="previewCustomReport()"><i
@@ -611,17 +618,41 @@
                                                 <p class="text-muted mt-1 mb-0 fs-12"><%= isStaffOwnTrail ? 'Your own actions, logged for transparency and accountability.' : 'All system actions logged for transparency and accountability' %></p>
                                             </div>
                                             <div class="card-body pt-0">
-                                                <!-- Filters -->
-                                                <div class="row g-2 mb-3">
+                                                <!-- Filters. Category/Status (2026-10-21 audit-logging investigation) filter the new structured fields
+                                                     every login/security event now carries — the fast way to find LOGIN_FAILED/LOGIN_BLOCKED activity an
+                                                     Administrator is specifically investigating, without scrolling the whole trail. Pre-existing
+                                                     ADD/EDIT/DELETE/etc. rows have no category/status and simply don't match either filter, exactly
+                                                     like a Role filter already didn't match a legacy record with no stored email. -->
+                                                <div class="row g-2 mb-2">
                                                     <div class="col-md-3">
                                                         <select id="audit-filter-action" class="form-select" onchange="applyAuditFilters()">
                                                             <option value="">All Actions</option>
+                                                            <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
+                                                            <option value="LOGIN_FAILED">LOGIN_FAILED</option>
+                                                            <option value="LOGIN_BLOCKED">LOGIN_BLOCKED</option>
+                                                            <option value="LOGOUT">LOGOUT</option>
+                                                            <option value="FORBIDDEN">FORBIDDEN</option>
                                                             <option value="ADD">ADD</option>
                                                             <option value="EDIT">EDIT</option>
                                                             <option value="DELETE">DELETE</option>
                                                             <option value="APPROVE">APPROVE</option>
                                                             <option value="REJECT">REJECT</option>
                                                             <option value="RENEW">RENEW</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <select id="audit-filter-category" class="form-select" onchange="applyAuditFilters()">
+                                                            <option value="">All Categories</option>
+                                                            <option value="Authentication">Authentication</option>
+                                                            <option value="Security">Security</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <select id="audit-filter-status" class="form-select" onchange="applyAuditFilters()">
+                                                            <option value="">All Statuses</option>
+                                                            <option value="success">Success</option>
+                                                            <option value="failure">Failure</option>
+                                                            <option value="blocked">Blocked</option>
                                                         </select>
                                                     </div>
                                                     <div class="col-md-3">
@@ -633,14 +664,18 @@
                                                             <option value="Staff">CIRL Staff</option>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-2">
+                                                </div>
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label fs-12 text-muted mb-1">Date From</label>
                                                         <input type="date" id="audit-filter-from" class="form-control" onchange="applyAuditFilters()">
                                                     </div>
-                                                    <div class="col-md-2">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label fs-12 text-muted mb-1">Date To</label>
                                                         <input type="date" id="audit-filter-to" class="form-control" onchange="applyAuditFilters()">
                                                     </div>
-                                                    <div class="col-md-2">
-                                                        <button class="btn btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset</button>
+                                                    <div class="col-md-3 d-flex align-items-end">
+                                                        <button class="btn btn-outline-secondary w-100" onclick="resetAuditFilters()"><i class="ri-refresh-line me-1"></i>Reset Filters</button>
                                                     </div>
                                                 </div>
                                                 <div id="audit-grid"></div>
@@ -771,8 +806,13 @@
             ADD: 'bg-success-subtle text-success', EDIT: 'bg-primary-subtle text-primary',
             RENEW: 'bg-warning-subtle text-warning', VIEW: 'bg-secondary-subtle text-secondary',
             DELETE: 'bg-danger-subtle text-danger', APPROVE: 'bg-info-subtle text-info',
-            REJECT: 'bg-danger-subtle text-danger'
+            REJECT: 'bg-danger-subtle text-danger',
+            // 2026-10-21 login-attempt audit logging investigation.
+            LOGIN_SUCCESS: 'bg-success-subtle text-success', LOGIN_FAILED: 'bg-danger-subtle text-danger',
+            LOGIN_BLOCKED: 'bg-danger-subtle text-danger', LOGOUT: 'bg-secondary-subtle text-secondary',
+            FORBIDDEN: 'bg-danger-subtle text-danger'
         };
+        const statusBadge = { success: 'bg-success-subtle text-success', failure: 'bg-danger-subtle text-danger', blocked: 'bg-warning-subtle text-warning' };
         const roleBadge = {
             'Administrator': 'bg-primary-subtle text-primary',
             'Auth. Personnel': 'bg-warning-subtle text-warning',
@@ -834,16 +874,22 @@
                 columns: [
                     { name: '#', width: '50px', formatter: (_, row) => gridjs.html(`<span class="text-muted fw-semibold">${row.cells[0].data}</span>`) },
                     { name: 'Action', formatter: (cell) => gridjs.html(`<span class="badge ${actionBadge[cell] || 'bg-secondary-subtle text-secondary'}">${cell}</span>`) },
-                    { name: 'Record / Details', width: '38%' },
-                    { name: 'Performed By' },
-                    { name: 'Role', formatter: (cell) => gridjs.html(`<span class="badge ${roleBadge[cell] || 'bg-secondary-subtle text-secondary'}">${formatRole(cell)}</span>`) },
+                    // Category/Status (2026-10-21): absent on every pre-existing record (ADD/EDIT/DELETE/… never
+                    // carried either) — an em dash, not a blank cell, so "no category recorded" reads as a fact
+                    // rather than looking like missing/broken data.
+                    { name: 'Category', formatter: (cell) => cell || '—' },
+                    { name: 'Status', formatter: (cell) => cell ? gridjs.html(`<span class="badge ${statusBadge[cell] || 'bg-secondary-subtle text-secondary'}">${cell}</span>`) : '—' },
+                    { name: 'Record / Details', width: '30%' },
+                    { name: 'Performed By', formatter: (cell) => cell || 'Unknown' },
+                    { name: 'Role', formatter: (cell) => cell ? gridjs.html(`<span class="badge ${roleBadge[cell] || 'bg-secondary-subtle text-secondary'}">${formatRole(cell)}</span>`) : '—' },
+                    { name: 'IP Address', formatter: (cell) => cell || '—' },
                     { name: 'Date & Time' }
                 ],
-                data: logs.map((a, i) => [i + 1, a.action, displayRoleText(a.record), a.by, a.role, a.date]),
+                data: logs.map((a, i) => [i + 1, a.action, a.category, a.status, displayRoleText(a.record), a.by, a.role, a.ip, a.date]),
                 search: true,
                 pagination: { limit: 15 },
                 sort: true,
-                language: { search: { placeholder: 'Search action, record, performed by or date…' } },
+                language: { search: { placeholder: 'Search action, category, record, performed by, IP or date…' } },
                 style: {
                     table: { border: 'none' },
                     // 2026-09-18: background/color used to be set here as
@@ -864,19 +910,37 @@
             }).render(document.getElementById('audit-grid'));
         }
 
+        // "YYYY-MM-DD" -> local midnight / local end-of-day, built from its own parts — never
+        // toISOString()/bare new Date("YYYY-MM-DD") (parsed as UTC midnight per spec), the exact UTC/local
+        // mismatch already fixed for the Custom Report Builder's own Date From/To (2026-09-26 investigation).
+        // A bare `new Date(from)` compared against a LOCAL-time log entry silently excluded anything dated
+        // exactly on the `from` boundary day in a timezone ahead of UTC (Asia/Manila, UTC+8, is exactly such a
+        // zone) — the same bug, in the same shape, in a different filter.
+        function auditLocalDate(ymd, endOfDay) {
+            var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+            if (!m) return null;
+            return endOfDay ? new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999) : new Date(+m[1], +m[2] - 1, +m[3], 0, 0, 0, 0);
+        }
         function applyAuditFilters() {
-            const action = document.getElementById('audit-filter-action').value;
-            const role   = document.getElementById('audit-filter-role').value;
-            const from   = document.getElementById('audit-filter-from').value;
-            const to     = document.getElementById('audit-filter-to').value;
+            const action   = document.getElementById('audit-filter-action').value;
+            const category = document.getElementById('audit-filter-category').value;
+            const status   = document.getElementById('audit-filter-status').value;
+            const role     = document.getElementById('audit-filter-role').value;
+            const from     = auditLocalDate(document.getElementById('audit-filter-from').value, false);
+            const to       = auditLocalDate(document.getElementById('audit-filter-to').value, true);
             let filtered = allAuditLogs.filter(function(log) {
-                if (action && log.action !== action) return false;
-                if (role   && log.role   !== role)   return false;
+                if (action   && log.action   !== action)   return false;
+                if (category && log.category !== category) return false;
+                if (status   && log.status   !== status)   return false;
+                if (role     && log.role     !== role)      return false;
                 if (from || to) {
-                    // log.date is like "Jun 25, 2026, 09:30 PM" — parse it
-                    var d = new Date(log.date);
-                    if (from && d < new Date(from)) return false;
-                    if (to   && d > new Date(to + 'T23:59:59')) return false;
+                    // `timestamp` (2026-10-21) is a real Date, present on every record written since this
+                    // change; an older record has none, so it falls back to parsing the display string exactly
+                    // as before — still a best-effort parse, not a new limitation this change introduces.
+                    var d = log.timestamp ? new Date(log.timestamp) : new Date(log.date);
+                    if (isNaN(d)) return false;
+                    if (from && d < from) return false;
+                    if (to   && d > to)   return false;
                 }
                 return true;
             });
@@ -885,6 +949,8 @@
 
         function resetAuditFilters() {
             document.getElementById('audit-filter-action').value = '';
+            document.getElementById('audit-filter-category').value = '';
+            document.getElementById('audit-filter-status').value = '';
             document.getElementById('audit-filter-role').value = '';
             document.getElementById('audit-filter-from').value = '';
             document.getElementById('audit-filter-to').value = '';

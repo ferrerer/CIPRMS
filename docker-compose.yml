@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Overrides whatever MONGO_URI is in .env so compose always talks to
+      # the mongo service below by its service name, not a host-only URI
+      # (e.g. your Atlas string, or 127.0.0.1) that isn't reachable from
+      # inside the app container. Point MONGO_URI in .env at Atlas instead
+      # and delete this line + the mongo service if you don't want a local
+      # database at all.
+      - MONGO_URI=mongodb://mongo:27017/ciprms
+    volumes:
+      # Persists OCR/document/avatar uploads across container restarts and
+      # rebuilds — without this they live only in the removed container.
+      - uploads:/app/uploads
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  uploads:
+  mongo-data:

@@ -1,0 +1,31 @@
+node_modules
+npm-debug.log*
+
+.git
+.gitignore
+.env
+.env.*
+
+test
+docs
+SETUP.md
+note.txt
+*.md
+
+Database_backup
+_REDUNDANT_BACKUP
+.sixth
+maek
+
+uploads/tmp/*
+uploads/documents/*
+uploads/avatars/*
+!uploads/**/.gitkeep
+
+# Stray root-level sample/scratch files — not referenced by the app (real
+# static assets live under public/ and assets/, which this does NOT touch).
+/*.docx
+/*.docx.pdf
+/*.png
+/dunbar*.txt
+/eng.traineddata

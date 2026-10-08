@@ -129,6 +129,22 @@ async function connectDB() {
     } catch (indexErr) {
       console.error('⚠️  Could not create text index on documents — OCR-content search will fall back to metadata-only matching:', indexErr.message);
     }
+    // 2026-10-21 Audit Trail / login-attempt logging investigation. `activitylogs` had only the generic
+    // { id: -1 } index above (for the nextId lookup) — every one of its own real query patterns was an
+    // unindexed collection scan. `email` is the most-hit of these: every single CIRL Staff page load of the
+    // Audit Trail already filters by it (activityLogFilterFor()), which existed well before this change — not
+    // a new query this feature introduces, just the first time anyone indexed it. `timestamp` is new with
+    // this change (the collection previously had no real Date field to range-filter by at all — `date` is a
+    // display-only locale string); `action`, `category` and `status` back the Audit Trail UI's filter
+    // dropdowns, now including the new login/security events. Plain, non-unique, same non-fatal precedent as
+    // every index above — a failure here only leaves these queries at their current (unindexed) speed.
+    for (const spec of [{ timestamp: -1 }, { action: 1 }, { category: 1 }, { email: 1 }, { status: 1 }]) {
+      try {
+        await db.collection('activitylogs').createIndex(spec);
+      } catch (indexErr) {
+        console.error(`⚠️  Could not create index ${JSON.stringify(spec)} on activitylogs:`, indexErr.message);
+      }
+    }
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);

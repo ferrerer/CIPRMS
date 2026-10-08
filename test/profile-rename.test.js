@@ -261,7 +261,7 @@ describe('Changing the password ends the session — the person signs in again w
 
     // the old password no longer signs in, the new one does
     const oldLogin = await request(app).post('/login').type('form').send({ username: user.email, password: user.password });
-    expect(oldLogin.status).toBe(200);                                // the login page again, not a redirect
+    expect(oldLogin.status).toBe(401);                                // the login page again, not a redirect (2026-10-28: a real failure status, not 200)
     expect(oldLogin.text).toContain('Invalid email or password.');
     const fresh = request.agent(app);
     const newLogin = await fresh.post('/login').type('form').send({ username: user.email, password: 'BrandNew123' });
