@@ -18,18 +18,32 @@ const realtime = require('./realtime');
 const OCR_TIMEOUT_MS = 90 * 1000;
 const LOW_CONFIDENCE_THRESHOLD = 45;
 const MIN_EMBEDDED_TEXT_LENGTH = 200; // above this, a PDF is treated as "digitally created" and skips OCR
-const JOB_TTL_MS = 10 * 60 * 1000;
+// Overridable only for test/partnership-document-persistence's sibling, test/ocr-temp-file-cleanup.test.js,
+// to exercise this sweep in real (sub-second) time instead of waiting out a real 10-minute TTL — production
+// behavior is completely unchanged (both env vars are unset outside that one test file).
+const JOB_TTL_MS = Number(process.env.OCR_JOB_TTL_MS) || 10 * 60 * 1000;
+const JOB_SWEEP_INTERVAL_MS = Number(process.env.OCR_JOB_SWEEP_MS) || 60 * 1000;
 
 // In-memory job store (mirrors the pattern already used for the login rate
 // limiter in cirl.js) — fine for a single-instance capstone deployment.
 const jobs = new Map();
 
+// 2026-11 upload/OCR performance investigation: this used to only `jobs.delete(id)` — the in-memory job
+// record disappeared, but an unconfirmed job's temp file (set on the job as `tempFilePath` once OCR
+// finishes; see runJob()) was never unlinked, so a user who extracted a document and then just closed the
+// tab or the modal (without clicking either Save or Discard) leaked that file in uploads/tmp permanently —
+// nothing left to ever clean it up once the job itself expired. Deleting the file here, right before the
+// job record that was the only reference to its path, closes that leak at its one root cause instead of
+// trying to catch every caller that might abandon a job without discarding it.
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of jobs) {
-    if (now - job.createdAt > JOB_TTL_MS) jobs.delete(id);
+    if (now - job.createdAt > JOB_TTL_MS) {
+      if (job.tempFilePath) fs.unlink(job.tempFilePath, () => {});
+      jobs.delete(id);
+    }
   }
-}, 60 * 1000).unref();
+}, JOB_SWEEP_INTERVAL_MS).unref();
 
 // uploadedByEmail is stored on the job itself (not just passed through to
 // runJob) so GET /api/ocr/status/:jobId can enforce ownership (S15, Roadmap
@@ -76,20 +90,44 @@ async function preprocessImage(input) {
 }
 
 // ── Core OCR over a single image buffer ───────────────────────────────────────
-async function ocrImage(buffer, onProgress) {
-  const worker = await Tesseract.createWorker('eng', 1, {
-    logger: (m) => {
-      if (m.status === 'recognizing text' && typeof onProgress === 'function') {
-        onProgress(m.progress);
+// `worker`, when passed, is used as-is and left running — the caller owns its lifecycle (see
+// processPdf()'s multi-page loop below, which creates one and reuses it across every page instead of
+// paying Tesseract's WASM-core-plus-language-data startup cost on every single page). With no worker
+// passed, behavior is exactly what it always was: create one, recognize once, terminate — still the
+// right choice for processImage() below, which only ever has the one page to do.
+async function ocrImage(buffer, onProgress, worker) {
+  const ownWorker = !worker;
+  if (ownWorker) {
+    worker = await Tesseract.createWorker('eng', 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text' && typeof onProgress === 'function') {
+          onProgress(m.progress);
+        }
       }
-    }
-  });
+    });
+  }
   try {
     const { data } = await worker.recognize(buffer);
     return { text: data.text || '', confidence: data.confidence || 0 };
   } finally {
-    await worker.terminate();
+    if (ownWorker) await worker.terminate();
   }
+}
+
+// One worker for an entire multi-page job, created once and reused for every page — the expensive part of
+// Tesseract.js is createWorker() (loading the WASM core and the English language data), not recognize()
+// itself, so a 5-page scan used to pay that startup cost 5 times over for no reason. Tesseract.js's logger
+// is fixed at worker-creation time, but each page needs ITS OWN progress callback (a different
+// pageBaseProgress per iteration — see processPdf()'s loop below) — so the logger here calls through a
+// mutable holder the loop repoints before every recognize() call, instead of baking in one fixed callback.
+async function createReusableWorker() {
+  const handler = { current: null };
+  const worker = await Tesseract.createWorker('eng', 1, {
+    logger: (m) => {
+      if (m.status === 'recognizing text' && typeof handler.current === 'function') handler.current(m.progress);
+    }
+  });
+  return { worker, setProgressHandler: (fn) => { handler.current = fn; } };
 }
 
 // Rasterizes every page of a PDF to PNG in a child process. Isolation is
@@ -158,17 +196,28 @@ async function processPdf(filePath, jobId) {
 
     const texts = [];
     const confidences = [];
-    for (let i = 0; i < pageFiles.length; i++) {
-      const pageBaseProgress = 20 + Math.round((i / pageFiles.length) * 65);
-      updateJob(jobId, { progress: pageBaseProgress, stage: `ocr-page-${i + 1}-of-${pageFiles.length}` });
+    // One Tesseract worker for every page in this job instead of one per page (2026-11 performance
+    // investigation) — createWorker()'s WASM-core-plus-language-data load is the actual expensive step,
+    // not recognize(), so a 5-page scanned MOA/MOU used to pay full Tesseract startup cost 5 separate
+    // times for no reason. Always terminated below, success or failure, same as the old per-page worker
+    // was.
+    const { worker, setProgressHandler } = await createReusableWorker();
+    try {
+      for (let i = 0; i < pageFiles.length; i++) {
+        const pageBaseProgress = 20 + Math.round((i / pageFiles.length) * 65);
+        updateJob(jobId, { progress: pageBaseProgress, stage: `ocr-page-${i + 1}-of-${pageFiles.length}` });
 
-      const pageBuffer = await fsp.readFile(pageFiles[i]);
-      const processed = await preprocessImage(pageBuffer);
-      const { text, confidence } = await ocrImage(processed, (p) => {
-        updateJob(jobId, { progress: pageBaseProgress + Math.round((p * 65) / pageFiles.length) });
-      });
-      texts.push(text);
-      confidences.push(confidence);
+        const pageBuffer = await fsp.readFile(pageFiles[i]);
+        const processed = await preprocessImage(pageBuffer);
+        setProgressHandler((p) => {
+          updateJob(jobId, { progress: pageBaseProgress + Math.round((p * 65) / pageFiles.length) });
+        });
+        const { text, confidence } = await ocrImage(processed, null, worker);
+        texts.push(text);
+        confidences.push(confidence);
+      }
+    } finally {
+      await worker.terminate();
     }
 
     const avgConfidence = confidences.length
@@ -269,7 +318,11 @@ async function runJob(jobId, filePath, mimetype, meta = {}) {
 // ── Confirm: permanently archive a completed OCR job to the Document Library ──
 // Called by POST /api/ocr/confirm after the user reviews and explicitly saves.
 // `overrides` contains any field values the user edited in the results form.
-async function confirmJob(jobId, overrides = {}, session = {}) {
+// `extraMeta` (2026-11 New Partnership / Document Library investigation) carries archival metadata that
+// isn't an extracted/editable field at all — today just { partnershipId }, set only by the Add New
+// Partnership flow once its own save actually succeeds (see registry-gridjs.init.js), so a partnership
+// that never ends up created never gets a document archived for it either — nothing to roll back.
+async function confirmJob(jobId, overrides = {}, session = {}, extraMeta = {}) {
   const job = jobs.get(jobId);
   if (!job) throw new Error('Job not found or has expired.');
   if (job.status !== 'done') throw new Error('Job is not in a completed state.');
@@ -277,7 +330,7 @@ async function confirmJob(jobId, overrides = {}, session = {}) {
 
   // Merge user edits into the extracted result before archiving.
   const extraction = Object.assign({}, job.result, overrides);
-  const meta = Object.assign({}, job.meta, {
+  const meta = Object.assign({}, job.meta, extraMeta, {
     uploadedBy: session.name || job.meta.uploadedBy || 'Unknown',
     uploadedByEmail: session.email || job.meta.uploadedByEmail || null
   });

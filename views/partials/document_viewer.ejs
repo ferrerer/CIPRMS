@@ -1,0 +1,163 @@
+<%# Shared uploaded-file viewer with zoom controls (2026-11 investigation). One implementation, included by
+    every page that previews an uploaded Document Library file (administrator/documents.ejs,
+    potential_partner/partner_documents.ejs) instead of each maintaining its own — call
+    DocViewer.open(fileLink, title) from any "Preview" button/link. Self-contained: its own markup, its own
+    <style> (including dark mode, since not every including page loads ciprms-bridge.css — e.g. Partner pages
+    deliberately don't, per header.ejs's own comment on that), its own script. Nothing here talks to the
+    server — it only renders whatever fileLink the caller already had. %>
+<style>
+    #docViewerModal .modal-content { height: 85vh; }
+    #docViewerModal .modal-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+    #docv-stage {
+        flex: 1 1 auto; min-height: 0; overflow: auto; background: #525659;
+        display: flex; align-items: flex-start; justify-content: center; padding: 16px;
+    }
+    #docv-stage.docv-empty { align-items: center; justify-content: center; }
+    /* transform-origin top center so zooming in grows the page downward (the natural reading direction)
+       instead of outward from the middle, which would push the top of the document out of view immediately. */
+    #docv-frame, #docv-image { transform-origin: top center; transition: transform .12s ease-out; background: #fff; }
+    #docv-frame { width: 850px; height: 1100px; border: none; box-shadow: 0 2px 12px rgba(0,0,0,.35); }
+    #docv-image { max-width: 100%; display: block; box-shadow: 0 2px 12px rgba(0,0,0,.35); }
+    #docv-toolbar { gap: .5rem; }
+    #docv-zoom-pct { min-width: 3.5rem; text-align: center; font-variant-numeric: tabular-nums; }
+    [data-bs-theme="dark"] #docViewerModal .modal-header,
+    [data-bs-theme="dark"] #docViewerModal .modal-footer { background-color: #2a2f34; border-color: rgba(255,255,255,.1); }
+    [data-bs-theme="dark"] #docv-stage { background: #1b1e21; }
+    @media (max-width: 575.98px) {
+        #docViewerModal .modal-content { height: 92vh; }
+        #docv-frame { width: 100%; height: 100%; }
+    }
+</style>
+
+<div class="modal fade" id="docViewerModal" tabindex="-1" aria-hidden="true" aria-labelledby="docViewerModalLabel">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-15 text-truncate" id="docViewerModalLabel">Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="docv-stage"><div class="text-muted">Loading…</div></div>
+            </div>
+            <div class="modal-footer py-2 d-flex flex-wrap align-items-center justify-content-between">
+                <div class="d-flex align-items-center" id="docv-toolbar">
+                    <button type="button" class="btn btn-sm btn-soft-secondary" id="docv-zoom-out" title="Zoom out (−)" aria-label="Zoom out">
+                        <i class="ri-subtract-line"></i>
+                    </button>
+                    <span id="docv-zoom-pct">100%</span>
+                    <button type="button" class="btn btn-sm btn-soft-secondary" id="docv-zoom-in" title="Zoom in (+)" aria-label="Zoom in">
+                        <i class="ri-add-line"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-soft-secondary" id="docv-zoom-reset" title="Reset zoom (0)" aria-label="Reset zoom to 100%">
+                        <i class="ri-refresh-line me-1"></i>Reset
+                    </button>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a id="docv-open" href="#" target="_blank" rel="noopener" class="btn btn-sm btn-soft-primary"><i class="ri-external-link-line me-1"></i>Open in New Tab</a>
+                    <a id="docv-download" href="#" download class="btn btn-sm btn-soft-success"><i class="ri-download-2-line me-1"></i>Download</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.DocViewer = (function () {
+    var ZOOM_STEPS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]; // 50%–300%, same steps most PDF viewers use
+    var DEFAULT_STEP = 3; // index of 100%
+    var step = DEFAULT_STEP;
+    var modalEl, bsModal, target; // target: the <iframe> or <img> currently showing the open document
+
+    function el(id) { return document.getElementById(id); }
+
+    function clamp(i) { return Math.max(0, Math.min(ZOOM_STEPS.length - 1, i)); }
+
+    function applyZoom() {
+        if (!target) return;
+        var scale = ZOOM_STEPS[step];
+        target.style.transform = 'scale(' + scale + ')';
+        el('docv-zoom-pct').textContent = Math.round(scale * 100) + '%';
+        el('docv-zoom-out').disabled = step === 0;
+        el('docv-zoom-in').disabled = step === ZOOM_STEPS.length - 1;
+    }
+
+    function zoomIn() { step = clamp(step + 1); applyZoom(); }
+    function zoomOut() { step = clamp(step - 1); applyZoom(); }
+    function zoomReset() { step = DEFAULT_STEP; applyZoom(); }
+
+    // PDF/doc files render in a sandboxed <iframe> (the browser's own PDF viewer handles the actual
+    // rendering, so existing PDF behavior — printing, text selection, its own internal zoom/search — is
+    // untouched; these controls additionally scale the whole iframe element, which is the one zoom
+    // mechanism that works identically across browsers without depending on any particular PDF viewer's
+    // internal API). Anything else recognized as an image renders as a plain <img> so it zooms/pans without
+    // any stretching — CSS transform:scale never distorts aspect ratio.
+    var IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp)$/i;
+
+    function open(fileLink, title) {
+        if (!modalEl) init();
+        el('docViewerModalLabel').textContent = title || 'Document';
+        el('docv-open').href = fileLink;
+        el('docv-download').href = fileLink;
+        step = DEFAULT_STEP;
+
+        var stage = el('docv-stage');
+        stage.classList.remove('docv-empty');
+        if (!fileLink) {
+            stage.classList.add('docv-empty');
+            stage.innerHTML = '<div class="text-white-50"><i class="ri-file-warning-line fs-1 d-block text-center mb-2"></i>This document has no file to preview.</div>';
+            target = null;
+            el('docv-zoom-out').disabled = el('docv-zoom-in').disabled = el('docv-zoom-reset').disabled = true;
+        } else if (IMAGE_EXT.test(fileLink)) {
+            stage.innerHTML = '<img id="docv-image" alt="">';
+            target = el('docv-image');
+            target.onerror = function () { showLoadError(stage); };
+            target.src = fileLink;
+            el('docv-zoom-out').disabled = el('docv-zoom-in').disabled = el('docv-zoom-reset').disabled = false;
+            applyZoom();
+        } else {
+            stage.innerHTML = '<iframe id="docv-frame" title="Document preview"></iframe>';
+            target = el('docv-frame');
+            // onerror never fires for a cross-origin-like iframe load failure (same-origin here, but a 404
+            // still loads successfully AS A DOCUMENT showing the app's own 404 page) — a 404/500 response is
+            // still "loaded" from the iframe's perspective, so file-not-found is surfaced by the caller
+            // checking the document's own fileLink before calling open(), not detected here.
+            target.src = fileLink;
+            el('docv-zoom-out').disabled = el('docv-zoom-in').disabled = el('docv-zoom-reset').disabled = false;
+            applyZoom();
+        }
+        bsModal.show();
+    }
+
+    function showLoadError(stage) {
+        stage.classList.add('docv-empty');
+        stage.innerHTML = '<div class="text-white-50"><i class="ri-file-warning-line fs-1 d-block text-center mb-2"></i>This file could not be loaded. It may have been moved or removed.</div>';
+        target = null;
+        el('docv-zoom-out').disabled = el('docv-zoom-in').disabled = el('docv-zoom-reset').disabled = true;
+    }
+
+    function init() {
+        modalEl = el('docViewerModal');
+        bsModal = new bootstrap.Modal(modalEl);
+        el('docv-zoom-in').addEventListener('click', zoomIn);
+        el('docv-zoom-out').addEventListener('click', zoomOut);
+        el('docv-zoom-reset').addEventListener('click', zoomReset);
+        // Keyboard: +/- /0, only while this modal is the one open — never hijacks these keys on the rest of
+        // the page, and Escape-to-close is already Bootstrap's own default modal behavior, untouched here.
+        modalEl.addEventListener('keydown', function (e) {
+            if (e.target && /input|textarea/i.test(e.target.tagName)) return;
+            if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn(); }
+            else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomOut(); }
+            else if (e.key === '0') { e.preventDefault(); zoomReset(); }
+        });
+        // Releasing the <iframe>/<img> on close (rather than leaving last session's content sitting in a
+        // hidden modal) means reopening the SAME modal for a different document never shows a stale frame
+        // for the instant before the new src loads, and a PDF plugin's own memory is freed promptly.
+        modalEl.addEventListener('hidden.bs.modal', function () {
+            el('docv-stage').innerHTML = '';
+            target = null;
+        });
+    }
+
+    return { open: open };
+})();
+</script>

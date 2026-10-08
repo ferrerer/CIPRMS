@@ -767,6 +767,15 @@
         });
     }
 
+    // Looks the document up by id (same safe pattern as renameDocumentPrompt/toggleDocArchive below — only a
+    // numeric id is ever interpolated into the onclick attribute, never the raw title/fileLink strings) so
+    // the shared viewer (views/partials/document_viewer.ejs) never needs those values embedded in markup.
+    function openDocPreview(docId) {
+        const doc = allDocs.find(d => d.id === docId);
+        if (!doc) return;
+        DocViewer.open(doc.fileLink || '', doc.title || 'Document');
+    }
+
     function renameDocumentPrompt(docId) {
         const doc = allDocs.find(d => d.id === docId);
         const title = prompt('Rename document:', doc ? doc.title : '');
@@ -870,7 +879,7 @@
                             </div>
                             ${accredExtra}
                             <div class="d-flex gap-2 mb-2">
-                                <a class="btn btn-sm btn-soft-primary flex-grow-1" href="${doc.fileLink || '#'}" target="_blank" rel="noopener"${doc.fileLink ? '' : ' aria-disabled="true"'}><i class="ri-eye-line me-1"></i>Preview</a>
+                                <button type="button" class="btn btn-sm btn-soft-primary flex-grow-1" onclick="openDocPreview(${doc.id})"><i class="ri-eye-line me-1"></i>Preview</button>
                                 <a class="btn btn-sm btn-soft-success" href="${doc.fileLink || '#'}" download title="Download"><i class="ri-download-2-line"></i></a>
                                 <button class="btn btn-sm btn-soft-warning" title="Rename" onclick="renameDocumentPrompt(${doc.id})"><i class="ri-pencil-line"></i></button>
                             </div>
@@ -925,7 +934,7 @@
                     </td>
                     <td class="text-end">
                         <div class="btn-group btn-group-sm">
-                            <a class="btn btn-soft-primary" href="${doc.fileLink || '#'}" target="_blank" rel="noopener" title="Preview"><i class="ri-eye-line"></i></a>
+                            <button type="button" class="btn btn-soft-primary" title="Preview" onclick="openDocPreview(${doc.id})"><i class="ri-eye-line"></i></button>
                             <a class="btn btn-soft-success" href="${doc.fileLink || '#'}" download title="Download"><i class="ri-download-2-line"></i></a>
                             <button class="btn btn-soft-warning" title="Rename" onclick="renameDocumentPrompt(${doc.id})"><i class="ri-pencil-line"></i></button>
                             <button class="btn ${doc.archived ? 'btn-soft-secondary' : 'btn-soft-info'}" title="${doc.archived ? 'Unarchive' : 'Archive'}" onclick="toggleDocArchive(${doc.id}, ${!doc.archived})"><i class="ri-archive-line"></i></button>
@@ -1172,6 +1181,8 @@
     opacity:0;pointer-events:none;transition:opacity .3s;
     display:flex;align-items:center;gap:.4rem;
 "></div>
+
+<%- include('../partials/document_viewer') %>
 
 </body>
 </html>

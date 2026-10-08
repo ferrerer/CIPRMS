@@ -320,6 +320,14 @@
         });
     }
 
+    // Same safe id-lookup pattern as moveDocument/toggleDocArchive below — only a numeric id is ever
+    // interpolated into the onclick attribute, never the raw title/fileLink strings.
+    function openDocPreview(docId) {
+        var doc = allDocs.find(function (d) { return d.id === docId; });
+        if (!doc) return;
+        DocViewer.open(doc.fileLink || '', doc.title || 'Document');
+    }
+
     function moveDocument(docId, folderValue) {
         var folderId = folderValue === '' ? null : parseInt(folderValue);
         fetch('/api/documents/' + docId + '/organize', {
@@ -432,7 +440,7 @@
                                 '<span class="badge ' + statusBadge + ' fs-10" style="flex-shrink:0;">' + doc.status + '</span>' +
                             '</div>' +
                             '<div class="d-flex gap-2 mb-2">' +
-                                '<a class="btn btn-sm btn-soft-primary flex-grow-1" href="' + (doc.fileLink || '#') + '" target="_blank" rel="noopener"><i class="ri-eye-line me-1"></i>Preview</a>' +
+                                '<button type="button" class="btn btn-sm btn-soft-primary flex-grow-1" onclick="openDocPreview(' + doc.id + ')"><i class="ri-eye-line me-1"></i>Preview</button>' +
                                 '<a class="btn btn-sm btn-soft-success" href="' + (doc.fileLink || '#') + '" download title="Download"><i class="ri-download-2-line"></i></a>' +
                             '</div>' +
                             '<select class="form-select form-select-sm mb-2" title="Move to folder" onchange="moveDocument(' + doc.id + ', this.value)">' + folderOptionsHtml(doc) + '</select>' +
@@ -466,7 +474,7 @@
                 '<td><span class="badge ' + statusBadge + ' fs-10">' + (doc.status || '—') + '</span></td>' +
                 '<td style="min-width:140px"><select class="form-select form-select-sm" title="Move to folder" onchange="moveDocument(' + doc.id + ', this.value)">' + folderOptionsHtml(doc) + '</select></td>' +
                 '<td class="text-end"><div class="btn-group btn-group-sm">' +
-                    '<a class="btn btn-soft-primary" href="' + (doc.fileLink || '#') + '" target="_blank" rel="noopener" title="Preview"><i class="ri-eye-line"></i></a>' +
+                    '<button type="button" class="btn btn-soft-primary" title="Preview" onclick="openDocPreview(' + doc.id + ')"><i class="ri-eye-line"></i></button>' +
                     '<a class="btn btn-soft-success" href="' + (doc.fileLink || '#') + '" download title="Download"><i class="ri-download-2-line"></i></a>' +
                     '<button class="btn ' + (doc.archived ? 'btn-soft-secondary' : 'btn-soft-info') + '" title="' + (doc.archived ? 'Unarchive' : 'Archive') + '" onclick="toggleDocArchive(' + doc.id + ', ' + (!doc.archived) + ')"><i class="ri-archive-line"></i></button>' +
                 '</div></td>' +
@@ -493,6 +501,8 @@
     opacity:0;pointer-events:none;transition:opacity .3s;
     display:flex;align-items:center;gap:.4rem;
 "></div>
+
+<%- include('../partials/document_viewer') %>
 
 </body>
 </html>

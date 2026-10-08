@@ -442,7 +442,11 @@
               <span class="badge bg-primary-subtle text-primary fs-12 px-2 py-1">Optional</span>
             </div>
             <% var docLibraryHref = (typeof user !== 'undefined' && user && user.role === 'Auth. Personnel') ? '/personnel/documents' : '/documents'; %>
-            <p class="text-muted fs-13 mb-3">Upload a MOA, MOU, Contract, Partnership Proposal, or Letter of Intent. The system extracts text, suggests values, and pre-fills the form fields below. The file is safely archived to the <a href="<%= docLibraryHref %>" target="_blank" class="fw-medium text-decoration-underline">Document Library</a>.</p>
+            <%# 2026-11 investigation: this used to say the file "is safely archived to the Document Library"
+                 in the present tense — true now (see confirmOcrDocument(), registry-gridjs.init.js), but not
+                 until "Save Partnership" below actually succeeds; worded that way, it previously described
+                 something that was never actually implemented at all. %>
+            <p class="text-muted fs-13 mb-3">Upload a MOA, MOU, Contract, Partnership Proposal, or Letter of Intent. The system extracts text and suggests values for the form below. Once you save the partnership, the file is archived to the <a href="<%= docLibraryHref %>" target="_blank" class="fw-medium text-decoration-underline">Document Library</a> too.</p>
             <div id="monitoring-ocr-dropzone-wrap" class="mb-3">
               <input type="file" class="form-control" id="ocr-file-input" accept=".pdf,.jpg,.jpeg,.png">
             </div>

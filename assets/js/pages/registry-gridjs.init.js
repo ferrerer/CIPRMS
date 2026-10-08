@@ -1125,6 +1125,15 @@ function showToast(msg){
 function computeStatus(){var v=document.getElementById('f-end').value;if(!v)return;var d=Math.ceil((new Date(v)-new Date())/86400000);document.getElementById('f-status').value=d<0?'Expired':d<=90?'Expiring Soon':'Active';}
 
 // \u2500\u2500 OCR auto-fill (Extract using OCR button in the Add Partnership modal) \u2500\u2500\u2500\u2500
+// ocrJobId (2026-11 New Partnership / Document Library investigation): root cause of uploaded documents
+// never appearing in the Document Library from this form \u2014 extraction (POST /api/ocr/extract) only ever
+// held the file as an unconfirmed job; applyOcrToForm() below copies the EXTRACTED FIELDS into the
+// partnership form, but nothing here ever called POST /api/ocr/confirm (the one call that actually
+// archives the file \u2014 see controllers/ocrController.js's own comment on /extract for why), so the job
+// quietly expired and its temp file leaked. Mirrors documents.ejs's own currentJobId \u2014 confirmed only once
+// submitPartnership() below actually succeeds (so a partnership that fails to save never gets an orphaned
+// document archived for it either), discarded if the modal is closed/reset without saving.
+var ocrJobId = null;
 var ocrExtractedResult = null;
 var ocrPollTimer = null;
 var OCR_MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -1140,6 +1149,11 @@ function startOcrExtraction() {
   var ext = '.' + file.name.split('.').pop().toLowerCase();
   if (OCR_ALLOWED_EXT.indexOf(ext) === -1) { showToast('Unsupported file type. Use PDF, JPG, JPEG, or PNG.'); return; }
   if (file.size > OCR_MAX_FILE_SIZE) { showToast('File is too large. Maximum size is 10MB.'); return; }
+
+  // Replacing an earlier extraction that was never saved — discard its temp file server-side instead of
+  // leaking it (it would otherwise just sit in uploads/tmp until the 10-minute job TTL, unrecoverable
+  // either way once ocrJobId below is overwritten).
+  discardOcrJob();
 
   ocrShow('ocr-error-box', false);
   ocrShow('ocr-result-box', false);
@@ -1186,7 +1200,7 @@ function pollOcrStatus(jobId) {
       document.getElementById('ocr-stage-text').textContent = 'OCR Processing\u2026 (' + (data.stage || '') + ')';
 
       if (data.status === 'error') { ocrFail(data.error || 'OCR processing failed.'); return; }
-      if (data.status === 'done') { ocrSucceed(data.result); return; }
+      if (data.status === 'done') { ocrJobId = jobId; ocrSucceed(data.result); return; }
       ocrPollTimer = setTimeout(function () { pollOcrStatus(jobId); }, 700);
     })
     .catch(function () { ocrFail('Lost connection while checking OCR progress.'); });
@@ -1199,6 +1213,35 @@ function ocrFail(message) {
   box.textContent = message;
   ocrShow('ocr-error-box', true);
   showToast('OCR error: ' + message);
+}
+
+// Tells the server to delete the temp file for a job that will never be confirmed — replacing it with a
+// new upload, or closing the modal without saving. Fire-and-forget (nothing in the UI needs to wait for
+// this): the job is already done from this form's point of view either way.
+function discardOcrJob() {
+  if (!ocrJobId) return;
+  var id = ocrJobId;
+  ocrJobId = null;
+  fetch('/api/ocr/discard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId: id }) }).catch(function () {});
+}
+
+// Called by submitPartnership() only after /api/partnerships has actually reported success — permanently
+// archives the upload to the Document Library, tagged with the partnership it supports, with the user's
+// own saved Institution/Agreement Type values (not whatever OCR merely guessed) — overrides take
+// precedence server-side exactly like documents.ejs's saveDocument() already does.
+function confirmOcrDocument(jobId, institution, docType, partnershipId) {
+  fetch('/api/ocr/confirm', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jobId: jobId, institution: institution, documentType: docType, partnershipId: partnershipId })
+  }).then(function (r) { return r.json(); }).then(function (data) {
+    if (!data.success) {
+      // The partnership itself is already saved — this only ever reports a SEPARATE problem: its
+      // supporting document did not make it into the Document Library. Never silently dropped.
+      showToast('Partnership saved, but the uploaded document could not be added to the Document Library: ' + (data.error || 'unknown error') + '. You can upload it again from the Document Library page.', '#f06548');
+    }
+  }).catch(function () {
+    showToast('Partnership saved, but the uploaded document could not be added to the Document Library (network error). You can upload it again from the Document Library page.', '#f06548');
+  });
 }
 
 function ocrSucceed(result) {
@@ -1327,6 +1370,7 @@ function applyOcrToForm() {
 }
 
 function dismissOcrResult() {
+  discardOcrJob();
   ocrExtractedResult = null;
   ocrShow('ocr-result-box', false);
   ocrShow('ocr-error-box', false);
@@ -1476,6 +1520,9 @@ function submitPartnership(){
     startYear:new Date(start).getFullYear(),endYear:new Date(end).getFullYear(),
     start:fmt(start),end:fmt(end),status:status,remarks:document.getElementById('f-remarks').value.trim()};
   if(pendingRequestConversion) payload.sourceRequestId=pendingRequestConversion;
+  // Captured now, before the partnership save — see submitPartnership()'s own doc comment above
+  // ocrExtractedResult/ocrJobId for the root cause this closes (confirm only on an actual save).
+  var jobIdToConfirm = ocrJobId;
   return runOnce('#addPartnershipModal .btn-primary.ms-auto','Saving...',function(){
     return CIPRMS.api('/api/partnerships',{method:'POST',json:payload,quiet:true}).then(function(res){
       var data=res.data;
@@ -1492,6 +1539,13 @@ function submitPartnership(){
         showToast(data.alreadyConverted
           ? '"'+inst+'" was already converted to a Registry partnership.'
           : '"'+inst+'" added to the registry.'+locationNote(data.partnership));
+        // The partnership itself is already saved and shown to the user at this point regardless of what
+        // happens below — archiving its supporting document is a trailing step, never something that can
+        // make a successful partnership save look like it failed.
+        if (jobIdToConfirm) {
+          ocrJobId = null; // claimed — hidden.bs.modal's own discardOcrJob() must not also touch this job
+          confirmOcrDocument(jobIdToConfirm, inst, type, data.partnership.id);
+        }
       } else {
         showToast(res.error||'Error saving partnership. Please try again.');
       }
@@ -1535,6 +1589,10 @@ document.addEventListener('DOMContentLoaded', function() {
     pendingRequestConversion=null;
     hideFromRequestBanner();
     clearFromRequestParam();
+    // Closed (X / backdrop / Cancel) with an extracted-but-never-saved upload still pending — discard its
+    // temp file now rather than leaving it for the 10-minute job TTL to eventually clean up. A no-op if
+    // submitPartnership() already confirmed (and nulled) it, or if there was never a pending job.
+    discardOcrJob();
   });
 
   checkFromRequestParam();

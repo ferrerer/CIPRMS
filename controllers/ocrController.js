@@ -53,7 +53,7 @@ function status(req, res) {
 // institution) with the extracted fields, then permanently archives the file.
 // Only the session owner of the job may confirm it.
 async function confirm(req, res) {
-  const { jobId, title, institution } = req.body || {};
+  const { jobId, title, institution, documentType, partnershipId } = req.body || {};
   if (!jobId) {
     return res.status(400).json({ success: false, error: 'jobId is required.' });
   }
@@ -77,10 +77,21 @@ async function confirm(req, res) {
     overrides.institution = institution.trim();
     overrides.partner = institution.trim();
   }
+  // documentType (2026-11 investigation): lets a caller whose own form has its own, already-user-confirmed
+  // type selection (e.g. the Add New Partnership form's MOA/MOU field) make the archived Document Library
+  // record agree with it, instead of only ever reflecting OCR's own free-text guess.
+  if (documentType && String(documentType).trim()) overrides.documentType = String(documentType).trim();
+
+  // Only a bare positive integer is ever accepted — never trusted beyond that (it is looked up server-side
+  // the same as any other id; this merely records which partnership this upload belongs to).
+  const extraMeta = {};
+  if (partnershipId != null && Number.isInteger(Number(partnershipId)) && Number(partnershipId) > 0) {
+    extraMeta.partnershipId = Number(partnershipId);
+  }
 
   try {
     const session = (req.session && req.session.user) || {};
-    const archived = await ocrService.confirmJob(jobId, overrides, session);
+    const archived = await ocrService.confirmJob(jobId, overrides, session, extraMeta);
     res.json({ success: true, documentId: archived.documentId, fileLink: archived.fileLink });
   } catch (err) {
     console.error('❌ OCR confirm error:', err);

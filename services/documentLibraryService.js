@@ -254,7 +254,14 @@ async function archiveToDocumentLibrary(tempFilePath, originalName, extraction, 
     // uploaded during review of, when applicable (undefined for the OCR
     // registry-upload path, which doesn't set these).
     ...(meta.requestId != null ? { requestId: meta.requestId } : {}),
-    ...(meta.requestType ? { requestType: meta.requestType } : {})
+    ...(meta.requestType ? { requestType: meta.requestType } : {}),
+    // 2026-11 New Partnership / Document Library investigation: the OCR auto-fill upload on the Add New
+    // Partnership form (views/administrator/monitoring.ejs, assets/js/pages/registry-gridjs.init.js) is a
+    // separate relationship from requestId/requestType above (that pair links to a pending Partnership
+    // *Request* awaiting review — this partnership already exists, straight in the Registry) — its own
+    // field so the two are never confused, and so a Document Library record can show which partnership it
+    // was the supporting document for.
+    ...(meta.partnershipId != null ? { partnershipId: meta.partnershipId } : {})
   };
 
   await db.collection('documents').insertOne(doc);
