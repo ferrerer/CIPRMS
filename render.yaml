@@ -18,3 +18,14 @@ services:
         sync: false
       - key: GOOGLE_TOKEN_ENCRYPTION_KEY
         sync: false
+      # Required for e-mail notifications (services/emailService.js). Without these, CIPRMS runs normally
+      # but e-mail delivery is skipped and the System Status banner reports "Email Notifications" as not
+      # configured. Set in the Render dashboard (Environment tab) — never commit real values here.
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_APP_PASSWORD
+        sync: false
+      # Public URL used to build the "Open in CIPRMS" links inside notification e-mails. Without this,
+      # emailService.js falls back to http://localhost:<PORT>, which is unreachable from a recipient's inbox.
+      - key: APP_BASE_URL
+        sync: false

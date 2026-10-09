@@ -19,6 +19,7 @@ const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary 
 const googleCalendarService = require('./services/googleCalendarService');
 const googleDocsService = require('./services/googleDocsService');
 const emailService = require('./services/emailService');
+const systemStatusService = require('./services/systemStatusService');
 const notificationService = require('./services/notificationService');
 const realtime = require('./services/realtime');
 const searchService = require('./services/searchService');
@@ -2601,10 +2602,24 @@ const REQUIRED_PARTNERSHIP_FIELDS = ['inst', 'type', 'unit', 'start', 'end'];
 const VALID_PARTNERSHIP_TYPES = ['MOA', 'MOU'];
 const VALID_PARTNERSHIP_CATEGORIES = ['International', 'Local'];
 const VALID_PARTNERSHIP_STATUSES = ['Active', 'Expiring Soon', 'Expired'];
-// Responsible Unit (Registry → Add/Edit Partnership → CSPC-CIRL Details) is a
-// closed, predefined set — unlike Document Request's free-text combobox, no
-// custom values are accepted here.
+// Responsible Unit (Registry → Add/Edit Partnership → CSPC-CIRL Details) — 2026-11 investigation: this used
+// to be a closed set hardcoded here AND separately in assets/js/pages/registry-gridjs.init.js's own
+// UNIT_OPTIONS, with no way for an Administrator/Staff user to add a unit that legitimately doesn't exist
+// yet without a code change. Now backed by the `responsibleunits` collection (GET/POST
+// /api/responsible-units below) — this constant survives only as the one-time seed list (db.js, so every
+// existing unit keeps working with zero migration) and as the final fallback if that collection is
+// ever somehow empty when validPartnershipUnitNames() runs. The set itself is no longer closed in the
+// "nobody can ever add to it" sense, but a save is still validated against a real, authoritative list —
+// never free text, unlike Document Request's combobox.
 const VALID_PARTNERSHIP_UNITS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
+
+// The current authoritative Responsible Unit list, read fresh on every save (not cached) — a Responsible
+// Unit is added rarely enough that this one extra query per partnership save is not worth the staleness
+// risk of a cache that could let someone else's brand-new unit "fail to validate" for a few minutes.
+async function validPartnershipUnitNames(db) {
+  const units = await db.collection('responsibleunits').find({}).toArray();
+  return units.length ? units.map(u => u.name) : VALID_PARTNERSHIP_UNITS.slice();
+}
 // Country (2026-09-22): the Registry's Add/Edit Partnership form now presents Country as a closed <select> —
 // see assets/js/pages/registry-gridjs.init.js's COUNTRY_OPTIONS for that list. Deliberately NOT enforced here
 // as a matching server-side enum: the existing partnership test suite (partnerships.test.js's dashboard/
@@ -2625,7 +2640,10 @@ const PARTNERSHIP_COUNTRY_MAX_LENGTH = 100;
  * pass the `typeof` check, so it's simply reported as a type error rather
  * than ever reaching `$set`/`insertOne`.
  */
-function sanitizePartnershipFields(body, { requireCore }) {
+function sanitizePartnershipFields(body, { requireCore, validUnits }) {
+  // Callers that don't pass validUnits (there are none left in this file, but kept defensive for any
+  // future/test caller) still get real validation, just against the seed list rather than the live DB set.
+  validUnits = validUnits || VALID_PARTNERSHIP_UNITS;
   const fields = {};
   const errors = [];
   for (const [field, type] of Object.entries(PARTNERSHIP_FIELDS)) {
@@ -2656,7 +2674,7 @@ function sanitizePartnershipFields(body, { requireCore }) {
         if (typeof v !== 'string') { invalid = true; break; }
         const trimmed = v.trim();
         if (!trimmed) continue;
-        if (field === 'unit' && !VALID_PARTNERSHIP_UNITS.includes(trimmed)) { invalid = true; break; }
+        if (field === 'unit' && !validUnits.includes(trimmed)) { invalid = true; break; }
         const key = trimmed.toLowerCase();
         if (seen.has(key)) continue; // de-dupe silently — the UI already prevents this, this is just defense-in-depth
         seen.add(key);
@@ -2664,7 +2682,7 @@ function sanitizePartnershipFields(body, { requireCore }) {
       }
       if (invalid) {
         errors.push(field === 'unit'
-          ? 'unit must only contain: ' + VALID_PARTNERSHIP_UNITS.join(', ')
+          ? 'unit must only contain: ' + validUnits.join(', ')
           : `${field} must be an array of strings.`);
         continue;
       }
@@ -2690,6 +2708,67 @@ function sanitizePartnershipFields(body, { requireCore }) {
   return { fields, errors };
 }
 
+// ── RESPONSIBLE UNITS (2026-11) ───────────────────────────────────────────────
+// The Add/Edit Partnership form's "Responsible Unit" field used to be a closed set hardcoded in two places
+// (VALID_PARTNERSHIP_UNITS above and registry-gridjs.init.js's own UNIT_OPTIONS) with no way for an
+// Administrator/Staff user to add a legitimately-missing unit without a code change. Backed by its own
+// collection now — same requireStaffAccess gate as /api/partnerships itself, since this field is only ever
+// edited from that same Administrator/Staff-only form; no new, more permissive access was introduced.
+app.get('/api/responsible-units', requireStaffAccess, async (req, res) => {
+  try {
+    const db = getDb();
+    const units = await db.collection('responsibleunits').find({}).sort({ name: 1 }).toArray();
+    res.json(units);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const RESPONSIBLE_UNIT_MAX_LENGTH = 100;
+// Letters/digits/spaces and a short list of punctuation real CSPC unit names actually use (CIRL's own full
+// name has a comma-free ampersand-free style, but e.g. "College of Arts & Sciences" or "Office of the VP
+// for Academic Affairs (OVPAA)" are realistic) — rejects anything that looks like markup/script content
+// rather than a department name, the same spirit as filename sanitization elsewhere in this app.
+const RESPONSIBLE_UNIT_NAME_RE = /^[A-Za-z0-9 .,&'()\/-]+$/;
+
+// No announce() here deliberately — that middleware's 'partnership' topic reads body.partnership to build
+// its realtime broadcast, which this response doesn't have; reusing it would publish a misleading
+// partnership.updated event with no real id attached. Adding a Responsible Unit isn't a collaborative
+// live-edit scenario the way a partnership record is, so no realtime event is needed for it at all.
+app.post('/api/responsible-units', requireStaffAccess, async (req, res) => {
+  try {
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    if (!name) return res.status(400).json({ error: 'Unit name is required.' });
+    if (name.length > RESPONSIBLE_UNIT_MAX_LENGTH) {
+      return res.status(400).json({ error: `Unit name must be ${RESPONSIBLE_UNIT_MAX_LENGTH} characters or fewer.` });
+    }
+    if (!RESPONSIBLE_UNIT_NAME_RE.test(name)) {
+      return res.status(400).json({ error: 'Unit name may only contain letters, numbers, spaces, and basic punctuation.' });
+    }
+    const db = getDb();
+    // Case-insensitive duplicate check (buildExactCaseInsensitiveMatch/escapeRegexLiteral — the exact same
+    // helpers the Custom Report Builder's Country matching already uses for this identical "same value,
+    // different casing" problem) — "CIRL" existing must block "cirl", "Cirl", etc., not just an exact
+    // byte-for-byte match.
+    const existing = await db.collection('responsibleunits').findOne({ name: buildExactCaseInsensitiveMatch(name) });
+    if (existing) return res.status(409).json({ error: `"${existing.name}" already exists as a Responsible Unit.` });
+
+    const last = await db.collection('responsibleunits').find({}).sort({ id: -1 }).limit(1).toArray();
+    const id = last.length ? last[0].id + 1 : 1;
+    const unit = { id, name, createdAt: new Date().toISOString(), createdByEmail: req.session.user.email };
+    await db.collection('responsibleunits').insertOne(unit);
+    res.json({ success: true, unit });
+  } catch (err) {
+    // A unique-index race (two simultaneous adds of the same name) surfaces as a duplicate-key error here —
+    // reported as the same friendly "already exists" message a sequential duplicate gets, not a raw DB error.
+    if (err && err.code === 11000) {
+      return res.status(409).json({ error: 'That Responsible Unit already exists.' });
+    }
+    console.error('❌ Create Responsible Unit error:', err);
+    res.status(500).json({ error: 'Unable to create the Responsible Unit right now. Please try again.' });
+  }
+});
+
 // Registry CRUD — Administrator and Staff share full authority (2026-08-27
 // full-parity revision); every other role stays read-only or unauthenticated.
 //
@@ -2708,11 +2787,11 @@ app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async
     if (unknown.length) {
       return res.status(400).json({ error: 'Unknown field(s): ' + unknown.join(', ') });
     }
-    const { fields, errors } = sanitizePartnershipFields(partnershipBody, { requireCore: true });
+    const db = getDb();
+    const { fields, errors } = sanitizePartnershipFields(partnershipBody, { requireCore: true, validUnits: await validPartnershipUnitNames(db) });
     if (errors.length) {
       return res.status(400).json({ error: errors.join(' ') });
     }
-    const db = getDb();
 
     // ── Approved-Request → Registry conversion ──────────────────────────────
     // Resolved before the insert so a request that was already converted
@@ -2812,7 +2891,8 @@ app.patch('/api/partnerships/:id', requireStaffAccess, announce('partnership', {
     if (unknown.length) {
       return res.status(400).json({ error: 'Unknown field(s): ' + unknown.join(', ') });
     }
-    const { fields, errors } = sanitizePartnershipFields(req.body, { requireCore: false });
+    const db = getDb();
+    const { fields, errors } = sanitizePartnershipFields(req.body, { requireCore: false, validUnits: await validPartnershipUnitNames(db) });
     if (errors.length) {
       return res.status(400).json({ error: errors.join(' ') });
     }
@@ -2820,7 +2900,6 @@ app.patch('/api/partnerships/:id', requireStaffAccess, announce('partnership', {
       return res.status(400).json({ error: 'No valid fields to update.' });
     }
 
-    const db = getDb();
     const existing = await db.collection('partnerships').findOne({ id });
     if (!existing) return res.status(404).json({ error: 'Not found.' });
 
@@ -7618,6 +7697,22 @@ app.get('/api/google-docs/status', requireAdmin, async (req, res) => {
   }
 });
 
+// System Status (2026-11) — any signed-in user, not just Administrator: everyone benefits from knowing
+// *which* feature is unavailable instead of guessing the whole app is broken. Deliberately returns only
+// state + a plain-language message per service — none of the account-linking detail (connected-by email,
+// OAuth redirect URI) that the admin-only /api/google-*/status routes above expose.
+app.get('/api/system-status', requireAuth, async (req, res) => {
+  try {
+    const status = await systemStatusService.getSystemStatus();
+    res.json(status);
+  } catch (err) {
+    // The status check itself failing is not the same claim as "CIPRMS is down" — report that the check
+    // could not complete rather than fabricate a worse (or falsely reassuring) status.
+    console.error('❌ /api/system-status error:', err);
+    res.json({ coreAvailable: true, overall: 'unknown', services: [], checkedAt: new Date().toISOString() });
+  }
+});
+
 app.get('/api/google-docs/connect', requireAdmin, (req, res) => {
   if (!googleCalendarConfigured()) return googleDocsFailure(res, 'not_configured');
   const state = crypto.randomBytes(16).toString('hex');
@@ -7841,7 +7936,10 @@ async function readOwnProfile(req, res) {
     const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
     res.json(registeredProfile(userDoc));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // Same convention as /api/admin/password etc. below: log the real error server-side, never echo raw
+    // internals (Mongo driver messages, stack traces) back to the client — this previously did `error: err.message`.
+    console.error('❌ readOwnProfile error:', err);
+    res.status(503).json({ error: 'Unable to load your profile right now. Please try again.', code: 'SERVICE_UNAVAILABLE' });
   }
 }
 
@@ -7863,7 +7961,8 @@ async function saveOwnName(req, res) {
     const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { password: 0 } });
     res.json({ success: true, profile: registeredProfile(userDoc) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ saveOwnName error:', err);
+    res.status(503).json({ error: 'Unable to save your name right now. Please try again.', code: 'SERVICE_UNAVAILABLE' });
   }
 }
 
@@ -8902,6 +9001,9 @@ if (require.main === module) {
     console.log(`CIPRMS server running → ${url}`);
     try {
       await connectDB();
+      console.log(emailService.isConfigured()
+        ? '✅ Email notifications configured (MAIL_USER set).'
+        : '⚠️  Email notifications NOT configured — set MAIL_USER and MAIL_APP_PASSWORD to enable e-mail delivery (see .env.example).');
       await migrateLegacyPartnerAvatars().catch(err => console.error('⚠️  Partner avatar migration skipped:', err.message));
       await runLifecycleCheck(); // catch up immediately on startup, don't wait for the first interval tick
       setInterval(runLifecycleCheck, LIFECYCLE_CHECK_INTERVAL_MS);

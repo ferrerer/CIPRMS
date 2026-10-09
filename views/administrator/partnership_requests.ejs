@@ -957,6 +957,34 @@
     </div>
   </div>
 
+  <%# 2026-11 Document Requests confirmation investigation: a Document Request's status previously changed the
+       instant the Status dropdown's value changed, with no confirmation step at all —
+       a single misclick could move a real request to Approved/Rejected/Completed. One shared modal for every
+       status transition (not a separate one per status) — see confirmDrStatusChange()/cancelDrStatusChange()
+       below for the wiring. Styled like this page's own dr-modal/draft-preview-modal (modal fade zoomIn,
+       bg-light header) rather than the browser's plain confirm() the one pre-existing confirm() on this page
+       (unlinking a Google Doc) still uses — out of scope to also change that one here. %>
+  <div class="modal fade zoomIn" id="dr-status-confirm-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-light p-3">
+          <h5 class="modal-title"><i class="ri-shield-check-line me-2 text-warning"></i>Confirm Status Update</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-3">Are you sure you want to change the status of the document request for <strong id="dr-confirm-inst">—</strong> from <span id="dr-confirm-from"></span> to <span id="dr-confirm-to"></span>?</p>
+          <p class="text-muted fs-12 mb-0"><i class="ri-information-line me-1"></i>This will be saved immediately and cannot be undone from here.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="dr-status-confirm-btn" onclick="confirmDrStatusChange()">
+            <span id="dr-status-confirm-btn-label">Confirm</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="pr-toast"></div>
 
@@ -2090,6 +2118,11 @@
       }
     }
     // One delegated listener for every row's dropdown (the tbody is re-rendered, so per-row handlers would pile up).
+    // Holds the one pending status change awaiting confirmation — by id/value, not a DOM element reference,
+    // since dr-tbody can be re-rendered in the background (a realtime refresh from someone else's unrelated
+    // change) while this page's own confirm modal is still open.
+    var pendingDrStatusChange = null;
+
     function bindDrStatusSelects() {
       const tbody = document.getElementById('dr-tbody');
       if (tbody.dataset.statusBound) return;
@@ -2099,10 +2132,55 @@
         if (!sel) return;
         const id = parseInt(sel.dataset.id, 10);
         const previous = sel.dataset.current;
-        if (!sel.value || sel.value === previous) return;
+        const next = sel.value;
+        if (!next || next === previous) return;
         if (drStatusInFlight.has(id)) { sel.value = previous; return; }
-        submitDrStatusChange(id, sel.value);
+        // The native <select> already shows `next` visually the instant the user picks it — revert that now;
+        // it is re-applied for real only if the user actually clicks Confirm below. This is what makes Cancel
+        // (or dismissing the modal any other way: backdrop click, Esc, the header ✕) leave the request
+        // genuinely unchanged, both on screen and server-side (nothing is sent yet either way).
+        sel.value = previous;
+        openDrStatusConfirm(id, previous, next);
       });
+    }
+
+    function openDrStatusConfirm(id, previousStatus, newStatus) {
+      const r = drData.find(x => x.id === id);
+      if (!r) return;
+      pendingDrStatusChange = { id: id, previousStatus: previousStatus, newStatus: newStatus };
+      document.getElementById('dr-confirm-inst').textContent = r.institution || 'this request';
+      document.getElementById('dr-confirm-from').innerHTML = statusBadge(previousStatus);
+      document.getElementById('dr-confirm-to').innerHTML = statusBadge(newStatus);
+      const btn = document.getElementById('dr-status-confirm-btn');
+      btn.disabled = false;
+      document.getElementById('dr-status-confirm-btn-label').textContent = 'Confirm';
+      modalInstance('dr-status-confirm-modal').show();
+    }
+
+    // Covers every way of NOT confirming — Cancel, the header ✕, Esc, a backdrop click — so there is a
+    // single place that always leaves the request alone, rather than one path for an explicit Cancel button
+    // and a separate (and easy to forget) path for every other way to close a Bootstrap modal.
+    document.addEventListener('DOMContentLoaded', function () {
+      const confirmModalEl = document.getElementById('dr-status-confirm-modal');
+      if (confirmModalEl) confirmModalEl.addEventListener('hidden.bs.modal', function () { pendingDrStatusChange = null; });
+    });
+
+    async function confirmDrStatusChange() {
+      if (!pendingDrStatusChange) return;
+      const { id, newStatus } = pendingDrStatusChange;
+      const btn = document.getElementById('dr-status-confirm-btn');
+      // Prevents rapid/double-clicking Confirm from firing the PATCH twice — the same in-flight guard
+      // submitDrStatusChange() already uses for the dropdown itself, applied here too since the button is a
+      // second way to trigger the exact same call.
+      if (btn.disabled) return;
+      btn.disabled = true;
+      document.getElementById('dr-status-confirm-btn-label').innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+      pendingDrStatusChange = null; // claimed — hidden.bs.modal's own reset below is now a no-op for this change
+      try {
+        await submitDrStatusChange(id, newStatus); // unchanged: same PATCH, same audit/notification/history side effects as before
+      } finally {
+        modalInstance('dr-status-confirm-modal').hide();
+      }
     }
 
     /* ─── INIT ─── */

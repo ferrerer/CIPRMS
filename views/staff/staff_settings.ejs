@@ -281,14 +281,21 @@
   async function loadProfile() {
     applyPhoto(INITIAL_AVATAR);
     try {
-      const data = await fetch('/api/staff/profile').then(r => r.json());
+      const res = await fetch('/api/staff/profile', { headers: { 'X-Requested-With': 'ciprms' } });
+      const data = await res.json().catch(() => null);
+      // A failed load must say so — leaving the form silently blank looks like the account's own data
+      // disappeared, when the real cause is the profile fetch itself failing (network/session/server error).
+      if (!res.ok || !data) throw new Error((data && data.error) || 'Unable to load your profile.');
       if (data.name)        document.getElementById('s-name').value        = data.name;
       if (data.dept)        document.getElementById('s-dept').value        = data.dept;
       if (data.position)    document.getElementById('s-position').value    = data.position;
       if (data.institution) document.getElementById('s-institution').value = data.institution;
       document.getElementById('s-contact').value = data.contactNumber || '';
       updateCard();
-    } catch(_) { updateCard(); }
+    } catch(err) {
+      updateCard();
+      showToast('<i class="ri-error-warning-line me-1"></i>' + escapeText(err.message || 'Unable to load your profile. Please refresh the page.'), '#f06548');
+    }
   }
 
   async function saveSettings() {

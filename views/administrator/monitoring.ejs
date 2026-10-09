@@ -69,6 +69,13 @@
       }
       .unit-combo-option:hover, .unit-combo-option.active { background: #f0f2fb; color: #405189; }
       .unit-combo-empty { padding: 10px; font-size: .8rem; color: #878a99; text-align: center; }
+      /* "+ Add Responsible Unit" (2026-11) — a thin top border separates it from the real, selectable
+         options above it so it never reads as just one more unit in the list; colored like this app's other
+         primary actions (btn-primary blue) rather than the plain neutral text every real option uses. */
+      .unit-combo-add { color: #405189; font-weight: 600; border-top: 1px solid #eef0f4; margin-top: 4px; }
+      .unit-combo-add:hover { background: #f0f2fb; color: #405189; }
+      [data-bs-theme="dark"] .unit-combo-add { color: #a9bcf5; border-top-color: #3a4053; }
+      [data-bs-theme="dark"] .unit-combo-add:hover { background: #363c4c; color: #a9bcf5; }
 
       /* Country — same searchable-combo pattern as Unit/Nature above, but single-select and made to look like
          an ordinary <select> (a dropdown caret) since it fronts one (see registry-gridjs.init.js's
@@ -649,6 +656,9 @@
                       <div class="unit-combo-dropdown" id="f-unit-dropdown" role="listbox" style="display:none"></div>
                     </div>
                   </div>
+                  <%# 2026-11: the dropdown's own "+ Add Responsible Unit" row (registry-gridjs.init.js) is the
+                       actual control — this is just making it discoverable without opening the dropdown first. %>
+                  <div class="form-text fs-11">Type to search, or open the list and choose <strong>+ Add Responsible Unit</strong> for one not yet listed.</div>
                 </div>
                 <div class="col-lg-6 mb-3">
                   <label class="form-label" for="f-coordinator">CIRL Coordinator / Contact Person</label>
@@ -783,6 +793,7 @@
                 <div class="unit-combo-dropdown" id="e-unit-dropdown" role="listbox" style="display:none"></div>
               </div>
             </div>
+            <div class="form-text fs-11">Open the list and choose <strong>+ Add Responsible Unit</strong> for one not yet listed.</div>
           </div>
           <div class="col-lg-4 mb-3">
             <label class="form-label" for="e-start">Start Date</label>
@@ -896,6 +907,31 @@
   </div>
 </div>
 <!--end delete modal -->
+
+<%# Add Responsible Unit (2026-11) — opened from either Unit combo's own "+ Add Responsible Unit" dropdown
+     row (assets/js/pages/registry-gridjs.init.js's openAddResponsibleUnitModal()/submitAddResponsibleUnit()).
+     Deliberately a small, separate modal rather than inline fields inside the Add/Edit Partnership modal —
+     Bootstrap 5 stacks a second shown modal on top of an already-open one correctly on its own (its own
+     backdrop, higher z-index), so the in-progress partnership form underneath stays open and untouched. %>
+<div class="modal fade zoomIn" id="add-unit-modal" tabindex="-1" aria-hidden="true" aria-labelledby="add-unit-modal-label">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-light p-3">
+        <h5 class="modal-title" id="add-unit-modal-label"><i class="ri-building-4-line me-2 text-primary"></i>Add Responsible Unit</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="new-unit-name">Unit Name</label>
+        <input type="text" class="form-control" id="new-unit-name" maxlength="100" placeholder="e.g. College of Computing and Information Sciences">
+        <div class="invalid-feedback d-none" id="new-unit-error"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="new-unit-add-btn" onclick="submitAddResponsibleUnit()">Add Unit</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- toast -->
 <div id="reg-toast"><span id="reg-toast-msg"></span></div>

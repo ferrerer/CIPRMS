@@ -63,6 +63,10 @@
     if (status === 404) return server || 'That item no longer exists. The list has been refreshed.';
     if (status === 409) return server || 'This conflicts with a change that was already made. The list has been refreshed.';
     if (status === 429) return server || 'Too many requests. Please wait a moment and try again.';
+    // 503 means a specific dependency (database, a Google integration, mail) is unavailable, not a generic
+    // crash — surface the server's own plain-language reason (see services/systemStatusService.js /
+    // readOwnProfile etc.) instead of the generic 500+ message below.
+    if (status === 502 || status === 503) return server || 'A required service is temporarily unavailable. Please try again shortly.';
     if (status >= 500) return 'Something went wrong on the server. Please try again in a moment.';
     return server || fallback || 'Something went wrong. Please try again.';
   }

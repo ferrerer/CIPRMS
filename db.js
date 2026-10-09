@@ -145,6 +145,33 @@ async function connectDB() {
         console.error(`⚠️  Could not create index ${JSON.stringify(spec)} on activitylogs:`, indexErr.message);
       }
     }
+    // 2026-11 Responsible Unit investigation: the Add/Edit Partnership form's "Responsible Unit" field used
+    // to be a closed set hardcoded in cirl.js (VALID_PARTNERSHIP_UNITS) and separately in
+    // registry-gridjs.init.js's own UNIT_OPTIONS — nobody could add a legitimately-missing unit without a
+    // code change. Seeded here, once, with that exact original list, so every existing partnership's stored
+    // `unit` value keeps validating with zero migration — this only ever runs when the collection is
+    // genuinely empty (a brand-new deployment, or this feature's very first run against an existing one),
+    // never overwrites or re-seeds an already-populated collection.
+    try {
+      const existingUnitCount = await db.collection('responsibleunits').countDocuments();
+      if (existingUnitCount === 0) {
+        const seedUnits = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
+        await db.collection('responsibleunits').insertMany(
+          seedUnits.map((name, i) => ({ id: i + 1, name, createdAt: new Date().toISOString(), createdByEmail: null }))
+        );
+        console.log(`✓ Seeded ${seedUnits.length} default Responsible Units`);
+      }
+    } catch (seedErr) {
+      console.error('⚠️  Could not seed default Responsible Units:', seedErr.message);
+    }
+    // Case-insensitive uniqueness at the DB level too (defense in depth under the application-level check
+    // in POST /api/responsible-units) — a collation of strength 2 treats "CIRL"/"Cirl"/"cirl" as the same
+    // key for this index's purposes without needing a separate lowercased field.
+    try {
+      await db.collection('responsibleunits').createIndex({ name: 1 }, { unique: true, collation: { locale: 'en', strength: 2 } });
+    } catch (indexErr) {
+      console.error('⚠️  Could not create unique index on responsibleunits.name — duplicate-name race protection is NOT active:', indexErr.message);
+    }
     return db;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);

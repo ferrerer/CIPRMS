@@ -129,8 +129,10 @@ describe('Department / Institution / Position are fixed at registration', () => 
       const start = html.indexOf('function updateCard()');
       expect(start).toBeGreaterThan(-1);
       const body = html.slice(start, html.indexOf('function applyPhoto', start));
-      // every variable the function reads must be declared inside it
-      for (const v of ['name', 'dept', 'pos', 'inst', 'phone', 'parts', 'initials']) expect(body).toContain(`const ${v} =`);
+      // every variable the function reads must be declared inside it (pos is deliberately double-spaced in
+      // the source — `const pos  =` — to line up the `=` signs with the other, longer variable names)
+      for (const v of ['name', 'dept', 'inst', 'phone', 'parts', 'initials']) expect(body).toContain(`const ${v} =`);
+      expect(body).toContain('const pos  =');
       expect(body).toContain('av.textContent = initials');
       expect(body).toContain("document.getElementById('info-phone').textContent = phone");
     }

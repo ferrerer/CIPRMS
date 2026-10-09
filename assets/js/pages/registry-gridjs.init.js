@@ -309,8 +309,28 @@ function sanitizeUrl(url) {
 // ── "Responsible Unit" combobox — searchable multi-select restricted to the
 // predefined CSPC unit list, with removable chips (2026-09-03). Unlike the
 // Document Request combobox elsewhere in this app, no custom/free-text
-// entries are allowed here — only these six values are ever selectable.
+// entries are allowed here — only values from this list are ever selectable
+// (restrictToOptions stays true, below).
+//
+// 2026-11 investigation: this used to be the one and only copy of a hardcoded 6-value list (cirl.js's
+// VALID_PARTNERSHIP_UNITS was a second, independently-maintained copy of the same six) with no way for an
+// Administrator/Staff user to add a unit that legitimately doesn't exist yet. Seeded here with that exact
+// original list so the dropdown is never empty for the instant before loadResponsibleUnits() below returns
+// (a plain client-server round trip, not a hardcoded ceiling — see that function for the fetch that keeps
+// this array in sync with the real, shared, database-backed list every time the page loads), and MUTATED
+// in place (never reassigned) once that fetch resolves — createUnitCombo() below hands this exact array
+// reference to both the Add and Edit forms' combos, so updating its contents in place is what lets a newly
+// added unit appear in an already-constructed combo without reconstructing it.
 var UNIT_OPTIONS = ['CCS', 'CILS', 'CETE', 'CNAS', 'CAMS', 'CIRL'];
+
+function loadResponsibleUnits() {
+  return CIPRMS.api('/api/responsible-units', { quiet: true }).then(function (res) {
+    if (!res.ok || !Array.isArray(res.data)) return; // keep the seed fallback above — never leave the field with no options at all
+    var names = res.data.map(function (u) { return u.name; });
+    UNIT_OPTIONS.length = 0;
+    Array.prototype.push.apply(UNIT_OPTIONS, names);
+  }).catch(function () { /* network hiccup — the seed fallback list above still works for this page view */ });
+}
 
 // "Nature of Partnership" reuses this exact same searchable chip-combobox
 // pattern (2026-09-19, multi-select) — same predefined-list behavior as
@@ -392,12 +412,27 @@ function createChipCombo(prefix, field, options, comboOpts) {
     dropdown.dataset.q = q;
     var available = options.filter(function (u) { return selected.indexOf(u) === -1; });
     var matches = q ? available.filter(function (u) { return u.toLowerCase().indexOf(q) !== -1; }) : available;
-    dropdown.innerHTML = matches.length
+    // "+ Add Responsible Unit" (2026-11) — Unit-only (comboOpts.allowAddNew), appended after the real
+    // options/empty-state rather than replacing them, so it's discoverable without hiding the existing
+    // list it sits below — the exact same dropdown the user is already searching, not a second,
+    // separate control elsewhere on the form.
+    var addRowHtml = (comboOpts && comboOpts.allowAddNew)
+      ? '<div class="unit-combo-option unit-combo-add" data-add="1"><i class="ri-add-line me-1"></i>Add Responsible Unit</div>'
+      : '';
+    dropdown.innerHTML = (matches.length
       ? matches.map(function (u) { return '<div class="unit-combo-option" data-val="' + escapeHtml(u) + '">' + escapeHtml(u) + '</div>'; }).join('')
-      : '<div class="unit-combo-empty">' + (available.length ? 'No matching option.' : 'All options selected.') + '</div>';
+      : '<div class="unit-combo-empty">' + (available.length ? 'No matching option.' : 'All options selected.') + '</div>') + addRowHtml;
     dropdown.style.display = 'block';
     input.setAttribute('aria-expanded', 'true');
-    dropdown.querySelectorAll('.unit-combo-option').forEach(function (opt) {
+    var addRow = dropdown.querySelector('.unit-combo-add');
+    if (addRow) {
+      addRow.addEventListener('mousedown', function (e) {
+        e.preventDefault(); // same reason as the real options below — a mousedown-before-blur guard, not a click
+        closeDropdown();
+        openAddResponsibleUnitModal({ getValues: function () { return selected.slice(); }, addValue: addValue });
+      });
+    }
+    dropdown.querySelectorAll('.unit-combo-option:not(.unit-combo-add)').forEach(function (opt) {
       opt.addEventListener('mousedown', function (e) {
         e.preventDefault();
         addValue(opt.getAttribute('data-val'));
@@ -445,8 +480,81 @@ function createChipCombo(prefix, field, options, comboOpts) {
   };
 }
 
-function createUnitCombo(prefix) { return createChipCombo(prefix, 'unit', UNIT_OPTIONS); }
+function createUnitCombo(prefix) { return createChipCombo(prefix, 'unit', UNIT_OPTIONS, { allowAddNew: true }); }
 function createNatureCombo(prefix) { return createChipCombo(prefix, 'nature', NATURE_OPTIONS, { restrictToOptions: false }); }
+
+// ── Add Responsible Unit (2026-11) — the small modal opened from either Unit combo's own "+ Add
+// Responsible Unit" dropdown row (see openDropdown() above). Deliberately NOT nested inside/replacing the
+// Add/Edit Partnership modal that's already open when this is triggered — Bootstrap 5 stacks multiple
+// shown modals correctly on its own (each gets its own backdrop, z-index climbs per modal), so the
+// in-progress partnership form stays open and untouched underneath while this one small modal is answered.
+var pendingUnitCombo = null; // { getValues, addValue } of whichever combo (Add form's or Edit form's) opened this
+
+function openAddResponsibleUnitModal(comboApi) {
+  pendingUnitCombo = comboApi;
+  var input = document.getElementById('new-unit-name');
+  var err = document.getElementById('new-unit-error');
+  var btn = document.getElementById('new-unit-add-btn');
+  if (input) { input.value = ''; input.classList.remove('is-invalid'); }
+  if (err) { err.textContent = ''; err.classList.add('d-none'); }
+  if (btn) { btn.disabled = false; btn.textContent = 'Add Unit'; }
+  modalInstanceGlobal('add-unit-modal').show();
+  setTimeout(function () { if (input) input.focus(); }, 150); // after the modal's own fade-in, same as Bootstrap's own autofocus examples
+}
+
+// This file is shared by both the Registry page (which defines its own modalInstance()-equivalent nowhere
+// — it has always just called bootstrap.Modal.getOrCreateInstance(...) inline) — kept as its own tiny
+// helper here rather than introducing a dependency on partnership_requests.ejs's own modalInstance(),
+// which is a different page's inline script, not something this shared file can reach.
+function modalInstanceGlobal(id) { return bootstrap.Modal.getOrCreateInstance(document.getElementById(id)); }
+
+async function submitAddResponsibleUnit() {
+  var input = document.getElementById('new-unit-name');
+  var err = document.getElementById('new-unit-error');
+  var btn = document.getElementById('new-unit-add-btn');
+  var name = (input.value || '').trim();
+  if (!name) {
+    input.classList.add('is-invalid');
+    err.textContent = 'Unit name is required.';
+    err.classList.remove('d-none');
+    input.focus();
+    return;
+  }
+  if (btn.disabled) return; // guards rapid double-click the same way the Document Request confirm button does
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+  err.classList.add('d-none');
+  try {
+    var res = await CIPRMS.api('/api/responsible-units', { method: 'POST', json: { name: name }, quiet: true });
+    if (!res.ok || !res.data || !res.data.success) {
+      input.classList.add('is-invalid');
+      err.textContent = res.error || 'Unable to add this Responsible Unit. Please try again.';
+      err.classList.remove('d-none');
+      btn.disabled = false;
+      btn.textContent = 'Add Unit';
+      return;
+    }
+    var savedName = res.data.unit.name;
+    // Keeps whatever the server actually stored (its own trim is authoritative) in sync everywhere this
+    // shared array is read — both the Add and Edit forms' Unit combos see it on their very next open.
+    if (UNIT_OPTIONS.indexOf(savedName) === -1) UNIT_OPTIONS.push(savedName);
+    if (pendingUnitCombo) pendingUnitCombo.addValue(savedName); // auto-selects it on the form that asked for it
+    modalInstanceGlobal('add-unit-modal').hide();
+    showToast('<i class="ri-checkbox-circle-line me-1"></i>"' + escapeHtml(savedName) + '" added as a Responsible Unit.');
+  } catch (e) {
+    input.classList.add('is-invalid');
+    err.textContent = 'Network error while adding this unit. Please try again.';
+    err.classList.remove('d-none');
+    btn.disabled = false;
+    btn.textContent = 'Add Unit';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  loadResponsibleUnits();
+  var addUnitInput = document.getElementById('new-unit-name');
+  if (addUnitInput) addUnitInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitAddResponsibleUnit(); } });
+});
 
 document.addEventListener('click', function (e) {
   ['f', 'e'].forEach(function (prefix) {
