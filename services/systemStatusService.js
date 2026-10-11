@@ -45,7 +45,15 @@ async function checkGoogleCalendar() {
     return { key: 'googleCalendar', label: 'Google Calendar', state: 'not_configured', message: 'Google credentials are not configured on this server.' };
   }
   try {
-    const integration = await googleCalendarService.getIntegration(getDb());
+    // Root cause (2026-11 repeated-warning investigation): this read used to have no timeout of its own,
+    // so under a transient MongoDB hiccup it was bounded only by the driver's own default
+    // serverSelectionTimeoutMS (30s) instead of this service's own PING_TIMEOUT_MS (4s) — the SAME
+    // underlying stall that checkDatabase() already reports (and correctly bails out of in 4s) would then
+    // ALSO make this unrelated check hang for up to 30s and inconsistently flip to "unavailable" on its
+    // own schedule, reporting "Google Calendar is down" for what was really a slow database roundtrip, not
+    // a real problem with the Calendar integration. Wrapped the same way checkDatabase()/checkEmail()
+    // already are, so every I/O-bound check here shares one consistent, short deadline.
+    const integration = await withTimeout(googleCalendarService.getIntegration(getDb()), PING_TIMEOUT_MS);
     if (!integration) return { key: 'googleCalendar', label: 'Google Calendar', state: 'available', message: 'Not connected yet (optional — connect it from Account Settings).' };
     if (integration.lastSyncOk === false) {
       return { key: 'googleCalendar', label: 'Google Calendar', state: 'degraded', message: integration.lastSyncError || 'The last attempt to reach Google Calendar failed.' };
@@ -61,7 +69,8 @@ async function checkGoogleDocs() {
     return { key: 'googleDocs', label: 'Google Docs', state: 'not_configured', message: 'Google credentials are not configured on this server.' };
   }
   try {
-    const integration = await googleDocsService.getIntegration(getDb());
+    // Same fix and reasoning as checkGoogleCalendar() above — see its comment.
+    const integration = await withTimeout(googleDocsService.getIntegration(getDb()), PING_TIMEOUT_MS);
     if (!integration) return { key: 'googleDocs', label: 'Google Docs', state: 'available', message: 'Not connected yet (optional — connect it from Account Settings).' };
     if (integration.lastSyncOk === false) {
       return { key: 'googleDocs', label: 'Google Docs', state: 'degraded', message: integration.lastSyncError || 'The last attempt to reach Google Docs failed.' };

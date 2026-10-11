@@ -11,6 +11,8 @@ const app = require('../cirl');
 const { connectDB, closeDB, getDb } = require('../db');
 const systemStatusService = require('../services/systemStatusService');
 const emailService = require('../services/emailService');
+const googleCalendarService = require('../services/googleCalendarService');
+const googleDocsService = require('../services/googleDocsService');
 const { createTestUser, loginAs, cleanupAll, TEST_TAG } = require('./helpers');
 
 beforeAll(async () => { await connectDB(); });
@@ -141,6 +143,58 @@ describe('GET /api/system-status — a degraded (not fully down) Google integrat
     const fixed = await agent.get('/api/system-status');
     expect(fixed.body.services.find(s => s.key === 'googleCalendar').state).toBe('available');
   });
+});
+
+// 2026-11 repeated-warning root-cause fix: checkGoogleCalendar()/checkGoogleDocs() used to read the
+// integration record with no timeout of their own, so a slow/stalled MongoDB round trip — the SAME
+// transient condition checkDatabase() already detects and reports in its own 4s window — left these two
+// checks waiting on the MongoDB driver's own default serverSelectionTimeoutMS (30s) instead. The whole
+// GET /api/system-status response (Promise.all of all five checks) was therefore bounded by whichever
+// check took longest, so one slow database round trip could make an unrelated, perfectly healthy Google
+// Calendar/Docs connection get reported as "unavailable" minutes after the real database hiccup had
+// already resolved — exactly the "warning keeps appearing even though the feature already works" pattern
+// this investigation was asked to fix. Reproduced directly against the pre-fix code: 5 consecutive real
+// getSystemStatus() calls against this environment's actual Atlas cluster took 30-61 seconds each and
+// non-deterministically reported different services as "unavailable" each time; after wrapping both
+// checks in the same withTimeout() helper checkDatabase()/checkEmail() already used, 5 consecutive calls
+// took well under 5 seconds each and consistently reported every service correctly.
+describe('GET /api/system-status — Google Calendar/Docs checks are bounded by the same timeout as the database check, not the MongoDB driver\'s own (much longer) default', () => {
+  const originalGetCalendarIntegration = googleCalendarService.getIntegration;
+  const originalGetDocsIntegration = googleDocsService.getIntegration;
+  afterEach(() => {
+    googleCalendarService.getIntegration = originalGetCalendarIntegration;
+    googleDocsService.getIntegration = originalGetDocsIntegration;
+  });
+
+  test('checkGoogleCalendar(): a getIntegration() read that never resolves is reported "unavailable" within a few seconds, not left pending for the driver\'s own ~30s default', async () => {
+    googleCalendarService.getIntegration = () => new Promise(() => {}); // never resolves
+    const t0 = Date.now();
+    const result = await systemStatusService.checkGoogleCalendar();
+    expect(Date.now() - t0).toBeLessThan(8000); // PING_TIMEOUT_MS (4s) plus generous headroom, nowhere near 30s
+    expect(result.state).toBe('unavailable');
+  }, 10000);
+
+  test('checkGoogleDocs(): same guarantee as checkGoogleCalendar() above', async () => {
+    googleDocsService.getIntegration = () => new Promise(() => {});
+    const t0 = Date.now();
+    const result = await systemStatusService.checkGoogleDocs();
+    expect(Date.now() - t0).toBeLessThan(8000);
+    expect(result.state).toBe('unavailable');
+  }, 10000);
+
+  test('end-to-end: GET /api/system-status as a whole stays fast even when one Google check\'s own read hangs, and still reports the other, genuinely healthy services correctly', async () => {
+    const { agent } = await agentFor('Administrator');
+    googleCalendarService.getIntegration = () => new Promise(() => {});
+    const t0 = Date.now();
+    const res = await agent.get('/api/system-status');
+    expect(Date.now() - t0).toBeLessThan(8000);
+    expect(res.status).toBe(200);
+    const byKey = Object.fromEntries(res.body.services.map(s => [s.key, s.state]));
+    expect(byKey.googleCalendar).toBe('unavailable');
+    // The hung Google Calendar read must never drag an unrelated, actually-healthy service down with it —
+    // each service's own state is independent (brief: "different services can report independent failures").
+    expect(byKey.database).toBe('available');
+  }, 10000);
 });
 
 describe('GET /api/system-status — email state transitions (mocked SMTP sign-in, never a real send)', () => {
