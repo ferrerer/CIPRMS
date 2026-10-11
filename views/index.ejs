@@ -91,8 +91,65 @@
             color: var(--vz-primary, #405189);
         }
 
-        /* About Us modal — team cards. Plain CSS-drawn initials avatars (no photo assets exist for
-           the five members — see the chat response), navy-and-gold to match the CIRL seal's own
+        /* About Us modal — enlarged (2026-11), then widened further on request, to comfortably fit all
+           five team cards without clipping or excessive scrolling. A custom dialog class rather than
+           modal-lg/modal-xl: Bootstrap's own size steps (800px / 1140px) don't land where this needs to,
+           so max-width is set directly and left free to shrink below that on narrower viewports exactly
+           like any other Bootstrap modal-dialog does. modal-dialog-scrollable (kept on the element)
+           makes modal-body the thing that scrolls once modal-content hits the explicit max-height below,
+           never the whole page behind it. */
+        .about-modal-dialog {
+            max-width: 1100px;
+        }
+        @media (min-width: 1200px) {
+            .about-modal-dialog { max-width: 1220px; }
+        }
+        .about-modal-dialog .modal-content {
+            max-height: 90vh;
+        }
+        .about-modal-dialog .modal-body {
+            padding: 1.75rem 2rem;
+        }
+
+        /* Team grid — three cards on row one, two CENTERED (not left-aligned) on row two. A 6-column
+           grid divides evenly by both 3 and 2: each of the first three cards spans 2 of 6 columns
+           (filling the row exactly), and the last two are explicitly placed starting at column 2 and
+           column 4 — leaving column 1 and column 6 empty on either side — which is what visually
+           centers a 2-card row under a 3-card row above it. Order in the markup below IS the visual
+           order (top row first, then the two bottom row members), so "keeping the order intact" on
+           narrower layouts just means falling back to a plain single column of that same sequence. */
+        .about-team-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 1.25rem;
+        }
+        .about-team-grid .team-card-col {
+            grid-column: span 2;
+        }
+        .about-team-grid .team-card-col:nth-child(4) { grid-column: 2 / span 2; }
+        .about-team-grid .team-card-col:nth-child(5) { grid-column: 4 / span 2; }
+
+        /* Tablet: two per row, order intact top-to-bottom; a lone fifth card centers itself rather than
+           hugging the left edge. */
+        @media (max-width: 991.98px) {
+            .about-team-grid { grid-template-columns: repeat(2, 1fr); }
+            .about-team-grid .team-card-col,
+            .about-team-grid .team-card-col:nth-child(4),
+            .about-team-grid .team-card-col:nth-child(5) { grid-column: span 1; }
+            .about-team-grid .team-card-col:nth-child(5) { grid-column: 1 / -1; max-width: calc(50% - .625rem); margin: 0 auto; }
+        }
+        /* Mobile: single column; names/descriptions wrap within the card instead of the card itself
+           ever forcing horizontal scroll. */
+        @media (max-width: 575.98px) {
+            .about-team-grid { grid-template-columns: 1fr; }
+            .about-team-grid .team-card-col,
+            .about-team-grid .team-card-col:nth-child(4),
+            .about-team-grid .team-card-col:nth-child(5) { grid-column: 1 / -1; max-width: 100%; margin: 0; }
+            .about-modal-dialog .modal-body { padding: 1.25rem 1.25rem; }
+        }
+
+        /* Team cards. Plain CSS-drawn initials avatars (no photo assets exist for the five members —
+           confirmed again while enlarging this modal), navy-and-gold to match the CIRL seal's own
            palette rather than an arbitrary color per card. Dark-mode variant included even though
            this logged-out page itself always renders light (ui-state-init.ejs forces Light on
            login/signup) — the brief asked for dark-mode-safe modal styling regardless, defensive
@@ -101,17 +158,18 @@
             border: 1px solid var(--vz-border-color, #e9ebec);
             border-radius: .75rem;
             height: 100%;
+            min-width: 0; /* lets long names wrap instead of overflowing a grid/flex item */
         }
         .team-avatar {
-            width: 56px;
-            height: 56px;
+            width: 60px;
+            height: 60px;
             flex: none;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: .95rem;
+            font-size: 1rem;
             color: #fff;
             background: linear-gradient(135deg, #405189, #2e3b66);
             border: 2px solid #f1b44c;
@@ -234,7 +292,7 @@
          close it, and background scroll is suspended, via Bootstrap's own default modal behavior
          (no data-bs-backdrop="static"/data-bs-keyboard="false" override here). -->
     <div class="modal fade" id="about-modal" tabindex="-1" aria-labelledby="about-modal-label" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-dialog-centered about-modal-dialog modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="about-modal-label"><i class="ri-information-line me-2 text-primary"></i>About CIPRMS</h5>
@@ -250,16 +308,18 @@
                     </div>
 
                     <h6 class="fw-semibold text-uppercase fs-12 text-muted mb-3">Development Team — Team Dunbar</h6>
-                    <div class="row g-3">
+                    <!-- Top row (3, left to right): Briñas, Golpe, Malto. Bottom row (2, centered): Baliber,
+                         Ferrer. Array order below IS the visual order — see .about-team-grid in <style>. -->
+                    <div class="about-team-grid">
                         <% const teamMembers = [
-                            { name: 'Joshua B. Baliber', initials: 'JB' },
                             { name: 'Lui Vhinz Dominic P. Briñas', initials: 'LB' },
-                            { name: 'John Raven M. Ferrer', initials: 'JF' },
                             { name: 'Begie B. Golpe', initials: 'BG' },
-                            { name: 'Zyra Devie D. Malto', initials: 'ZM' }
+                            { name: 'Zyra Devie D. Malto', initials: 'ZM' },
+                            { name: 'Joshua B. Baliber', initials: 'JB' },
+                            { name: 'John Raven M. Ferrer', initials: 'JF' }
                         ]; %>
                         <% teamMembers.forEach(function (m) { %>
-                        <div class="col-md-6">
+                        <div class="team-card-col">
                             <div class="team-card p-3 d-flex gap-3 align-items-start">
                                 <div class="team-avatar"><%= m.initials %></div>
                                 <div class="flex-grow-1 min-width-0">

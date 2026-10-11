@@ -115,3 +115,53 @@ describe('GET / — centered branding composition and About Us', () => {
     expect(modalBlock).not.toMatch(/password|MONGO_URI|GOOGLE_CLIENT_SECRET|SESSION_SECRET/i);
   });
 });
+
+// Enlarged About Us modal (2026-11) — wider/taller dialog plus the exact 3-top/2-centered-bottom team
+// layout. Separate describe block from the one above so a size/order regression here reads as its own
+// failure, distinct from the pre-existing content checks.
+describe('GET / — About Us modal is enlarged with the exact 3-top / 2-centered-bottom team layout', () => {
+  let html, modalBlock;
+  beforeAll(async () => {
+    html = (await request(app).get('/')).text;
+    const modalStart = html.indexOf('id="about-modal"');
+    modalBlock = html.slice(modalStart, html.indexOf('</body>'));
+  });
+
+  test('the dialog uses the enlarged custom width class, not the old modal-lg, and caps its height responsively', () => {
+    expect(html).toMatch(/<div class="modal-dialog modal-dialog-centered about-modal-dialog modal-dialog-scrollable">/);
+    expect(html).not.toMatch(/modal-dialog-centered modal-lg/);
+    // Widened on request beyond the original ~900-1100px band (1100px base, 1220px at the xl
+    // breakpoint) and the modal-content itself is explicitly capped so modal-body — not the page — is
+    // what scrolls.
+    expect(html).toMatch(/\.about-modal-dialog\s*\{\s*max-width:\s*1100px;/);
+    expect(html).toMatch(/max-width:\s*1220px/);
+    expect(html).toMatch(/\.about-modal-dialog \.modal-content\s*\{\s*max-height:\s*90vh;/);
+  });
+
+  test('team cards render inside the CSS Grid layout (.about-team-grid / .team-card-col), not the old Bootstrap row/col-md-6 pair', () => {
+    expect(modalBlock).toContain('about-team-grid');
+    expect(modalBlock).toContain('team-card-col');
+    expect(modalBlock).not.toMatch(/class="row g-3"/);
+    expect(modalBlock).not.toContain('col-md-6');
+  });
+
+  test('the exact five names appear in the exact required order: Briñas, Golpe, Malto (top row), then Baliber, Ferrer (bottom row)', () => {
+    const order = ['Lui Vhinz Dominic P. Briñas', 'Begie B. Golpe', 'Zyra Devie D. Malto', 'Joshua B. Baliber', 'John Raven M. Ferrer'];
+    const positions = order.map((name) => modalBlock.indexOf(name));
+    positions.forEach((pos) => expect(pos).toBeGreaterThan(-1)); // every name is present at all
+    for (let i = 1; i < positions.length; i++) {
+      expect(positions[i]).toBeGreaterThan(positions[i - 1]); // and strictly in the required order
+    }
+  });
+
+  test('each member has the exact initials specified in the brief', () => {
+    const initials = ['LB', 'BG', 'ZM', 'JB', 'JF'];
+    initials.forEach((i) => expect(modalBlock).toContain(`>${i}<`));
+  });
+
+  test('the CSS Grid centers the bottom two cards under the top three (6-column grid, bottom pair offset to columns 2 and 4)', () => {
+    expect(html).toMatch(/\.about-team-grid \.team-card-col\s*\{\s*grid-column:\s*span 2;\s*\}/);
+    expect(html).toMatch(/:nth-child\(4\)\s*\{\s*grid-column:\s*2 \/ span 2;\s*\}/);
+    expect(html).toMatch(/:nth-child\(5\)\s*\{\s*grid-column:\s*4 \/ span 2;\s*\}/);
+  });
+});
