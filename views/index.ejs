@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en" data-layout="vertical" data-topbar="light" data-sidebar="dark" data-sidebar-size="lg" data-sidebar-image="none" data-preloader="disable" data-theme="default" data-theme-colors="default" data-bs-theme="light">
 <head>
     <meta charset="utf-8" />
@@ -22,11 +22,112 @@
             background-position: center;
             background-size: cover;
         }
+
+        /* ── Centered sign-in composition (2026-11) ──────────────────────────────────────────────
+           Logo, system title, institutional name, welcome text, and the Google button are one
+           visually connected block, vertically AND horizontally centered in the viewport (not just
+           top-anchored under a fixed pt-5 the way this page used to be) — .auth-page-wrapper becomes
+           the flex container; its content area grows to fill the space between the curved header
+           shape and the footer and centers its one child. */
+        .auth-page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .auth-page-content {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            padding-top: 2rem;
+            padding-bottom: 1.5rem;
+        }
+        /* The logo/CIPRMS/system-title/institutional-name block is taller than the one line of text
+           (institutional name only) this dark background area was originally sized for — without an
+           increase, the white text spills past the dark photo background it needs for contrast onto
+           the light page background below, reading as cut off. How MUCH taller depends on how many
+           lines the system title and institutional name each wrap to, which changes continuously with
+           viewport width (not just at one breakpoint) — sizeAuthBgToContent() below measures the real
+           rendered block and sets this from JS instead of guessing fixed breakpoint heights. This
+           fallback (plain CSS, no JS) covers the common desktop case so there's never a flash of the
+           old too-short default before JS runs.  */
+        .auth-one-bg-position { height: 460px; }
+        .auth-page-content > .container { width: 100%; }
+
+        .auth-brand-logo {
+            height: 85px;
+            width: 85px;
+            object-fit: cover;
+            border-radius: 50%;
+            box-shadow: 0 0 0 6px rgba(255, 255, 255, .45), 0 6px 18px rgba(0, 0, 0, .25);
+        }
+        /* The full system name reads as a descriptive subtitle under the CIPRMS acronym, not as a
+           second, disconnected heading — kept on the same hairline-separated block as the logo and
+           institutional office name so the whole thing reads as one composition. Balanced line
+           breaks on desktop (max-width keeps it from stretching edge-to-edge into one long line);
+           free natural wrapping on mobile (no fixed width, no nowrap) so it never overflows. */
+        .auth-system-acronym {
+            letter-spacing: .04em;
+        }
+        .auth-system-title {
+            max-width: 30rem;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        @media (max-width: 420px) {
+            .auth-system-title { max-width: 100%; }
+        }
+
+        /* About Us — bottom-right, above the footer, never overlapping the copyright line (brief
+           §2/§3). Part of the normal page flow (not position:fixed), so it can never float over
+           content on a short/zoomed viewport; right-aligned at every width rather than repositioned
+           on mobile, since "stay bottom-right" was explicit and a simple right-aligned flow element
+           already never overlaps anything below it. */
+        .about-us-trigger {
+            color: inherit;
+            opacity: .85;
+        }
+        .about-us-trigger:hover, .about-us-trigger:focus-visible {
+            opacity: 1;
+            color: var(--vz-primary, #405189);
+        }
+
+        /* About Us modal — team cards. Plain CSS-drawn initials avatars (no photo assets exist for
+           the five members — see the chat response), navy-and-gold to match the CIRL seal's own
+           palette rather than an arbitrary color per card. Dark-mode variant included even though
+           this logged-out page itself always renders light (ui-state-init.ejs forces Light on
+           login/signup) — the brief asked for dark-mode-safe modal styling regardless, defensive
+           against that forcing ever changing. */
+        .team-card {
+            border: 1px solid var(--vz-border-color, #e9ebec);
+            border-radius: .75rem;
+            height: 100%;
+        }
+        .team-avatar {
+            width: 56px;
+            height: 56px;
+            flex: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: .95rem;
+            color: #fff;
+            background: linear-gradient(135deg, #405189, #2e3b66);
+            border: 2px solid #f1b44c;
+        }
+        [data-bs-theme="dark"] .team-card {
+            border-color: #3a4053;
+            background: #2a2f3c;
+        }
+        [data-bs-theme="dark"] .about-modal-meta {
+            color: #b9bfcc;
+        }
     </style>
 </head>
 <body>
 
-    <div class="auth-page-wrapper pt-5">
+    <div class="auth-page-wrapper">
         <!-- auth page bg -->
         <div class="auth-one-bg-position auth-one-bg" id="auth-particles">
             <div class="bg-overlay"></div>
@@ -40,23 +141,18 @@
         <!-- auth page content -->
         <div class="auth-page-content">
             <div class="container">
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="text-center mt-sm-5 mb-4 text-white-50">
-                            <div>
-                                <a href="/" class="d-inline-block auth-logo">
-                                    <img src="/images/cirl-logo.jpg" alt="CIRL" height="40" style="border-radius:50%;object-fit:cover;">
-                                </a>
-                            </div>
-                            <p class="mt-3 fs-15 fw-medium">CSPC Center for International Relations and Linkages</p>
-                        </div>
-                    </div>
-                </div>
-                <!-- end row -->
-
                 <div class="row justify-content-center">
-                    <div class="col-md-8 col-lg-6 col-xl-5">
-                        <div class="card mt-4 card-bg-fill">
+                    <div class="col-md-9 col-lg-7 col-xl-5">
+
+                        <div class="auth-brand-block text-center mb-4 text-white-50">
+                            <a href="/" class="d-inline-block auth-logo">
+                                <img src="/images/cirl-logo.jpg" alt="CSPC-CIRL" class="auth-brand-logo">
+                            </a>
+                            <p></p>
+                            <p class="mb-0 fs-15 fw-medium">CSPC Center for International Relations and Linkages</p>
+                        </div>
+
+                        <div class="card card-bg-fill mb-0">
                             <div class="card-body p-4">
                                 <div class="text-center mt-2">
                                     <h5 class="text-primary">Welcome Back!</h5>
@@ -77,44 +173,17 @@
                                 </div>
                                 <% } %>
 
+                                <!-- Google-only sign-in (2026-11): CIPRMS accounts are provisioned by the CIRL
+                                     Administrator and matched to a Google account by e-mail (see GET
+                                     /auth/google/callback) — there is no self-registration, so a password
+                                     field here was never a second independent path, just a second way into
+                                     the same allowlisted accounts. Removed in favor of Google alone. The
+                                     POST /login route itself is unchanged and still rate-limited/lockout-
+                                     protected server-side (not UI-reachable, but not removed). -->
                                 <div class="p-2 mt-4">
-                                    <form action="/login" method="POST">
-
-                                        <div class="mb-3">
-                                            <label for="username" class="form-label">Email Address</label>
-                                            <input type="email" class="form-control" id="username" name="username" required>
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <label class="form-label" for="password-input">Password</label>
-                                            <div class="position-relative auth-pass-inputgroup mb-3">
-                                                <input type="password" class="form-control pe-5 password-input" id="password-input" name="password">
-                                                <button class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted password-addon material-shadow-none" type="button" id="password-addon" aria-label="Show or hide password">
-                                                    <i class="ri-eye-fill align-middle"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="" id="auth-remember-check">
-                                            <label class="form-check-label" for="auth-remember-check">Remember me</label>
-                                        </div>
-
-                                        <div class="mt-4">
-                                            <button class="btn btn-success w-100" type="submit">Sign In</button>
-                                        </div>
-
-                                        <div class="mt-4 text-center">
-                                            <div class="signin-other-title">
-                                                <h5 class="fs-13 mb-4 title">Or sign in with</h5>
-                                            </div>
-                                            <div>
-                                                <button type="button" class="btn btn-danger btn-icon waves-effect waves-light" onclick="window.location.href='/auth/google'">
-                                                    <i class="ri-google-fill fs-16"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </form>
+                                    <button type="button" class="btn btn-danger w-100 waves-effect waves-light" onclick="window.location.href='/auth/google'">
+                                        <i class="ri-google-fill align-middle fs-16 me-2"></i>Sign in with Google
+                                    </button>
                                 </div>
                             </div>
                             <!-- end card body -->
@@ -124,6 +193,19 @@
                     </div>
                 </div>
                 <!-- end row -->
+
+                <!-- About Us (2026-11) — bottom-right, above the footer, opens the team/project info
+                     modal below. A plain in-page anchor, not a form control, so it carries no
+                     authentication surface of its own. -->
+                <div class="row justify-content-center">
+                    <div class="col-md-9 col-lg-7 col-xl-5">
+                        <div class="text-end mt-3">
+                            <a href="#" class="about-us-trigger fs-13 fw-medium" data-bs-toggle="modal" data-bs-target="#about-modal">
+                                <i class="ri-information-line align-middle me-1"></i>About Us
+                            </a>
+                        </div>
+                    </div>
+                </div>
             </div>
             <!-- end container -->
         </div>
@@ -145,6 +227,58 @@
     </div>
     <!-- end auth-page-wrapper -->
 
+    <!-- About Us modal (2026-11) — project + 5-member team info. No internal user data, credentials,
+         e-mail addresses, or configuration of any kind; everything here is public project/team
+         information already named in the capstone manuscript on file, never invented (see the chat
+         response for the verification trail). Plain Bootstrap modal — Escape and backdrop-click both
+         close it, and background scroll is suspended, via Bootstrap's own default modal behavior
+         (no data-bs-backdrop="static"/data-bs-keyboard="false" override here). -->
+    <div class="modal fade" id="about-modal" tabindex="-1" aria-labelledby="about-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="about-modal-label"><i class="ri-information-line me-2 text-primary"></i>About CIPRMS</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="about-modal-meta mb-4">
+                        <h6 class="fw-semibold mb-1">Centralized Institutional Partnership Registry and Management System with Decision Support Analytics for CSPC–CIRL</h6>
+                        <p class="text-muted mb-1"><strong>Institution:</strong> Camarines Sur Polytechnic Colleges (CSPC)</p>
+                        <p class="text-muted mb-1"><strong>Office:</strong> Center for International Relations and Linkages (CIRL)</p>
+                        <p class="text-muted mb-1"><strong>Purpose:</strong> Centralize institutional partnership records, support partnership lifecycle monitoring, streamline partnership and document workflows, and provide reporting and decision-support analytics.</p>
+                        <p class="text-muted mb-0"><strong>Project context:</strong> Academic capstone project — Bachelor of Science in Information Technology, College of Computer Studies, Camarines Sur Polytechnic Colleges (Team Dunbar, May 2026).</p>
+                    </div>
+
+                    <h6 class="fw-semibold text-uppercase fs-12 text-muted mb-3">Development Team — Team Dunbar</h6>
+                    <div class="row g-3">
+                        <% const teamMembers = [
+                            { name: 'Joshua B. Baliber', initials: 'JB' },
+                            { name: 'Lui Vhinz Dominic P. Briñas', initials: 'LB' },
+                            { name: 'John Raven M. Ferrer', initials: 'JF' },
+                            { name: 'Begie B. Golpe', initials: 'BG' },
+                            { name: 'Zyra Devie D. Malto', initials: 'ZM' }
+                        ]; %>
+                        <% teamMembers.forEach(function (m) { %>
+                        <div class="col-md-6">
+                            <div class="team-card p-3 d-flex gap-3 align-items-start">
+                                <div class="team-avatar"><%= m.initials %></div>
+                                <div class="flex-grow-1 min-width-0">
+                                    <h6 class="mb-0"><%= m.name %></h6>
+                                    <p class="text-primary fs-13 fw-medium mb-1">Project Proponent, Team Dunbar</p>
+                                    <p class="text-muted fs-13 mb-0">Contributed to the design and development of CIPRMS as part of this capstone project. Individual role/contribution details to be supplied by the team.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <% }); %>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT -->
     <script src="/velzon/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/velzon/assets/libs/simplebar/simplebar.min.js"></script>
@@ -156,7 +290,32 @@
     <script src="/velzon/assets/libs/particles.js/particles.js"></script>
     <!-- particles app js -->
     <script src="/velzon/assets/js/pages/particles.app.js"></script>
-    <!-- password-addon init -->
-    <script src="/velzon/assets/js/pages/password-addon.init.js"></script>
+
+    <!-- Sizes the dark header background to the logo/title block's REAL rendered height (2026-11) — a
+         fixed CSS height can't track how many lines the system title and institutional name each wrap
+         to, which changes continuously with viewport width, not just at one breakpoint; measuring the
+         actual block is what keeps the white text readably on the dark photo background at every
+         width instead of spilling onto the light page background below it. -->
+    <script>
+    (function () {
+        function sizeAuthBgToContent() {
+            var block = document.querySelector('.auth-brand-block');
+            var bg = document.querySelector('.auth-one-bg-position');
+            if (!block || !bg) return;
+            // .bottom (not .height) — this page is never scrolled when the block is measured, so the
+            // block's distance from the viewport's own top edge already includes whatever top padding
+            // sits above it; using plain .height would undercount by exactly that padding.
+            var height = Math.ceil(block.getBoundingClientRect().bottom) + 56; // comfortable clearance below the last line
+            bg.style.height = Math.max(height, 300) + 'px';
+        }
+        sizeAuthBgToContent();
+        window.addEventListener('load', sizeAuthBgToContent); // fonts/logo image finishing load can change the block's height
+        var resizeTimer;
+        window.addEventListener('resize', function () {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(sizeAuthBgToContent, 120);
+        });
+    })();
+    </script>
 </body>
 </html>

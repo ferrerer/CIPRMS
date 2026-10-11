@@ -208,11 +208,19 @@ describe('Source-level: the Responsible Unit combo now offers "+ Add Responsible
   const fs = require('fs');
   const path = require('path');
   const jsSrc = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'pages', 'registry-gridjs.init.js'), 'utf8');
+  // 2026-11 Dynamic College/Unit Dropdowns: UNIT_OPTIONS/loadResponsibleUnits()/openAddResponsibleUnitModal()/
+  // submitAddResponsibleUnit() were extracted out of registry-gridjs.init.js into this shared file so Reports
+  // & Analytics' College/Unit filter and Comparison fields could reuse the exact same list and modal instead
+  // of growing their own copy — same behavior, same real API call, just relocated.
+  const sharedSrc = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'shared', 'responsible-units.js'), 'utf8');
 
   test('UNIT_OPTIONS is loaded from the real API, not left as a permanently-fixed array', () => {
-    expect(jsSrc).toContain("function loadResponsibleUnits()");
-    expect(jsSrc).toContain("CIPRMS.api('/api/responsible-units'");
-    expect(jsSrc).toContain('loadResponsibleUnits();');
+    expect(sharedSrc).toContain('function loadResponsibleUnits()');
+    expect(sharedSrc).toContain("CIPRMS.api('/api/responsible-units'");
+    expect(sharedSrc).toContain('loadResponsibleUnits();');
+    // registry-gridjs.init.js no longer defines its own copy — it relies on the shared file (loaded first,
+    // see monitoring.ejs's <script> order) for this exact same global.
+    expect(jsSrc).not.toContain('function loadResponsibleUnits()');
   });
 
   test('only the Unit combo gets the add-new affordance — Nature and Country are unaffected', () => {
@@ -221,15 +229,22 @@ describe('Source-level: the Responsible Unit combo now offers "+ Add Responsible
   });
 
   test('adding a unit auto-selects it on whichever form opened the modal, without a full page reload', () => {
-    const fn = jsSrc.slice(jsSrc.indexOf('async function submitAddResponsibleUnit'), jsSrc.indexOf('async function submitAddResponsibleUnit') + 2000);
+    const fn = sharedSrc.slice(sharedSrc.indexOf('async function submitAddResponsibleUnit'), sharedSrc.indexOf('async function submitAddResponsibleUnit') + 2000);
     expect(fn).toContain('pendingUnitCombo.addValue(savedName)');
     expect(fn).not.toMatch(/location\.(reload|href)/);
   });
 
-  test('the Add Responsible Unit modal is a separate, stackable modal (not nested inside/replacing the Add Partnership modal)', () => {
+  test('the Add Responsible Unit modal is a separate, stackable, shared modal (not nested inside/replacing the Add Partnership modal, not duplicated per page)', () => {
     const view = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'monitoring.ejs'), 'utf8');
-    expect(view).toContain('<div class="modal fade zoomIn" id="add-unit-modal"');
-    // Not nested — its own top-level modal div, not a descendant of addPartnershipModal's own closing tag position.
-    expect(view.indexOf('id="add-unit-modal"')).toBeGreaterThan(view.indexOf('<!--end delete modal -->'));
+    // Monitoring includes the shared partial rather than defining its own copy of the modal markup...
+    expect(view).toContain("include('../partials/add_unit_modal')");
+    expect(view.indexOf("include('../partials/add_unit_modal')")).toBeGreaterThan(view.indexOf('<!--end delete modal -->'));
+    // ...and Reports & Analytics' College/Unit filter/Comparison fields reuse that exact same partial too,
+    // never a second "Add Unit" modal of its own.
+    const reportsView = fs.readFileSync(path.join(__dirname, '..', 'views', 'administrator', 'reports.ejs'), 'utf8');
+    expect(reportsView).toContain("include('../partials/add_unit_modal')");
+    // The partial itself still defines one real, separate, top-level, stackable modal.
+    const partial = fs.readFileSync(path.join(__dirname, '..', 'views', 'partials', 'add_unit_modal.ejs'), 'utf8');
+    expect(partial).toContain('<div class="modal fade zoomIn" id="add-unit-modal"');
   });
 });

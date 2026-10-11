@@ -1,24 +1,24 @@
-// Brute-force protection investigation (2026-10-28).
+// Brute-force protection (2026-10-28 investigation; superseded 2026-11 by the Google-only sign-in /
+// progressive rate limiting task).
 //
-// Root cause of the pre-existing weakness: POST /login already had a rate limiter (loginLimiter,
-// express-rate-limit — an already-maintained dependency, reused rather than hand-rolled), but it was keyed
-// ONLY by IP. That protects a network from an attacker working from inside it, but does nothing for one
-// targeted ACCOUNT being brute-forced from many different IPs, and (the inverse problem the task also named)
-// a shared office/NAT IP fully protects strangers from outside it but not two users on that SAME IP, one of
-// whom is attacking the other. Separately, because /login answered every outcome — success AND every kind of
-// failure — with res.render(...)'s default 200 status, express-rate-limit's skipSuccessfulRequests option
-// (which decides "successful" purely by statusCode < 400) could never have worked correctly against this
-// route even if someone had already turned it on: it would have skipped counting every FAILED attempt too,
-// not just real successes, silently neutering the limiter's own counting instead of fixing the "don't punish
-// success" problem it's meant to solve.
+// The 2026-10-28 fix (every login outcome answers a real, distinguishable status code, not always 200) is
+// still exactly as it was and is verified below unchanged. What changed 2026-11: the IP-keyed and
+// account-keyed express-rate-limit instances this file used to test (loginLimiter/loginIdentifierLimiter,
+// flat 10-attempts/15-minute, in-memory, /login-only) were replaced by a single progressive, MongoDB-
+// persisted lockout (services/loginLockoutService.js) shared by POST /login AND the Google OAuth routes
+// (GET /auth/google, GET /auth/google/callback) — see cirl.js's checkSignInLockout/recordSignInFailure/
+// recordSignInSuccess. The max before a lockout is now 5 attempts (was 10), and a repeat offender's next
+// lockout is progressively longer (1/5/15/30/60 minutes) instead of always the same fixed window.
 //
-// What Jest in this process CANNOT verify: makeRateLimiter() (cirl.js) is an intentional no-op under
-// NODE_ENV=test — the only way this whole suite's many independent per-test logins don't spuriously trip a
-// shared, in-memory limiter. The actual trip-after-N-attempts behavior, the 429 status, the cooldown window,
-// and the IP-scope vs account-scope distinction are verified live, against a real (non-test-mode) server —
-// see the chat response for that result; this file verifies the parts a test-mode bypass doesn't hide: the
-// real status codes every login outcome now returns (the actual fix needed for skipSuccessfulRequests to
-// work at all), and that the configuration in the source is what it claims to be.
+// What Jest in this process still CANNOT verify end to end through the real route: checkSignInLockout/
+// recordSignInFailure/recordSignInSuccess are bypassed under NODE_ENV=test for the same reason the old
+// limiters were — this suite's many independent per-test logins, all sharing one supertest "IP", would
+// otherwise trip a real, persisted lockout mid-suite and spuriously fail unrelated tests. The underlying
+// service's actual trip/escalate/expire/decay behavior is unit-tested directly, without that bypass, in
+// test/login-lockout.test.js; the full real-HTTP trip-after-5-attempts/429/Google-routes-also-blocked
+// behavior was verified live against a real (non-test-mode) server — see the chat response for that
+// result. This file verifies the parts a test-mode bypass doesn't hide: the real status codes every login
+// outcome returns, and that the lockout wiring in the source is what it claims to be.
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
@@ -27,10 +27,11 @@ const { connectDB, closeDB } = require('../db');
 const { createTestUser, cleanupAll, TEST_TAG } = require('./helpers');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'cirl.js'), 'utf8');
+const lockoutSrc = fs.readFileSync(path.join(__dirname, '..', 'services', 'loginLockoutService.js'), 'utf8');
 
 afterAll(async () => { await cleanupAll(); await closeDB(); });
 
-describe('Every login outcome now answers a real, distinguishable status code (not always 200)', () => {
+describe('Every login outcome still answers a real, distinguishable status code (not always 200)', () => {
   let user;
   beforeAll(async () => { await connectDB(); user = await createTestUser({ role: 'Staff' }); });
 
@@ -71,64 +72,95 @@ describe('Every login outcome now answers a real, distinguishable status code (n
   });
 });
 
-describe('Source-level: both limiters are wired onto POST /login with the configuration the report describes', () => {
-  test('both an IP-keyed and an account-keyed limiter are attached, in that order', () => {
-    expect(src).toContain("app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {");
+describe('Source-level: the progressive lockout is wired onto POST /login AND both Google OAuth routes', () => {
+  // Bounded dynamically by the NEXT route declaration, not a guessed character count — robust to either
+  // route growing over time.
+  const loginStart = src.indexOf("app.post('/login', async (req, res) => {");
+  const loginBlock = src.slice(loginStart, src.indexOf('app.get(', loginStart + 50));
+  const callbackStart = src.indexOf("app.get('/auth/google/callback'");
+  const callbackBlock = src.slice(callbackStart, src.indexOf("app.post('/login'", callbackStart));
+
+  test('POST /login no longer carries the old flat express-rate-limit middleware — the lockout check now happens inside the handler', () => {
+    expect(src).toContain("app.post('/login', async (req, res) => {");
+    // The old identifiers only ever appear now in explanatory history comments, never as a real
+    // declaration/usage — checked precisely rather than a blanket "the substring never appears anywhere",
+    // which would also forbid legitimately documenting what this code replaced.
+    expect(src).not.toMatch(/\bconst loginLimiter\b/);
+    expect(src).not.toMatch(/\bconst loginIdentifierLimiter\b/);
+    expect(src).not.toContain('function makeLoginBlockedHandler');
+    expect(loginBlock).not.toMatch(/\bloginLimiter\b|\bloginIdentifierLimiter\b/);
   });
 
-  test('both limiters reuse the existing 10-attempts/15-minute window (makeRateLimiter\'s default) — no new, uninspected number was invented', () => {
-    const factory = src.slice(src.indexOf('function makeRateLimiter'), src.indexOf('function makeRateLimiter') + 700);
-    expect(factory).toContain('windowMs: 15 * 60 * 1000');
-    expect(factory).toContain('limit: 10');
-    // loginLimiter/loginIdentifierLimiter only ever pass extra options (skipSuccessfulRequests/keyGenerator/
-    // skip) through the 3rd argument to the shared factory above — neither one's own call site mentions
-    // windowMs/limit at all, so both inherit the factory's one real number instead of a second, separately
-    // maintained one that could silently drift from it.
-    const loginCall = src.slice(src.indexOf('const loginLimiter ='), src.indexOf('const loginLimiter =') + 400);
-    const identifierCall = src.slice(src.indexOf('const loginIdentifierLimiter ='), src.indexOf('const loginIdentifierLimiter =') + 700);
-    expect(loginCall).not.toMatch(/windowMs|limit:\s*\d/);
-    expect(identifierCall).not.toMatch(/windowMs|limit:\s*\d/);
+  test('both GET /auth/google and GET /auth/google/callback check the lockout before doing anything else — restarting the OAuth flow cannot bypass it', () => {
+    const initBlock = src.slice(src.indexOf("app.get('/auth/google',"), callbackStart);
+    // 2026-11 Google-OAuth-audit-trail fix: checkSignInLockout() grew two more (optional) params —
+    // identifierForAudit and method — so the Google routes can tag their audit rows as 'google' rather
+    // than silently defaulting to 'password'. Matched here with .toMatch(), not a hardcoded 4-arg
+    // .toContain(), so this test keeps working if the call ever gains/reorders further optional args.
+    expect(initBlock).toMatch(/checkSignInLockout\(req, res, 'ip', ip,\s*null,\s*'google'\)/);
+    expect(callbackBlock).toMatch(/checkSignInLockout\(req, res, 'ip', ip,\s*null,\s*'google'\)/);
+    expect(callbackBlock).toContain("checkSignInLockout(req, res, 'account', accountKey");
+    // The ip-scope check must run before passport.authenticate is ever invoked — not after Google has
+    // already been contacted — so a locked-out IP never even starts a token exchange.
+    expect(callbackBlock.search(/checkSignInLockout\(req, res, 'ip', ip/)).toBeLessThan(callbackBlock.indexOf('passport.authenticate'));
   });
 
-  test('both limiters skip a request that actually succeeded, so a real login does not eat into the budget', () => {
-    const loginBlock = src.slice(src.indexOf('const loginLimiter ='), src.indexOf('const loginIdentifierLimiter ='));
-    const identifierBlock = src.slice(src.indexOf('const loginIdentifierLimiter ='), src.indexOf('app.post(\'/login\''));
-    expect(loginBlock).toContain('skipSuccessfulRequests: true');
-    expect(identifierBlock).toContain('skipSuccessfulRequests: true');
+  test('the account scope is the SAME normalized key (trim + lowercase) for both the password form and the Google profile e-mail — one shared budget, not two', () => {
+    expect(src).toContain('loginLockoutService.normalizeAccountKey(username)');
+    expect(src).toContain('loginLockoutService.normalizeAccountKey(googleEmail)');
+    expect(lockoutSrc).toMatch(/email\.trim\(\)\.toLowerCase\(\)/);
   });
 
-  test('the account-keyed limiter is keyed by the submitted identifier (normalized the same way the real lookup is), never by IP', () => {
-    const identifierBlock = src.slice(src.indexOf('const loginIdentifierLimiter ='), src.indexOf('app.post(\'/login\''));
-    expect(identifierBlock).toContain("req.body.username.trim().toLowerCase()");
-    expect(identifierBlock).not.toContain('req.ip');
+  test('invalid OAuth state / a failed callback / no Google profile all count as a failure (ip-scope) before any CIPRMS account is known', () => {
+    expect(callbackBlock).toMatch(/if \(err\) \{[^}]*recordSignInFailure\('ip', ip\)/);
+    expect(callbackBlock).toMatch(/if \(!googleUser\) \{[^}]*recordSignInFailure\('ip', ip\)/);
   });
 
-  test('the account-keyed limiter is skipped only for a request with no usable identifier at all — it is not disabled wholesale', () => {
-    const identifierBlock = src.slice(src.indexOf('const loginIdentifierLimiter ='), src.indexOf('app.post(\'/login\''));
-    expect(identifierBlock).toMatch(/skip:\s*\(req\)\s*=>\s*!\(req\.body/);
+  test('a password attempt against a Google-only account never counts toward the lockout — it is excluded by name, not just by accident', () => {
+    expect(loginBlock).toMatch(/countableReasons\s*=\s*new Set\(\[[^\]]*\]\)/);
+    const countableMatch = loginBlock.match(/countableReasons\s*=\s*new Set\(\[([^\]]*)\]\)/);
+    expect(countableMatch[1]).not.toMatch(/google_account_only/);
+    expect(countableMatch[1]).not.toMatch(/system_error/);
   });
 
-  test('the IP limiter keeps using express-rate-limit\'s own default keyGenerator (req.ip, trust-proxy-aware) — not re-implemented by hand', () => {
-    const loginBlock = src.slice(src.indexOf('const loginLimiter ='), src.indexOf('const loginIdentifierLimiter ='));
-    expect(loginBlock).not.toContain('keyGenerator');
+  // 2026-11 cross-account rate-limiting fix: a successful sign-in clears ONLY the account scope, never the
+  // IP scope. Clearing the IP's own failure count on any one account's success would let an attacker
+  // credential-stuff a run of DIFFERENT accounts from a shared/NAT IP for free every time an unrelated,
+  // legitimate colleague on that same IP happens to sign in — proving control of one account only ever
+  // vouches for that account, never for the IP it came from.
+  test('a successful sign-in clears the account scope only — never the shared IP scope', () => {
+    expect(loginBlock).toContain("recordSignInSuccess('account', accountKey)");
+    expect(loginBlock).not.toContain("recordSignInSuccess('ip', ip)");
+    expect(callbackBlock).toContain("recordSignInSuccess('account', accountKey)");
+    expect(callbackBlock).not.toContain("recordSignInSuccess('ip', ip)");
   });
 
-  test('a blocked request of either kind writes one LOGIN_BLOCKED row and never a password/token', () => {
-    expect(src).toContain("function makeLoginBlockedHandler(scope)");
-    const handlerBlock = src.slice(src.indexOf('function makeLoginBlockedHandler'), src.indexOf('function makeLoginBlockedHandler') + 900);
-    expect(handlerBlock).toContain("'LOGIN_BLOCKED'");
-    expect(handlerBlock).toContain("status: 'blocked'");
-    expect(handlerBlock).toContain("reason: 'rate_limited'");
-    expect(handlerBlock).not.toMatch(/password|token/i);
+  test('a blocked request writes one LOGIN_BLOCKED row and never a password/token, and the client-facing message names neither scope, limit nor window', () => {
+    expect(src).toContain('async function checkSignInLockout(');
+    const start = src.indexOf('async function checkSignInLockout(');
+    const fnEnd = src.indexOf('\n}', start);
+    const fnBlock = src.slice(start, fnEnd);
+    expect(fnBlock).toContain("'LOGIN_BLOCKED'");
+    expect(fnBlock).toContain("status: 'blocked'");
+    expect(fnBlock).toContain("reason: 'rate_limited'");
+    // 2026-11: the `method` param's fallback label is the literal string 'password' (vs. 'google') — a
+    // category name, never a credential — so the check below targets real secret-bearing identifiers
+    // (an actual password/token VALUE being read or logged) rather than banning the word outright.
+    expect(fnBlock).not.toMatch(/req\.body\.password|accessToken|refreshToken|clientSecret|authorization.?code/i);
+    expect(fnBlock).not.toMatch(/\b5\b|\bip-based\b|\baccount-based\b/i);
   });
 
-  test('the client-facing blocked message never names a limit, a window or which limiter tripped', () => {
-    const start = src.indexOf('function makeLoginBlockedHandler');
-    const fnEnd = src.indexOf('\n}', start); // this function's own closing brace, not a fixed character count
-    const handlerBlock = src.slice(start, fnEnd);
-    const clientText = handlerBlock.slice(handlerBlock.indexOf('res.status(429)'));
-    expect(clientText).toContain('Too many login attempts. Please wait 15 minutes and try again.');
-    expect(clientText).not.toMatch(/\b10\b|ip-based|account-based|\bscope\b/i); // the text shown to the client names neither axis nor the attempt count
+  test('the max attempts before a lockout is 5 (not the old 10), configured once in the service, not duplicated in cirl.js', () => {
+    expect(lockoutSrc).toContain('const MAX_ATTEMPTS = 5;');
+    expect(src).not.toMatch(/MAX_ATTEMPTS\s*=\s*\d/); // cirl.js never redefines its own copy of this number
+  });
+
+  test('the escalation schedule matches the brief exactly: 1, 5, 15, 30, 60 minutes, capped — never permanent, never unbounded', () => {
+    expect(lockoutSrc).toContain('const LOCKOUT_DURATIONS_MS = [60 * 1000, 5 * 60 * 1000, 15 * 60 * 1000, 30 * 60 * 1000, 60 * 60 * 1000];');
+  });
+
+  test('the escalation tier decays after a clearly defined quiet period, so a stale old incident can never compound forever', () => {
+    expect(lockoutSrc).toContain('const TIER_DECAY_MS = 24 * 60 * 60 * 1000;');
   });
 });
 

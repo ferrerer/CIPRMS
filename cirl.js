@@ -20,6 +20,7 @@ const googleCalendarService = require('./services/googleCalendarService');
 const googleDocsService = require('./services/googleDocsService');
 const emailService = require('./services/emailService');
 const systemStatusService = require('./services/systemStatusService');
+const loginLockoutService = require('./services/loginLockoutService');
 const notificationService = require('./services/notificationService');
 const realtime = require('./services/realtime');
 const searchService = require('./services/searchService');
@@ -126,9 +127,10 @@ function generateTempPassword() {
 // confirm its limiter worked left zero budget for a same-IP admin password
 // change moments later, using an earlier draft that shared one instance.
 // `extraOptions` (2026-10-28 brute-force-protection investigation) merges straight into the rateLimit()
-// config — currently only the two login limiters below use it (skipSuccessfulRequests, and the per-account
-// one's own keyGenerator/skip). Every other limiter built by this factory keeps its exact previous behavior:
-// an omitted 3rd argument spreads as {}.
+// config — no limiter built by this factory currently passes it (the two login limiters that originally
+// motivated it, loginLimiter/loginIdentifierLimiter, were replaced 2026-11 by the MongoDB-backed
+// progressive lockout in services/loginLockoutService.js, which this factory has no part in). Kept as a
+// supported parameter for whichever limiter needs it next: an omitted 3rd argument spreads as {}.
 function makeRateLimiter(jsonMessage, htmlHandler, extraOptions) {
   if (process.env.NODE_ENV === 'test') return (req, res, next) => next();
   return rateLimit({
@@ -142,59 +144,44 @@ function makeRateLimiter(jsonMessage, htmlHandler, extraOptions) {
   });
 }
 
-// Shared by both login limiters below (IP-keyed and account-keyed) so a blocked request always produces
-// exactly one LOGIN_BLOCKED row — whichever limiter actually tripped calls express-rate-limit's own handler
-// instead of next(), so the /login route body never runs for that request and the other limiter never even
-// gets a chance to also fire; see the two call sites for why this can't double-log. `scope` is never shown to
-// the client (the response text is identical either way, by design — never reveal internal rate-limit
-// configuration) but is kept in the audit record's own `details` for whoever reviews the Audit Trail
-// afterward: "many IPs hammering one account" and "one IP hammering many accounts" are different incidents.
-function makeLoginBlockedHandler(scope) {
-  return async (req, res) => {
-    await logActivity(getDb(), null, 'LOGIN_BLOCKED', `Login rate-limited${req.body && typeof req.body.username === 'string' && req.body.username ? ' for ' + req.body.username.trim().slice(0, 200) : ''}`,
-      { category: 'Authentication', status: 'blocked', targetType: 'login_attempt', targetId: safeLoginIdentifier(req.body && req.body.username), ip: getClientIp(req), userAgent: getClientUserAgent(req), requestId: req.sessionID || null, details: { reason: 'rate_limited', scope } });
-    res.status(429).render('index', {
-      activePage: '',
-      error: 'Too many login attempts. Please wait 15 minutes and try again.'
-    });
-  };
+// ── Progressive sign-in lockout (2026-11 Google-only sign-in / progressive rate limiting) ───────────────
+// Replaces the pair of flat, in-memory, 10-attempts/15-minute limiters that used to live here
+// (loginLimiter/loginIdentifierLimiter) — those only ever guarded POST /login, could not escalate across
+// repeat offenses, and reset on every process restart (express-rate-limit's default MemoryStore). See
+// services/loginLockoutService.js for the full escalation policy (5 attempts → 1/5/15/30/60-minute
+// lockouts, MongoDB-persisted so it survives a restart and is correct across multiple app instances) and
+// the reasoning behind its IP-scope vs account-scope split. Shared by POST /login AND the Google OAuth
+// routes below (GET /auth/google, GET /auth/google/callback) — one unified mechanism so an attacker cannot
+// reset or dodge a lockout by switching sign-in method, restarting the OAuth flow, or refreshing the page.
+//
+// Bypassed under NODE_ENV=test for the same reason the old limiters were (the Jest suite's own many
+// independent logins, all sharing one supertest "IP", would otherwise trip a real, persisted lockout mid
+// suite and spuriously fail unrelated tests): the underlying service itself is unit-tested directly,
+// without this bypass, in test/login-lockout.test.js, since that is the only way to exercise its actual
+// trip/escalate/expire/decay behavior deterministically and quickly.
+//
+// `recordSignInFailure`/`recordSignInSuccess` must each be called EXACTLY ONCE per real outcome, from the
+// single place in the route that already decides success/failure (the existing audit() closures' own call
+// sites) — never inferred from the HTTP status code, and never called from more than one middleware layer,
+// so one authentication event is never double-counted.
+async function checkSignInLockout(req, res, scope, key, identifierForAudit, method) {
+  if (process.env.NODE_ENV === 'test') return false;
+  const status = await loginLockoutService.getLockoutStatus(getDb(), scope, key);
+  if (!status.locked) return false;
+  const attemptedId = safeLoginIdentifier(identifierForAudit);
+  await logActivity(getDb(), null, 'LOGIN_BLOCKED', `Sign-in rate-limited${attemptedId ? ' for ' + attemptedId : ''}`,
+    { category: 'Authentication', status: 'blocked', targetType: 'login_attempt', targetId: attemptedId, ip: getClientIp(req), userAgent: getClientUserAgent(req), requestId: req.sessionID || null, details: { reason: 'rate_limited', scope, method: method || 'password' } });
+  res.status(429).render('index', { activePage: '', error: loginLockoutService.lockoutMessage(status.retryAfterSeconds) });
+  return true;
 }
-
-// Per-IP: unchanged threshold/window from before this investigation (10 attempts / 15 minutes — the project's
-// existing login-security posture, reused rather than inventing a new number). `skipSuccessfulRequests: true`
-// is new: a login that actually succeeds no longer eats into this budget, so a normal user who mistypes their
-// password a couple of times and then gets in is not left sitting closer to a lockout for the rest of the
-// day purely for having succeeded. This only works correctly because the /login route below now answers a
-// failed attempt with a real 4xx/5xx status (previously always 200) — see 2026-10-28 brute-force-protection
-// investigation in the final report: skipSuccessfulRequests decides "successful" as statusCode < 400, so
-// against the old all-200 responses it would have silently skipped counting FAILURES too, not just successes.
-const loginLimiter = makeRateLimiter(
-  'Too many login attempts. Please wait 15 minutes and try again.',
-  makeLoginBlockedHandler('ip'),
-  { skipSuccessfulRequests: true }
-);
-
-// Per-account: new. The IP limiter alone protects the network it's watching, but does nothing for ONE
-// targeted account being brute-forced from many different IPs (a botnet, or just an attacker who isn't
-// behind a single stable address) — and a shared office/NAT IP already fully protects every account behind
-// it from a stranger outside it, but offers no protection between two users ON that same IP, including one
-// deliberately attacking a co-worker's account from a desk down the hall. Keyed by the exact string the
-// client submitted (normalized the same way the login lookup itself normalizes it — trim + lowercase), NOT
-// by whether that string turns out to be a real account: keying on "is this a real email" would need a DB
-// read before the rate limiter can even run, and would itself leak existence through timing; keying on the
-// raw input avoids both. Same 10/15-minute budget as the IP limiter, for the same "don't invent a new
-// number" reason. `skip` deliberately excludes a request with no usable identifier at all (empty/non-string
-// username) — that case has no real account to protect and already can't drain anyone else's budget; it is
-// still fully covered by the IP limiter above either way.
-const loginIdentifierLimiter = makeRateLimiter(
-  'Too many login attempts. Please wait 15 minutes and try again.',
-  makeLoginBlockedHandler('account'),
-  {
-    skipSuccessfulRequests: true,
-    skip: (req) => !(req.body && typeof req.body.username === 'string' && req.body.username.trim()),
-    keyGenerator: (req) => req.body.username.trim().toLowerCase()
-  }
-);
+async function recordSignInFailure(scope, key) {
+  if (process.env.NODE_ENV === 'test') return;
+  await loginLockoutService.recordFailure(getDb(), scope, key);
+}
+async function recordSignInSuccess(scope, key) {
+  if (process.env.NODE_ENV === 'test') return;
+  await loginLockoutService.recordSuccess(getDb(), scope, key);
+}
 
 // Closes S11 (Roadmap v2 Phase G2, docs/SYSTEM_AUDIT_2026-07-16.md) — /signup,
 // the three password-change routes, and the public /api/institutions proxy
@@ -383,9 +370,23 @@ app.use((req, res, next) => {
 });
 
 // ── PASSPORT CONFIG ───────────────────────────────────────────────────────────
+// `state: true` (2026-11 Google OAuth audit trail / cross-account rate-limiting investigation) — real,
+// significant finding: this was NOT previously set, anywhere. passport-oauth2 decides its state-store
+// ONCE, here at strategy construction, regardless of anything passed to passport.authenticate() later per
+// route — with no `state` option here, it silently used NullStore, whose verify() unconditionally calls
+// back `(null, true)` for ANY state value or none at all (confirmed by reading
+// node_modules/passport-oauth2/lib/state/null.js). In practice this meant the Google sign-in flow had NO
+// real CSRF/state protection: nothing tied a callback's `code` to the specific browser session that
+// started that specific OAuth flow, leaving the door open to a login-CSRF attack (tricking a victim's
+// browser into completing an attacker-initiated OAuth flow, binding the victim's session to the attacker's
+// own Google identity). `state: true` switches this to passport-oauth2's own session-backed NonceStore: a
+// random value is generated and stored in `req.session` when /auth/google redirects to Google, and the
+// callback's own `state` query param must match it exactly — already express-session-backed, since this
+// app already requires a session for everything else.
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  state: true
 },
   function (accessToken, refreshToken, profile, done) {
     return done(null, profile);
@@ -684,40 +685,91 @@ function getCallbackUrl(req) {
   return `${protocol}://${host}/auth/google/callback`;
 }
 
-app.get('/auth/google', (req, res, next) => {
+// Shares the exact same progressive lockout as POST /login (checkSignInLockout/recordSignInFailure/
+// recordSignInSuccess, services/loginLockoutService.js) — 2026-11 Google-only sign-in / progressive rate
+// limiting. The IP scope is checked before Google is ever contacted (restarting the OAuth flow, or
+// repeatedly invoking the callback, cannot bypass a lockout already in effect for that IP); the account
+// scope — keyed by the Google profile's own e-mail, the SAME normalized key /login's account scope uses —
+// is checked as soon as the callback has an e-mail to check, before the allowlist DB lookup even runs.
+// Full Audit Trail coverage for Google sign-in (2026-11 Google OAuth audit trail / cross-account rate
+// limiting fix) — this route previously called logActivity() nowhere at all: neither a successful nor a
+// failed Google sign-in, nor a Google-triggered lockout, ever reached the Audit Trail, only
+// console.log/warn/error. Every branch below now writes exactly one row, reusing the SAME action types
+// (LOGIN_SUCCESS/LOGIN_FAILED/LOGIN_BLOCKED) the password flow already uses — so an Administrator reviewing
+// "all failed logins" sees both methods together — distinguished by a new `details.method: 'google'` field,
+// plus two new, purely informational action types (GOOGLE_AUTH_INITIATED/GOOGLE_AUTH_CALLBACK) for the two
+// non-outcome events the brief also asks for. Never logs an authorization code, access/refresh token, or
+// any other credential — only the already-public-to-the-attempt e-mail, IP, and user-agent, matching every
+// other Authentication-category row in this file.
+app.get('/auth/google', async (req, res, next) => {
+  const ip = getClientIp(req);
+  const userAgent = getClientUserAgent(req);
+  const requestId = req.sessionID || null;
+  if (await checkSignInLockout(req, res, 'ip', ip, null, 'google')) return;
   const callbackUrl = getCallbackUrl(req);
   console.log(`[AUTH] Redirecting to Google with callback URL: ${callbackUrl}`);
+  await logActivity(getDb(), null, 'GOOGLE_AUTH_INITIATED', 'Google sign-in initiated',
+    { category: 'Authentication', targetType: 'login_attempt', ip, userAgent, requestId, details: { method: 'google' } });
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     callbackURL: callbackUrl
   })(req, res, next);
 });
 
-app.get('/auth/google/callback', (req, res, next) => {
+app.get('/auth/google/callback', async (req, res, next) => {
+  const ip = getClientIp(req);
+  const userAgent = getClientUserAgent(req);
+  const requestId = req.sessionID || null;
+  const db = getDb();
+  if (await checkSignInLockout(req, res, 'ip', ip, null, 'google')) return;
   const callbackUrl = getCallbackUrl(req);
+  await logActivity(db, null, 'GOOGLE_AUTH_CALLBACK', 'Google OAuth callback received',
+    { category: 'Authentication', targetType: 'login_attempt', ip, userAgent, requestId, details: { method: 'google' } });
 
   passport.authenticate('google', {
     failureRedirect: '/',
     callbackURL: callbackUrl
   }, async function (err, googleUser, info) {
+    // Invalid/expired OAuth state, a denied/failed token exchange, or any other passport-level failure —
+    // counted the same as a failed password attempt (brief: "invalid OAuth state and failed callbacks").
+    // No CIPRMS account is identified yet at this point, so only the IP scope can be charged, and the
+    // audit row's targetId stays null — there is no attempted identifier to record, unlike every branch
+    // below this one that at least has a submitted e-mail.
     if (err) {
       console.error('❌ OAuth Error:', err.message);
+      await Promise.all([
+        recordSignInFailure('ip', ip),
+        logActivity(db, null, 'LOGIN_FAILED', 'Failed Google sign-in (invalid OAuth state or callback error)',
+          { category: 'Authentication', status: 'failure', targetType: 'login_attempt', ip, userAgent, requestId, details: { method: 'google', reason: 'oauth_error' } })
+      ]);
       return next(err);
     }
     if (!googleUser) {
       console.warn('⚠️  No user returned from OAuth');
+      await Promise.all([
+        recordSignInFailure('ip', ip),
+        logActivity(db, null, 'LOGIN_FAILED', 'Failed Google sign-in (denied consent or no profile returned)',
+          { category: 'Authentication', status: 'failure', targetType: 'login_attempt', ip, userAgent, requestId, details: { method: 'google', reason: 'oauth_denied_or_failed' } })
+      ]);
       return res.redirect('/');
     }
 
     try {
-      const db = getDb();
       const googleEmail = (googleUser.emails && googleUser.emails[0])
         ? googleUser.emails[0].value.trim().toLowerCase()
         : null;
 
       if (!googleEmail) {
+        await Promise.all([
+          recordSignInFailure('ip', ip),
+          logActivity(db, null, 'LOGIN_FAILED', 'Failed Google sign-in (Google profile has no e-mail)',
+            { category: 'Authentication', status: 'failure', targetType: 'login_attempt', ip, userAgent, requestId, details: { method: 'google', reason: 'no_google_email' } })
+        ]);
         return res.render('index', { activePage: '', error: 'Google account has no email. Please use a different login method.' });
       }
+
+      const accountKey = loginLockoutService.normalizeAccountKey(googleEmail);
+      if (await checkSignInLockout(req, res, 'account', accountKey, googleEmail, 'google')) return;
 
       // Strict allowlist (2026-09-05): Google/CSPC authentication only proves
       // WHO the person is. It never determines WHETHER they may access
@@ -731,6 +783,11 @@ app.get('/auth/google/callback', (req, res, next) => {
 
       if (!dbUser) {
         console.warn(`⚠️  Google login rejected — no authorized CIPRMS account for: ${googleEmail}`);
+        await Promise.all([
+          recordSignInFailure('ip', ip), recordSignInFailure('account', accountKey),
+          logActivity(db, null, 'LOGIN_FAILED', `Failed Google sign-in for ${googleEmail} (account_not_found)`,
+            { category: 'Authentication', status: 'failure', targetType: 'login_attempt', targetId: googleEmail, ip, userAgent, requestId, details: { method: 'google', reason: 'account_not_found' } })
+        ]);
         return res.render('index', {
           activePage: '',
           error: 'Your account is not authorized to access CIPRMS. Please contact the CIRL Administrator to request an account.'
@@ -738,6 +795,11 @@ app.get('/auth/google/callback', (req, res, next) => {
       }
 
       if (dbUser.status === 'Inactive') {
+        await Promise.all([
+          recordSignInFailure('ip', ip), recordSignInFailure('account', accountKey),
+          logActivity(db, dbUser, 'LOGIN_FAILED', `Failed Google sign-in for ${googleEmail} (account_disabled)`,
+            { category: 'Authentication', status: 'failure', targetType: 'login_attempt', targetId: dbUser.email, ip, userAgent, requestId, details: { method: 'google', reason: 'account_disabled' } })
+        ]);
         return res.render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
       }
 
@@ -763,8 +825,18 @@ app.get('/auth/google/callback', (req, res, next) => {
           activated: isActivated(dbUser),
           avatarUrl: avatarUrlFor(dbUser)
         };
-        req.session.save((saveErr) => {
+        req.session.save(async (saveErr) => {
           if (saveErr) return next(saveErr);
+          await Promise.all([
+            // Account scope only — NOT 'ip'. A shared/NAT IP (plausible on a campus network) is used by many
+            // people; clearing the IP's own failure count on anyone's successful sign-in would let an
+            // attacker credential-stuff a run of DIFFERENT accounts from that IP for free every time an
+            // unrelated, legitimate colleague on the same IP happens to sign in. Proving control of ONE
+            // account only ever vouches for that account, never for the IP itself.
+            recordSignInSuccess('account', accountKey),
+            logActivity(db, dbUser, 'LOGIN_SUCCESS', `Successful Google sign-in: ${dbUser.email}`,
+              { category: 'Authentication', status: 'success', targetType: 'login_attempt', targetId: dbUser.email, ip, userAgent, requestId, details: { method: 'google' } })
+          ]);
           console.log(`✓ Google login: ${dbUser.name} (${dbUser.role})`);
           return res.redirect(landingFor(dbUser));
         });
@@ -788,16 +860,33 @@ app.get('/auth/google/callback', (req, res, next) => {
 // investigation's brief asked for — never a message that would tell an attacker whether a given email is
 // actually registered (the *response* text already didn't; the audit `reason` below is for the Administrator
 // reviewing the trail, not shown to the person attempting to log in).
-app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {
+app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   const db = getDb();
   const ip = getClientIp(req);
   const userAgent = getClientUserAgent(req);
   const requestId = req.sessionID || null;
   const attemptedId = safeLoginIdentifier(username);
+  const accountKey = loginLockoutService.normalizeAccountKey(username);
   const audit = (status, reason, user, extraDetails) => logActivity(db, user || null, status === 'success' ? 'LOGIN_SUCCESS' : 'LOGIN_FAILED',
     status === 'success' ? `Successful login: ${user.email}` : `Failed login attempt${attemptedId ? ' for ' + attemptedId : ''} (${reason})`,
     { category: 'Authentication', status, targetType: 'login_attempt', targetId: user ? user.email : attemptedId, ip, userAgent, requestId, details: { reason, ...extraDetails } });
+  // Counts a failure toward BOTH the IP and (when a usable identifier was submitted) the account scope —
+  // except google_account_only, which must never count here: this account-scope key is shared with the
+  // Google OAuth callback below specifically so an attacker can't dodge a lockout by switching sign-in
+  // method, and counting a password attempt against a Google-only account would let someone lock that
+  // account out of Google sign-in too, through a form they never use. system_error is the server's own
+  // fault, not a signal about the attempt, so it never counts either.
+  const countableReasons = new Set(['validation_error', 'account_not_found', 'account_disabled', 'legacy_account_needs_reset', 'invalid_credentials']);
+  const recordOutcome = (reason) => {
+    if (reason && !countableReasons.has(reason)) return Promise.resolve();
+    const scopes = [recordSignInFailure('ip', ip)];
+    if (accountKey) scopes.push(recordSignInFailure('account', accountKey));
+    return Promise.all(scopes);
+  };
+
+  if (await checkSignInLockout(req, res, 'ip', ip, username)) return;
+  if (accountKey && await checkSignInLockout(req, res, 'account', accountKey, username)) return;
 
   // F-04: reject non-string values (e.g. JSON objects with MongoDB operators)
   // before any string method (.trim, .toLowerCase) is called, preventing a
@@ -813,7 +902,7 @@ app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {
   // for the detail an Administrator can see), 500 for a genuine server-side failure after the password had
   // already verified correct.
   if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
-    await audit('failure', 'validation_error', null);
+    await Promise.all([audit('failure', 'validation_error', null), recordOutcome('validation_error')]);
     return res.status(400).render('index', { activePage: '', error: 'Please enter your email and password.' });
   }
 
@@ -824,30 +913,30 @@ app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {
     });
 
     if (!user) {
-      await audit('failure', 'account_not_found', null);
+      await Promise.all([audit('failure', 'account_not_found', null), recordOutcome('account_not_found')]);
       return res.status(401).render('index', { activePage: '', error: 'Invalid email or password.' });
     }
 
     if (user.status === 'Inactive') {
-      await audit('failure', 'account_disabled', user);
+      await Promise.all([audit('failure', 'account_disabled', user), recordOutcome('account_disabled')]);
       return res.status(401).render('index', { activePage: '', error: 'Your CIPRMS account is inactive. Please contact the CIRL Administrator.' });
     }
 
     if (!user.password) {
       // Google-only account (no local password set) — must sign in via "Continue with Google".
-      await audit('failure', 'google_account_only', user);
+      await Promise.all([audit('failure', 'google_account_only', user), recordOutcome('google_account_only')]);
       return res.status(401).render('index', { activePage: '', error: 'This account signs in with Google. Please use "Continue with Google".' });
     }
 
     if (!isBcryptHash(user.password)) {
       // Legacy plain-text account that predates the password migration.
-      await audit('failure', 'legacy_account_needs_reset', user);
+      await Promise.all([audit('failure', 'legacy_account_needs_reset', user), recordOutcome('legacy_account_needs_reset')]);
       return res.status(401).render('index', { activePage: '', error: 'Your account needs a password reset. Please contact the Administrator.' });
     }
 
     const passwordMatches = await verifyPassword(password, user.password);
     if (!passwordMatches) {
-      await audit('failure', 'invalid_credentials', user);
+      await Promise.all([audit('failure', 'invalid_credentials', user), recordOutcome('invalid_credentials')]);
       return res.status(401).render('index', { activePage: '', error: 'Invalid email or password.' });
     }
 
@@ -885,6 +974,9 @@ app.post('/login', loginLimiter, loginIdentifierLimiter, async (req, res) => {
         getDb().collection('users').updateOne({ email: user.email }, { $set: { login: loginDate } }).catch(() => { });
 
         await audit('success', null, user);
+        // Account scope only — NOT 'ip'; see the matching comment on the Google callback's own success
+        // handler for why a shared/NAT IP's failure count must never be cleared by one account's success.
+        await recordSignInSuccess('account', accountKey);
         console.log(`✓ Login: ${user.name} (${user.role})`);
         res.redirect(landingFor(user));
       });
@@ -4008,10 +4100,23 @@ async function computeCustomReportData(db, query, user) {
       }
       groupsMap[v].Total += 1;
 
+      // DSS audit finding (2026-10-10): 'Inactive' must FOLD IN Expiring Soon
+      // records only when nothing else is already tracking them separately —
+      // otherwise they'd be counted in both columns (the six "By [Dimension]"
+      // types above, and the 'Custom Comparison' default, each already give
+      // Expiring Soon/Expired their own column). The only metricGroups shape
+      // where Expiring Soon has nowhere else to go is the plain two-column
+      // ['Active', 'Inactive'] default used by reportType 'Active vs
+      // Inactive' — without folding it in there, a group's Active + Inactive
+      // silently summed to less than Total whenever it contained an Expiring
+      // Soon record, AND it disagreed with the dedicated Comparison feature's
+      // own 'Active vs Inactive', which already treats Expiring Soon as
+      // Inactive (computeComparisonReport's matchStatus, same file).
+      const inactiveHasNoOtherBucket = !metricGroups.includes('Expiring Soon') && !metricGroups.includes('Expired');
       metricGroups.forEach(m => {
         let match = false;
         if (m === 'Active') match = (p.status === 'Active');
-        else if (m === 'Inactive') match = (p.status === 'Expired' || p.status === 'Inactive');
+        else if (m === 'Inactive') match = (p.status === 'Expired' || p.status === 'Inactive' || (inactiveHasNoOtherBucket && p.status === 'Expiring Soon'));
         else if (m === 'Expired') match = (p.status === 'Expired');
         else if (m === 'Expiring Soon') match = (p.status === 'Expiring Soon');
         else if (m === 'Renewed') match = p.isRenewed;

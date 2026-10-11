@@ -169,18 +169,10 @@
                 </div>
 
                 <div class="row">
-                <!-- Approval Progress -->
-                    <div class="col-xl-6">
-                        <div class="card">
-                            <div class="card-header"><h4 class="card-title mb-0"><i class="ri-progress-4-line me-2"></i>Approval Progress</h4></div>
-                            <div class="card-body" id="approval-progress-body">
-                                <div class="text-center text-muted py-4"><div class="spinner-border text-primary" role="status"></div></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Document Verification Status -->
-                    <div class="col-xl-6">
+                    <!-- Document Verification Status — full width now that Approval Progress moved to the
+                         Calendar page's Upcoming Events sidebar (2026-11), so this card no longer shares the
+                         row with it. -->
+                    <div class="col-xl-12">
                         <div class="card">
                             <div class="card-header"><h4 class="card-title mb-0"><i class="ri-file-shield-2-line me-2"></i>Document Verification Status</h4></div>
                             <div class="card-body">
@@ -786,12 +778,18 @@
         }, 'Cancelling…');
     }
 
-    // Stat cards + Approval Progress track the requester's own Document
-    // Requests. (The Partnership Requests section is not shown on this page,
-    // so no partnership-request counts are mixed in.) Document requests use
-    // the 6-stage workflow (see DR_WORKFLOW_STATUSES above) — "Approved" and
-    // everything after it (Release, Completed) counts toward Approved, since
-    // the request was approved and just continues through fulfillment.
+    // Stat cards track the requester's own Document Requests. (The Partnership
+    // Requests section is not shown on this page, so no partnership-request
+    // counts are mixed in.) Document requests use the 6-stage workflow (see
+    // DR_WORKFLOW_STATUSES above) — "Approved" and everything after it
+    // (Release, Completed) counts toward Approved, since the request was
+    // approved and just continues through fulfillment.
+    //
+    // Approval Progress (the same approved/total ratio, as a progress bar)
+    // used to render here too — moved to the Calendar page's Upcoming Events
+    // sidebar (2026-11), College-Dean-only, where it fetches this exact same
+    // /api/document-requests/mine endpoint independently (see
+    // loadApprovalProgress() in administrator/calendar.ejs).
     var DR_APPROVED_IDX = DR_WORKFLOW_STATUSES.indexOf('Approved');
     function drWorkflowIdx(r) { return DR_WORKFLOW_STATUSES.indexOf(r.canonicalStatus || r.status); }
     function drIsInProgress(r) { var idx = drWorkflowIdx(r); return idx > -1 && idx < DR_APPROVED_IDX; }
@@ -805,16 +803,6 @@
         setCount('cnt-total', total);
         setCount('cnt-progress', inProgress);
         setCount('cnt-approved', approved);
-
-        var progBox = document.getElementById('approval-progress-body');
-        var pct = total ? Math.round((approved / total) * 100) : 0;
-        progBox.innerHTML =
-            '<div class="d-flex justify-content-between mb-1"><span>Approved</span><span>' + approved + ' / ' + total + '</span></div>' +
-            '<div class="progress mb-3" style="height:10px"><div class="progress-bar bg-success" style="width:' + pct + '%"></div></div>' +
-            '<div class="row g-2 text-center">' +
-                '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0">' + inProgress + '</h5><small class="text-muted">In Progress</small></div></div>' +
-                '<div class="col-6"><div class="border rounded p-2"><h5 class="mb-0 text-success">' + approved + '</h5><small class="text-muted">Approved</small></div></div>' +
-            '</div>';
     }
 
     // Stat cards are clickable: each one jumps to and highlights the
@@ -862,7 +850,6 @@
             if (!res.ok || !Array.isArray(res.data)) {
                 if (live) return false;   // (false = try again later)
                 document.getElementById('dr-monitor-body').innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Failed to load requests.</td></tr>';
-                document.getElementById('approval-progress-body').innerHTML = '';
                 return;
             }
             var previous = {};
@@ -1067,7 +1054,7 @@
     loadCollegeReports();
     loadDRRequests();
     // Live updates: a reviewer moved one of my Document Requests to the next stage. The server is asked again for the
-    // real data — counters, Approval Progress and the table are all recomputed from it, never from the event itself.
+    // real data — the stat-card counters and the table are all recomputed from it, never from the event itself.
     if (window.CIPRMS && CIPRMS.live) {
         CIPRMS.live(['documentRequest.updated', 'documentRequest.statusChanged', 'request.updated', 'request.statusChanged', 'partnership.updated', 'partnership.statusChanged'], function () {
             return Promise.all([loadDRRequests({ live: true }), refreshDocs(), loadCollegeReports()]).then(function (r) { return r.indexOf(false) === -1; });

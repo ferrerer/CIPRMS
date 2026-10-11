@@ -204,6 +204,31 @@ describe('Enhanced Custom Report Builder & Comparison Tool', () => {
     expect(res.body.metricGroups).toEqual(['Active', 'Expired', 'Expiring Soon']);
   });
 
+  // DSS audit finding #2 (2026-10-10): reportType=Custom Comparison with NO customStatuses supplied used to
+  // default to ['Active','Inactive','Expired'] — but 'Inactive' already matches status==='Expired', so every
+  // Expired record was counted in BOTH columns, inflating Active+Inactive+Expired above Total. Confirmed
+  // unreachable from the actual UI (reports.ejs never sends reportType=Custom Comparison or a customStatuses
+  // param at all — grep across views/ and assets/js/ turns up zero matches; this reportType predates the
+  // 2026-07 "Comparison Fully Extracted From the Builder" redesign, see docs/SYSTEM_AUDIT_2026-07-16.md), but
+  // still fixed since a direct API call (by an already-authenticated Administrator/Staff session) gets a
+  // correct result either way, at zero cost to the one UI-reachable customStatuses path (unaffected — see test
+  // above).
+  test('Preview API: Custom Comparison with NO customStatuses falls back to three disjoint statuses that reconcile to Total', async () => {
+    // inst=Expired matches only the one Expired fixture (Jest Report Filter Expired University) — isolating
+    // it is what exposes the old double-count: Inactive (2-way: Expired+Inactive-status) and Expired would
+    // both match this single record, summing to 2 against a Total of 1.
+    const res = await agent.get('/api/reports/custom/preview?reportType=Custom%20Comparison&compareBy=Country&country=Testland&inst=Expired');
+    expect(res.status).toBe(200);
+    expect(res.body.metricGroups).toEqual(['Active', 'Expiring Soon', 'Inactive']);
+    const row = res.body.comparisonData.find(r => r.group === 'Testland');
+    expect(row).toBeDefined();
+    expect(row.Total).toBe(1);
+    expect(row.Active).toBe(0);
+    expect(row['Expiring Soon']).toBe(0);
+    expect(row.Inactive).toBe(1);
+    expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
+  });
+
   // Regression for the "By [Dimension]" reconciliation bug: these six grouped
   // report types used to fall through to the generic ['Active','Inactive']
   // default, whose 'Inactive' matcher never counted "Expiring Soon" — so a
@@ -283,12 +308,54 @@ describe('Enhanced Custom Report Builder & Comparison Tool', () => {
       });
     });
 
-    // Explicit non-regression check for the comparison report the fix must
-    // NOT touch: 'Active vs Inactive' still uses the original 2-way default.
-    test('Active vs Inactive comparison report is unaffected by the grouped-report fix', async () => {
+    // 'Active vs Inactive' keeps its original two-column shape (no separate
+    // Expiring Soon column, unlike the six "By [Dimension]" types above) —
+    // metricGroups itself is untouched by the fix below.
+    test('Active vs Inactive comparison report keeps its two-column shape', async () => {
       const res = await agent.get('/api/reports/custom/preview?reportType=Active%20vs%20Inactive&compareBy=Country');
       expect(res.status).toBe(200);
       expect(res.body.metricGroups).toEqual(['Active', 'Inactive']);
+    });
+
+    // DSS audit finding (2026-10-10): unlike the six "By [Dimension]" types
+    // above, 'Active vs Inactive' has only two columns — Expiring Soon isn't
+    // tracked separately, so it must be FOLDED INTO Inactive (not dropped)
+    // for Active + Inactive to reconcile to Total. Before this fix, 'Inactive'
+    // only matched status Expired/Inactive, silently excluding Expiring Soon
+    // records from both columns while still counting them in Total.
+    test('Active vs Inactive: Active + Inactive reconciles to Total (Expiring Soon folded into Inactive)', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=Active%20vs%20Inactive&compareBy=Country&country=Testland');
+      expect(res.status).toBe(200);
+      const row = res.body.comparisonData.find(r => r.group === 'Testland');
+      expect(row).toBeDefined();
+      expect(row.Total).toBe(3); // 1 Active + 1 Expired + 1 Expiring Soon fixture
+      expect(row.Active).toBe(1);
+      expect(row.Inactive).toBe(2); // Expired + Expiring Soon folded in
+      expect(row.Active + row.Inactive).toBe(row.Total);
+    });
+
+    // Same finding: the dedicated Comparison feature (computeComparisonReport)
+    // already folds Expiring Soon into its own 'Inactive' group — this proves
+    // the Custom Report Builder's 'Active vs Inactive' now agrees with it on
+    // the exact same filtered dataset, instead of returning a different count
+    // for the same word.
+    test('Active vs Inactive: Custom Report Builder and the dedicated Comparison feature now agree on what counts as Inactive', async () => {
+      const crb = await agent.get('/api/reports/custom/preview?reportType=Active%20vs%20Inactive&compareBy=Country&country=Testland');
+      const cmp = await agent.get('/api/reports/comparison/preview?compType=Active%20vs%20Inactive&country=Testland');
+      const crbRow = crb.body.comparisonData.find(r => r.group === 'Testland');
+      expect(cmp.body.totalA).toBe(crbRow.Active);
+      expect(cmp.body.totalB).toBe(crbRow.Inactive);
+    });
+
+    // The pre-existing "By [Dimension]" fix above must still hold: those six
+    // types track Expiring Soon as its own column, so Inactive must stay
+    // 2-way there (folding it in too would double-count it into both columns).
+    test('"By [Dimension]" types are unaffected: Inactive still excludes Expiring Soon (it has its own column)', async () => {
+      const res = await agent.get('/api/reports/custom/preview?reportType=By%20Country&country=Testland');
+      const row = res.body.comparisonData.find(r => r.group === 'Testland');
+      expect(row.Inactive).toBe(1); // Expired only — Expiring Soon counted in its own column
+      expect(row['Expiring Soon']).toBe(1);
+      expect(row.Active + row['Expiring Soon'] + row.Inactive).toBe(row.Total);
     });
   });
 

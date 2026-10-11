@@ -269,14 +269,7 @@
                         <div class="form-text mt-0" id="u-profile-note"></div>
                     </div>
                     <div class="col-12">
-                        <label class="form-label" id="u-password-label">Password <span class="text-danger" id="u-pwd-required">*</span></label>
-                        <div class="position-relative">
-                            <input type="password" class="form-control pe-5" id="u-password" autocomplete="new-password">
-                            <button type="button" class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted" style="padding:.375rem .75rem;" onclick="togglePwdVis()" aria-label="Show or hide password">
-                                <i class="ri-eye-fill" id="u-pwd-eye"></i>
-                            </button>
-                        </div>
-                        <div class="form-text" id="u-pwd-hint"></div>
+                        <div class="form-text"><i class="ri-information-line me-1"></i>New accounts sign in with Google — there is no password to set here.</div>
                     </div>
                 </div>
             </div>
@@ -464,13 +457,6 @@
   }
 
   // ── Modal helpers ────────────────────────────────────────────────────────────────────────
-  function togglePwdVis() {
-    const inp = document.getElementById('u-password');
-    const eye = document.getElementById('u-pwd-eye');
-    if (inp.type === 'password') { inp.type = 'text'; eye.className = 'ri-eye-off-fill'; }
-    else { inp.type = 'password'; eye.className = 'ri-eye-fill'; }
-  }
-
   // Digits and phone punctuation only: warn (rather than silently drop) so the person sees why a letter did not appear.
   function onContactInput() {
     const el = document.getElementById('u-contact');
@@ -492,12 +478,9 @@
     editingId = null;
     setProfileFieldsVisible(false);
     document.getElementById('usr-modal-title').innerHTML = '<i class="ri-user-add-line me-2 text-primary"></i>Add User';
-    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact'].forEach(id => { document.getElementById(id).value = ''; document.getElementById(id).classList.remove('is-invalid'); });
     document.getElementById('u-contact-warn').style.display = 'none';
     document.getElementById('u-role').value = 'Auth. Personnel';
-    document.getElementById('u-pwd-required').style.display = '';
-    document.getElementById('u-pwd-hint').textContent = 'Minimum 8 characters, with an uppercase letter, a lowercase letter, and a number.';
-    document.getElementById('u-password').placeholder = '';
     setBreadcrumb(['User Management', 'New User']);
     getModal().show();
   }
@@ -517,11 +500,7 @@
     document.getElementById('u-position').value = u.position || '';
     document.getElementById('u-contact').value = u.contactNumber || '';
     document.getElementById('u-contact-warn').style.display = 'none';
-    document.getElementById('u-password').value = '';
-    document.getElementById('u-pwd-required').style.display = 'none';
-    document.getElementById('u-pwd-hint').textContent = 'Leave blank to keep current password.';
-    document.getElementById('u-password').placeholder = '';
-    ['u-name','u-email','u-unit','u-institution','u-position','u-contact','u-password'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
+    ['u-name','u-email','u-unit','u-institution','u-position','u-contact'].forEach(id => document.getElementById(id).classList.remove('is-invalid'));
     setBreadcrumb(['User Management', u.name]);
     getModal().show();
   }
@@ -543,7 +522,6 @@
     const institution = document.getElementById('u-institution').value.trim();
     const position = document.getElementById('u-position').value.trim();
     const contactNumber = document.getElementById('u-contact').value.trim();
-    const password = document.getElementById('u-password').value;
     let valid = true;
 
     [['u-name', name], ['u-email', email]].forEach(([fid, val]) => {
@@ -561,24 +539,11 @@
       contactEl.classList.remove('is-invalid');
     }
 
-    // Password required on Add; optional on Edit. Must satisfy the same policy the server enforces.
-    const pwdEl = document.getElementById('u-password');
-    const isStrongPassword = pw => pw.length >= 8 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw);
-    if (!editingId && !password) {
-      pwdEl.classList.add('is-invalid'); valid = false;
-    } else if (password && !isStrongPassword(password)) {
-      pwdEl.classList.add('is-invalid'); valid = false;
-      showToast('<i class="ri-error-warning-line me-1"></i>Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.', '#f06548');
-    } else {
-      pwdEl.classList.remove('is-invalid');
-    }
-
     if (!valid) return;
 
     if (editingId) {
-      // EDIT — only send password if the admin typed a new one
+      // EDIT — accounts sign in with Google; there is no password here to ever touch.
       const payload = { name, email, role, unit, institution, position, contactNumber };
-      if (password) payload.password = password;
       apiPatch(editingId, payload)
         .then(data => {
           if (data.success) {
@@ -591,9 +556,10 @@
           }
         }).catch(e => { console.error(e); showToast('Error updating user.', '#f06548'); });
     } else {
-      // ADD — POST to MongoDB (password is required client-side above, so it's always sent here)
+      // ADD — POST to MongoDB; no password field — the account signs in with Google, and the server
+      // auto-generates a throwaway credential (never shown, never used) for the stored user record.
       const today = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-      apiPost({ name, email, role, password, login: 'Never', status: 'Active', createdAt: today })
+      apiPost({ name, email, role, login: 'Never', status: 'Active', createdAt: today })
         .then(data => {
           if (data.success) {
             users.unshift(data.user);

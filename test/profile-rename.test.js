@@ -4,7 +4,7 @@
 const request = require('supertest');
 const app = require('../cirl');
 const { connectDB, closeDB } = require('../db');
-const { createTestUser, loginAs, cleanupAll, getDb } = require('./helpers');
+const { createTestUser, loginAs, cleanupAll, getDb, uniqueEmail } = require('./helpers');
 
 beforeAll(async () => { await connectDB(); });
 // cleanupAll() does not sweep the documentrequests collection, so the ones created here are deleted explicitly.
@@ -278,16 +278,70 @@ describe('Changing the password ends the session — the person signs in again w
     expect((await agent.get('/api/me')).status).toBe(200);
   });
 
-  test('the Settings pages tell the person to log in again and go to the login page, which confirms it', async () => {
+  // 2026-11 UI update: the Change Password section (and its client-side "please log in again" redirect)
+  // was removed from every Settings page — self-service password changes now exist only as the backend
+  // routes exercised directly above (accounts sign in with Google instead). The server-rendered
+  // ?passwordChanged=1 banner on the login page itself is unrelated UI, still reachable, and still tested.
+  test('no Settings page shows a Change Password section, field, or control any more', async () => {
     for (const [role, path] of [['Administrator', '/admin/settings'], ['Staff', '/staff/settings'], ['Auth. Personnel', '/personnel/settings'], ['potential_partner', '/partner/settings']]) {
       const { agent } = await agentFor(role);
       const html = (await agent.get(path)).text;
-      expect(html).toContain('Please log in again');
-      expect(html).toContain("/?passwordChanged=1");
+      expect(html).not.toContain('Change Password');
+      expect(html).not.toMatch(/id="(old|new|confirm)passwordInput"|id="pw-(old|new|confirm)"/);
+      expect(html).not.toContain('tab-password');
+      expect(html).not.toMatch(/\/api\/(admin|staff|personnel|partner)\/password/);
     }
+  });
+
+  test('the ?passwordChanged=1 login-page banner (reachable from any client that calls the password-change routes directly) still shows and resets correctly', async () => {
     const login = await request(app).get('/?passwordChanged=1');
     expect(login.status).toBe(200);
     expect(login.text).toContain('Please log in again with your new password.');
     expect((await request(app).get('/')).text).not.toContain('Please log in again with your new password.');
+  });
+});
+
+// 2026-11 UI update: Add New User / Edit User no longer collect a password — new accounts sign in with
+// Google (matched by email; see GET /auth/google/callback), so User Management never needs to set one.
+describe('User Management: Add/Edit User no longer set a password — accounts authenticate via Google instead', () => {
+  test('Add New User has no password field, and creating a user without sending any password field still succeeds', async () => {
+    const { agent } = await agentFor('Administrator');
+    const html = (await agent.get('/users')).text;
+    expect(html).not.toMatch(/id="u-password"|id="u-pwd-(required|hint|eye)"/);
+
+    const email = uniqueEmail('nopassword');
+    const res = await agent.post('/api/users').send({ name: 'jesttest No Password', email, role: 'Staff' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    // The server still stores SOME bcrypt hash (so no account is ever left with an unusable/empty
+    // credential field) — it is just never the point of entry; Google sign-in never reads it.
+    const stored = await getDb().collection('users').findOne({ email });
+    expect(typeof stored.password).toBe('string');
+    expect(stored.password.length).toBeGreaterThan(0);
+  });
+
+  test('Edit User has no password field, and editing a user never changes their stored credential', async () => {
+    const { agent } = await agentFor('Administrator');
+    const target = await createTestUser({ role: 'Staff' });
+    const before = await getDb().collection('users').findOne({ id: target.id });
+
+    const html = (await agent.get('/users')).text;
+    expect(html).not.toMatch(/id="u-password"|id="u-pwd-(required|hint|eye)"/);
+
+    const res = await agent.patch(`/api/users/${target.id}`).send({ name: 'jesttest Renamed By Edit', email: target.email, role: 'Staff' });
+    expect(res.status).toBe(200);
+    const after = await getDb().collection('users').findOne({ id: target.id });
+    expect(after.password).toBe(before.password); // unchanged — Edit User sent no password field at all
+  });
+
+  test('a direct API request cannot sneak a password through unexpected/removed fields on profile self-update routes', async () => {
+    const { agent, user } = await agentFor('Staff');
+    const before = await getDb().collection('users').findOne({ id: user.id });
+    // saveOwnName() only ever reads+stores req.body.name — an attacker-supplied password field alongside it
+    // must be silently ignored, never reaching the stored credential.
+    const res = await agent.post('/api/staff/profile').send({ name: 'jesttest Still Me', password: 'HackedPass123' });
+    expect(res.status).toBe(200);
+    const after = await getDb().collection('users').findOne({ id: user.id });
+    expect(after.password).toBe(before.password);
   });
 });

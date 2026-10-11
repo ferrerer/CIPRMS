@@ -35,6 +35,11 @@ node.module/
 dist/
 build/
 
+# Playwright (npm run test:e2e) — screenshots/traces/HTML reports from a run, never source
+test-results/
+playwright-report/
+blob-report/
+
 # OCR temp uploads (deleted automatically after processing; never committed)
 uploads/tmp/*
 !uploads/tmp/.gitkeep

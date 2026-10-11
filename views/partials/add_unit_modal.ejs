@@ -1,0 +1,28 @@
+<%# Add Responsible Unit (2026-11, shared 2026-11 Dynamic College/Unit Dropdowns) — the one small modal every
+     page's "+ Add" trigger opens: Monitoring's Unit combo dropdown row (registry-gridjs.init.js) and
+     Reports & Analytics' College/Unit filter + Comparison fields (reports.ejs) all include this same
+     partial and drive it through assets/js/shared/responsible-units.js's openAddResponsibleUnitModal()/
+     submitAddResponsibleUnit() — one modal, one POST /api/responsible-units call, never a per-page copy.
+     Deliberately a small, separate modal rather than inline fields inside whatever modal/view is already
+     open — Bootstrap 5 stacks a second shown modal on top of an already-open one correctly on its own (its
+     own backdrop, higher z-index), so whatever the person was already doing underneath stays open and
+     untouched. %>
+<div class="modal fade zoomIn" id="add-unit-modal" tabindex="-1" aria-hidden="true" aria-labelledby="add-unit-modal-label">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header bg-light p-3">
+        <h5 class="modal-title" id="add-unit-modal-label"><i class="ri-building-4-line me-2 text-primary"></i>Add Responsible Unit</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="new-unit-name">Unit Name</label>
+        <input type="text" class="form-control" id="new-unit-name" maxlength="100" placeholder="e.g. College of Computing and Information Sciences">
+        <div class="invalid-feedback d-none" id="new-unit-error"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="new-unit-add-btn" onclick="submitAddResponsibleUnit()">Add Unit</button>
+      </div>
+    </div>
+  </div>
+</div>

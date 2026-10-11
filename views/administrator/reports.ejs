@@ -19,6 +19,11 @@
     <!-- Shared Country option list (same one the Registry Add/Edit Partnership Country combobox uses) — backs
          the Custom Report Builder's Country filter below, so there is one country list in the app, not two. -->
     <script src="/velzon/assets/js/shared/country-options.js"></script>
+    <!-- Shared Responsible Unit list + "Add Responsible Unit" modal (same one the Registry Add/Edit
+         Partnership Unit combobox uses) — backs the Custom Report Builder's and Comparison's College/Unit
+         fields below, so there is one Responsible Unit list and one creation path in the app, never a
+         separate unit-management system (2026-11 Dynamic College/Unit Dropdowns). -->
+    <script src="/velzon/assets/js/shared/responsible-units.js"></script>
     <!-- Custom Report Builder — searchable Country filter (2026-09-23). Same visual language (rounded corners,
          shadow, bounded/scrollable results, hover highlight, dark-mode variant) as the Registry page's Country
          combobox, defined independently here since this is a separate template with its own CSS. -->
@@ -384,15 +389,23 @@
                                                     </div>
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">College / Unit</label>
-                                                        <select class="form-select" id="cr-unit">
-                                                            <option value="">All Units</option>
-                                                            <option value="CCS">CCS</option>
-                                                            <option value="CILS">CILS</option>
-                                                            <option value="CETE">CETE</option>
-                                                            <option value="CNAS">CNAS</option>
-                                                            <option value="CAMS">CAMS</option>
-                                                            <option value="CIRL">CIRL</option>
-                                                        </select>
+                                                        <!-- Options populated from the live, shared Responsible Unit list (assets/js/shared/
+                                                             responsible-units.js's UNIT_OPTIONS, same source as Monitoring's Add/Edit Partnership
+                                                             Unit combobox) by renderUnitSelect() below — the six hard-coded <option>s this used to
+                                                             have were seeded here only as a no-JS/pre-load fallback, same seed UNIT_OPTIONS itself
+                                                             starts with, never a second authoritative list (2026-11 Dynamic College/Unit Dropdowns). -->
+                                                        <div class="d-flex gap-2">
+                                                            <select class="form-select" id="cr-unit">
+                                                                <option value="">All Units</option>
+                                                                <option value="CCS">CCS</option>
+                                                                <option value="CILS">CILS</option>
+                                                                <option value="CETE">CETE</option>
+                                                                <option value="CNAS">CNAS</option>
+                                                                <option value="CAMS">CAMS</option>
+                                                                <option value="CIRL">CIRL</option>
+                                                            </select>
+                                                            <button type="button" class="btn btn-outline-primary flex-shrink-0" id="cr-unit-add-btn" title="Add New Unit" aria-label="Add New Unit"><i class="ri-add-line"></i></button>
+                                                        </div>
                                                     </div>
                                                     <div class="col-xl-3 col-md-6">
                                                         <label class="form-label fw-semibold">Group By</label>
@@ -630,6 +643,8 @@
                                                             <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
                                                             <option value="LOGIN_FAILED">LOGIN_FAILED</option>
                                                             <option value="LOGIN_BLOCKED">LOGIN_BLOCKED</option>
+                                                            <option value="GOOGLE_AUTH_INITIATED">GOOGLE_AUTH_INITIATED</option>
+                                                            <option value="GOOGLE_AUTH_CALLBACK">GOOGLE_AUTH_CALLBACK</option>
                                                             <option value="LOGOUT">LOGOUT</option>
                                                             <option value="FORBIDDEN">FORBIDDEN</option>
                                                             <option value="ADD">ADD</option>
@@ -810,7 +825,10 @@
             // 2026-10-21 login-attempt audit logging investigation.
             LOGIN_SUCCESS: 'bg-success-subtle text-success', LOGIN_FAILED: 'bg-danger-subtle text-danger',
             LOGIN_BLOCKED: 'bg-danger-subtle text-danger', LOGOUT: 'bg-secondary-subtle text-secondary',
-            FORBIDDEN: 'bg-danger-subtle text-danger'
+            FORBIDDEN: 'bg-danger-subtle text-danger',
+            // 2026-11 Google OAuth audit trail — informational (not an outcome), so its own neutral/info
+            // tint rather than reusing success/failure/blocked's colors.
+            GOOGLE_AUTH_INITIATED: 'bg-info-subtle text-info', GOOGLE_AUTH_CALLBACK: 'bg-info-subtle text-info'
         };
         const statusBadge = { success: 'bg-success-subtle text-success', failure: 'bg-danger-subtle text-danger', blocked: 'bg-warning-subtle text-warning' };
         const roleBadge = {
@@ -1077,6 +1095,54 @@
             // since Summary (the default) never disables Status.
             onReportTypeChange();
         }
+
+        // ── College / Unit — dynamic options + "Add New Unit" (2026-11 Dynamic College/Unit Dropdowns) ──────
+        // Both the Custom Report Builder's #cr-unit and every Comparison config's #cmpcfg-<id>-unit read the
+        // exact same live, shared UNIT_OPTIONS array (assets/js/shared/responsible-units.js) that Monitoring's
+        // Add/Edit Partnership Unit combobox already uses — one Responsible Unit list and one creation path,
+        // never a second unit-management system.
+        function unitOptionsHtml(selectedValue) {
+            return UNIT_OPTIONS.map(function (name) {
+                return '<option value="' + escapeHtml(name) + '"' + (selectedValue === name ? ' selected' : '') + '>' + escapeHtml(name) + '</option>';
+            }).join('');
+        }
+
+        // Rebuilds a real <select>'s options from the current UNIT_OPTIONS, keeping its present selection if
+        // that value still exists (so refreshing after an unrelated unit was added elsewhere never resets
+        // what the person already picked here) and optionally forcing a specific value (the unit just added
+        // from THIS select's own "+" button).
+        function renderUnitSelect(select, forceValue) {
+            if (!select) return;
+            var current = forceValue !== undefined ? forceValue : select.value;
+            select.innerHTML = '<option value="">All Units</option>' + unitOptionsHtml(current);
+            select.value = (current && UNIT_OPTIONS.indexOf(current) !== -1) ? current : '';
+        }
+
+        // Every unit <select> currently on the page — the primary Custom Report Builder's plus one per
+        // existing Comparison config (_cmpConfigIds, defined further below) — refreshed together so a unit
+        // added from any one of them is immediately selectable in all the others too, with no page reload.
+        function refreshAllUnitSelects(forPrefix, forceValue) {
+            renderUnitSelect(document.getElementById('cr-unit'), forPrefix === 'cr-unit' ? forceValue : undefined);
+            (typeof _cmpConfigIds !== 'undefined' ? _cmpConfigIds : []).forEach(function (id) {
+                var prefix = 'cmpcfg-' + id + '-unit';
+                renderUnitSelect(document.getElementById(prefix), forPrefix === prefix ? forceValue : undefined);
+            });
+        }
+
+        // Delegated (not per-button) because Comparison configs are added/removed dynamically — one listener
+        // here covers #cr-unit-add-btn and every current/future [data-add-unit-for] button alike.
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('#cr-unit-add-btn, [data-add-unit-for]');
+            if (!btn) return;
+            var targetId = btn.id === 'cr-unit-add-btn' ? 'cr-unit' : btn.getAttribute('data-add-unit-for');
+            openAddResponsibleUnitModal({
+                addValue: function (name) { refreshAllUnitSelects(targetId, name); }
+            });
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadResponsibleUnits().then(function () { renderUnitSelect(document.getElementById('cr-unit')); });
+        });
 
         function exportReport(format, params) {
             var q = new URLSearchParams(params).toString();
@@ -1530,15 +1596,13 @@
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">College / Unit</label>' +
+                '        <div class="d-flex gap-2">' +
                 '        <select class="form-select" id="cmpcfg-' + id + '-unit">' +
                 '          <option value="">All Units</option>' +
-                '          <option value="CCS"'  + (prefill.unit === 'CCS'  ? ' selected' : '') + '>CCS</option>' +
-                '          <option value="CILS"' + (prefill.unit === 'CILS' ? ' selected' : '') + '>CILS</option>' +
-                '          <option value="CETE"' + (prefill.unit === 'CETE' ? ' selected' : '') + '>CETE</option>' +
-                '          <option value="CNAS"' + (prefill.unit === 'CNAS' ? ' selected' : '') + '>CNAS</option>' +
-                '          <option value="CAMS"' + (prefill.unit === 'CAMS' ? ' selected' : '') + '>CAMS</option>' +
-                '          <option value="CIRL"' + (prefill.unit === 'CIRL' ? ' selected' : '') + '>CIRL</option>' +
+                unitOptionsHtml(prefill.unit) +
                 '        </select>' +
+                '        <button type="button" class="btn btn-outline-primary flex-shrink-0" data-add-unit-for="cmpcfg-' + id + '-unit" title="Add New Unit" aria-label="Add New Unit"><i class="ri-add-line"></i></button>' +
+                '        </div>' +
                 '      </div>' +
                 '      <div class="col-xl-3 col-md-6">' +
                 '        <label class="form-label fw-semibold">Group By</label>' +
@@ -1896,6 +1960,7 @@
     <!-- gridjs -->
     <script src="/velzon/assets/libs/gridjs/gridjs.umd.js"></script>
     <script src="/velzon/assets/js/app.js"></script>
+    <%- include('../partials/add_unit_modal') %>
 </body>
 
 </html>

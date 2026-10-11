@@ -283,13 +283,16 @@ describe('Partner → Settings', () => {
   let html;
   beforeAll(async () => { const { agent } = await agentFor('potential_partner'); html = (await agent.get('/partner/settings')).text; });
 
-  test('"Notification Preferences" (tab, switches and Save Preferences) is gone — Profile and Password remain', () => {
+  test('"Notification Preferences" (tab, switches and Save Preferences) is gone — Profile remains', () => {
     expect(textOf(html)).not.toContain('Notification Preferences');
     expect(textOf(html)).not.toContain('Save Preferences');
     expect(html).not.toContain('id="tab-notif"');
     expect(html).not.toMatch(/id="n-(requests|approvals|documents|meetings|renewals)"/);
+    // 2026-11 UI update: Change Password was also removed (accounts sign in with Google), leaving only
+    // the Organization Profile tab.
+    expect(html).not.toContain('id="tab-password"');
     const tabs = [...html.matchAll(/data-bs-toggle="tab" href="(#tab-[^"]+)"/g)].map(m => m[1]);
-    expect(tabs).toEqual(['#tab-profile', '#tab-password']);
+    expect(tabs).toEqual(['#tab-profile']);
   });
 
   test('saving the profile echoes the STORED notification values back, so a saved "off" is never silently reset', () => {

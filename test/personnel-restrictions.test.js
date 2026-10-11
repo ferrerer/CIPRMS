@@ -47,10 +47,11 @@ describe('College Dean (Auth. Personnel) — closed pages bounce to Monitoring',
     }
   });
 
-  test('Settings page is the real Profile/Settings page (personal info + password tabs) and its breadcrumb no longer points at the closed Dashboard', async () => {
+  test('Settings page is the real Profile/Settings page (personal info tab) and its breadcrumb no longer points at the closed Dashboard', async () => {
     const html = (await agent.get('/personnel/settings')).text;
     expect(html).toContain('id="tab-personal"');
-    expect(html).toContain('id="tab-password"');
+    // 2026-11 UI update: the Change Password tab was removed (accounts sign in with Google).
+    expect(html).not.toContain('id="tab-password"');
     expect(html).toContain('/api/personnel/profile');
     expect(html).not.toContain('href="/personnel/dashboard"');
   });
