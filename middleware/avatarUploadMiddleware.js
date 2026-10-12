@@ -22,7 +22,10 @@ const storage = multer.diskStorage({
 function fileFilter(req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_MIME.has(file.mimetype) || !ALLOWED_EXT.has(ext)) {
-    return cb(new Error('Unsupported file type. Only JPG, JPEG, and PNG are accepted.'));
+    // clientSafe: see the matching comment in middleware/uploadMiddleware.js.
+    const err = new Error('Unsupported file type. Only JPG, JPEG, and PNG are accepted.');
+    err.clientSafe = true;
+    return cb(err);
   }
   cb(null, true);
 }

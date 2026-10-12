@@ -17,6 +17,12 @@ const FOLDER_NAME = 'CIPRMS Agreement Drafts';
 const DOC_MIME = 'application/vnd.google-apps.document';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
+// 2026-11 Phase 2: every outbound call this service makes (getToken, and every drive.files.*/permissions.*
+// call below) goes through this one client's transporter, so a single `transporterOptions.timeout` here
+// bounds all of them — a stalled/unreachable Google Drive now fails after this long instead of leaving the
+// Express request hanging indefinitely. Same fix and same constant as services/googleCalendarService.js.
+const GOOGLE_API_TIMEOUT_MS = 15000;
+
 // Collection names are overridable ONLY so the test suite never touches the real connection (see test/setup-env.js
 // and the same guard in googleCalendarService.js).
 const REAL_INTEGRATION_COLLECTION = 'googleDocsIntegration';
@@ -53,11 +59,22 @@ function describeGoogleError(err) {
   if (/insufficient.*(scope|permission)/i.test(raw)) {
     return 'Google Drive permission was not granted. Disconnect, reconnect, and allow the Drive access request.';
   }
+  // The GOOGLE_API_TIMEOUT_MS bound above (gaxios, via AbortSignal.timeout) surfaces as a DOMException named
+  // "TimeoutError" with a message like "This operation was aborted due to timeout" — never anything an
+  // Administrator could act on, so it gets the same "try again" framing as any other transient failure.
+  if (/timeout|aborted due to timeout|TimeoutError/i.test(raw)) {
+    return 'Google Docs did not respond in time. Please try again.';
+  }
   return raw;
 }
 
 function buildOAuthClient(redirectUri) {
-  return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, redirectUri);
+  return new google.auth.OAuth2({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri,
+    transporterOptions: { timeout: GOOGLE_API_TIMEOUT_MS }
+  });
 }
 
 function getAuthUrl(redirectUri, state) {
@@ -242,13 +259,17 @@ async function shareWith(drive, fileId, email, role, message) {
 // Creates the draft in the connected account's Drive, shares it with everyone in `recipients`
 // ([{ email, role: 'writer'|'commenter'|'reader' }]) and returns the Drive file. Throws a readable Error on failure.
 async function createAgreementDoc(db, request, kind, recipients) {
-  const authorized = await getAuthorizedDrive(db);
-  if (!authorized) throw new Error('Google Docs is not connected. An Administrator can connect it in Settings → Integrations.');
-  const { drive, integration } = authorized;
+  // 2026-11 error-leakage fix: getAuthorizedDrive() (specifically its decrypt() of the stored refresh
+  // token) is now INSIDE this same try/catch too — it used to run before the try started, so a bad
+  // GOOGLE_TOKEN_ENCRYPTION_KEY threw a raw crypto-library error straight past describeGoogleError()
+  // and out to the client via the route's `res.status(422).json({ error: err.message })`.
   const title = `${kind} Draft — ${request.institution || 'Partner'} (#REQ-${String(request.id).padStart(3, '0')})`;
-  let file;
+  let file, drive;
   try {
-    const folderId = await ensureFolder(db, drive, integration);
+    const authorized = await getAuthorizedDrive(db);
+    if (!authorized) throw new Error('Google Docs is not connected. An Administrator can connect it in Settings → Integrations.');
+    drive = authorized.drive;
+    const folderId = await ensureFolder(db, drive, authorized.integration);
     const created = await drive.files.create({
       requestBody: { name: title, mimeType: DOC_MIME, parents: [folderId] },
       media: { mimeType: 'text/html', body: Readable.from([buildAgreementHtml(request, kind)]) },
@@ -269,10 +290,19 @@ async function createAgreementDoc(db, request, kind, recipients) {
 
 // Re-applies sharing to an existing draft (e.g. after new staff joined). Google ignores a share that already exists.
 async function reshareDoc(db, fileId, recipients, message) {
-  const authorized = await getAuthorizedDrive(db);
-  if (!authorized) throw new Error('Google Docs is not connected.');
+  // Same reasoning as createAgreementDoc() above — getAuthorizedDrive() must be inside the try, not before
+  // it, so a decrypt failure is translated by describeGoogleError() instead of reaching the client raw via
+  // the route's `res.status(422).json({ error: err.message })` (PATCH /api/google-docs/:docId/reshare).
+  let drive;
+  try {
+    const authorized = await getAuthorizedDrive(db);
+    if (!authorized) throw new Error('Google Docs is not connected.');
+    drive = authorized.drive;
+  } catch (err) {
+    throw new Error(describeGoogleError(err));
+  }
   const sharing = [];
-  for (const r of recipients) sharing.push(await shareWith(authorized.drive, fileId, r.email, r.role, message));
+  for (const r of recipients) sharing.push(await shareWith(drive, fileId, r.email, r.role, message));
   return sharing;
 }
 
@@ -287,5 +317,6 @@ module.exports = {
   createAgreementDoc,
   reshareDoc,
   buildAgreementHtml,
-  docsCollection
+  docsCollection,
+  GOOGLE_API_TIMEOUT_MS // exported for unit testing the configured bound in isolation
 };

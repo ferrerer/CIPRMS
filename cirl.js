@@ -13,7 +13,7 @@ const multer = require('multer');
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const { connectDB, getDb } = require('./db');
+const { connectDB, getDb, insertWithNextId, insertManyWithNextId } = require('./db');
 const ocrRoutes = require('./routes/ocrRoutes');
 const { updateDocument, archiveToDocumentLibrary, archiveRequestRecordToLibrary } = require('./services/documentLibraryService');
 const googleCalendarService = require('./services/googleCalendarService');
@@ -1213,18 +1213,6 @@ app.get('/api/requests', requireAuth, async (req, res) => {
   }
 });
 
-// 'Active' if the new expiry is more than 90 days out, 'Expiring Soon' within
-// 90 days, 'Expired' if it's already past — same thresholds used everywhere
-// else in the app (stat cards, dashboards, expiring tables).
-function computePartnershipStatus(endDateStr) {
-  const end = new Date(endDateStr);
-  if (isNaN(end)) return 'Active';
-  const days = Math.ceil((end - new Date()) / 86400000);
-  if (days <= 0) return 'Expired';
-  if (days <= 90) return 'Expiring Soon';
-  return 'Active';
-}
-
 // Request a renewal for a partnership tied to this user's own approved request.
 // Creates a normal `requests` entry marked isRenewal — it's reviewed through the
 // exact same admin queue as any other partnership request; approving it is what
@@ -1258,10 +1246,7 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, announce('request')
       return res.status(409).json({ error: 'A renewal request for this partnership is already pending.' });
     }
 
-    const last = await db.collection('requests').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length > 0 ? (last[0].id + 1) : 1;
-
-    const entry = {
+    const entry = await insertWithNextId(db.collection('requests'), (nextId) => ({
       id: nextId,
       institution: partnership.inst || partnership.institution || '',
       country: partnership.country || '',
@@ -1284,15 +1269,15 @@ app.post('/api/partnerships/:id/renew-request', requireAuth, announce('request')
       status: 'Pending',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       updatedAt: new Date().toISOString()
-    };
+    }));
 
-    await db.collection('requests').insertOne(entry);
     await logActivity(db, req.session.user, 'SUBMIT',
       `Renewal request submitted: ${entry.institution} (${entry.type}) by ${entry.requestedBy}`);
 
     res.json({ success: true, request: entry });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Renewal request submit error:', err);
+    res.status(500).json({ error: 'Unable to submit the renewal request right now. Please try again.' });
   }
 });
 
@@ -1354,9 +1339,6 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       }
     }
 
-    const last = await db.collection('requests').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length > 0 ? (last[0].id + 1) : 1;
-
     // A College Partnership Report belongs to the Dean's own college (from their account, never from the form).
     let reportUnit = '';
     if (collegeReport) {
@@ -1364,7 +1346,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       reportUnit = (me && me.unit) || req.session.user.unit || '';
     }
 
-    const entry = {
+    const entry = await insertWithNextId(db.collection('requests'), (nextId) => ({
       id: nextId,
       institution: (institution || '').trim(),
       country: (country || '').trim(),
@@ -1385,11 +1367,10 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       ...(submission ? { isSubmission: true } : {}),
       ...(collegeReport ? { isCollegeReport: true } : {}),
       ...(isRenewal && !collegeReport ? { isRenewal: true, renewalPartnershipId: renewalPartnershipId } : {})
-    };
+    }));
 
-    await db.collection('requests').insertOne(entry);
     if (!draft) {
-      const ref = `#REQ-${String(nextId).padStart(3, '0')}`;
+      const ref = `#REQ-${String(entry.id).padStart(3, '0')}`;
       await logActivity(db, req.session.user, 'SUBMIT',
         submission
           ? `MOA/MOU submission sent: ${entry.institution} by ${entry.requestedBy}`
@@ -1428,14 +1409,14 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
             : isRenewal
               ? `${entry.requestedBy} initiated a renewal request for ${entry.institution}.`
               : `${entry.requestedBy} submitted a new partnership request for ${entry.institution}.`
-        }, role => prLinkForRole(role, nextId));
+        }, role => prLinkForRole(role, entry.id));
 
       emailSubmissionReceipt(req.session.user, collegeReport
         ? {
           tag: 'College Partnership Report',
           title: `Partnership report received: ${entry.institution}`,
           desc: `CSPC-CIRL received your copy of the approved ${entry.type} with ${entry.institution} (reference ${ref}). You will be notified by e-mail once CIRL records it in the Partnership Registry.`,
-          link: prLinkForRole(req.session.user.role, nextId)
+          link: prLinkForRole(req.session.user.role, entry.id)
         }
         : {
           tag: submission ? 'MOA/MOU Submission' : isRenewal ? 'Renewal Request' : 'Partnership Request',
@@ -1443,7 +1424,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
           desc: submission
             ? `Your MOA/MOU submission for ${entry.institution} was sent to CSPC-CIRL (reference ${ref}). You will be notified by e-mail as it is reviewed.`
             : `Your ${isRenewal ? 'renewal' : 'partnership'} request for ${entry.institution}${entry.type ? ' (' + entry.type + ')' : ''} was submitted to CSPC-CIRL (reference ${ref}). You will be notified by e-mail as it is reviewed.`,
-          link: prLinkForRole(req.session.user.role, nextId)
+          link: prLinkForRole(req.session.user.role, entry.id)
         });
 
       // Give the submitter their own copy in the Document Library — skipped
@@ -1452,7 +1433,7 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
       // submission and a College Partnership Report archive the file attached to them instead of a request record.
       if (!submission && !collegeReport && ['Auth. Personnel', 'potential_partner'].includes(req.session.user.role) && !entry.attachmentLink) {
         await archiveRequestRecordToLibrary(db, {
-          requestType: 'partnership', requestId: nextId, institution: entry.institution,
+          requestType: 'partnership', requestId: entry.id, institution: entry.institution,
           type: entry.type, submittedBy: entry.requestedBy, submittedByEmail: entry.submittedByEmail
         });
       }
@@ -1460,7 +1441,8 @@ app.post('/api/requests', requireRequester, denyCollegeStaffPartnershipRequests,
 
     res.json({ success: true, request: entry });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Request submit error:', err);
+    res.status(500).json({ error: 'Unable to submit the request right now. Please try again.' });
   }
 });
 
@@ -1506,7 +1488,8 @@ app.patch('/api/requests/:id/edit', requireRequester, denyCollegeStaffPartnershi
     const updated = await db.collection('requests').findOne({ id });
     res.json({ success: true, request: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Request update error:', err);
+    res.status(500).json({ error: 'Unable to update the request right now. Please try again.' });
   }
 });
 
@@ -1576,7 +1559,8 @@ app.post('/api/requests/:id/submit', requireRequester, denyCollegeStaffPartnersh
 
     res.json({ success: true, request: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Request update error:', err);
+    res.status(500).json({ error: 'Unable to update the request right now. Please try again.' });
   }
 });
 
@@ -1599,7 +1583,8 @@ app.delete('/api/requests/:id', requireRequester, denyCollegeStaffPartnershipReq
     await db.collection('requests').deleteOne({ id });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Request delete error:', err);
+    res.status(500).json({ error: 'Unable to delete the request right now. Please try again.' });
   }
 });
 
@@ -1614,7 +1599,8 @@ app.get('/api/requests/mine', requireAuth, async (req, res) => {
       .toArray();
     res.json(requests);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Requests list error:', err);
+    res.status(500).json({ error: 'Unable to load your requests right now. Please try again.' });
   }
 });
 
@@ -1661,7 +1647,15 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
     // Approving a renewal request doesn't just flip its own status — it actually
     // extends the linked partnership record (new expiry + recomputed status).
     if (status === 'Approved' && updated.isRenewal && updated.renewalPartnershipId) {
-      const newStatus = computePartnershipStatus(updated.endDate);
+      // computeStatusFromEnd() (below) is the one authoritative status rule in the app — every other read of
+      // it (Reports & Analytics, Dashboard, the hourly lifecycle job) already uses it; this used to call a
+      // second, independently-written copy (computePartnershipStatus(), now removed) that disagreed with it
+      // on the expiry date itself (treated day 0 as already Expired, instead of still Expiring Soon), so a
+      // just-renewed partnership could show one status here and a contradictory one an hour later when the
+      // lifecycle job recomputed it. `|| 'Active'` preserves that function's old fallback for an unparseable
+      // date — can't happen today (the renewal request's own proposedEndDate is validated at creation), but
+      // this is still a $set write and must never store a null status.
+      const newStatus = computeStatusFromEnd(updated.endDate) || 'Active';
       const parsedEnd = new Date(updated.endDate);
       const formattedEnd = isNaN(parsedEnd)
         ? updated.endDate
@@ -1708,7 +1702,8 @@ app.patch('/api/requests/:id', requireStaffAccess, announce('request'), async (r
 
     res.json({ success: true, request: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Request decision error:', err);
+    res.status(500).json({ error: 'Unable to process the request right now. Please try again.' });
   }
 });
 
@@ -1735,7 +1730,13 @@ app.post('/api/requests/:id/documents', requireAuth, announce('request'), (req, 
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10MB.' : err.message;
       return res.status(400).json({ error: message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) {
+      // clientSafe (set by uploadMiddleware.js's fileFilter): a deliberate validation message, safe to
+      // show as-is. Anything else here is an unexpected failure (disk I/O, etc.) and must not echo raw
+      // internals to the client.
+      if (!err.clientSafe) console.error('❌ Request document upload error:', err);
+      return res.status(400).json({ error: err.clientSafe ? err.message : 'Upload failed. Please try again.' });
+    }
     const note = (req.body.note || '').trim().slice(0, 1000);
     // File is now OPTIONAL (2026-09-19) — notes alone are a legitimate new
     // version/draft entry. Only reject when NEITHER is present; a file with
@@ -1948,9 +1949,6 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
   }
   try {
     const db = getDb();
-    const last = await db.collection('documentrequests').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length > 0 ? (last[0].id + 1) : 1;
-
     // A College Dean's contact number is the one entered when the account was registered — the request form shows it
     // read-only, and whatever the client sends is ignored here too. (An account registered without a number can still
     // type one on the request, as before.)
@@ -1960,7 +1958,7 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       if (me && me.contactNumber) requestContactNumber = me.contactNumber;
     }
 
-    const entry = {
+    const entry = await insertWithNextId(db.collection('documentrequests'), (nextId) => ({
       id: nextId,
       institution: institution.trim(),
       documentTypes,
@@ -1980,9 +1978,8 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       submittedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
-    };
+    }));
 
-    await db.collection('documentrequests').insertOne(entry);
     await logActivity(db, req.session.user, 'SUBMIT',
       `Document request submitted: ${entry.documentType} for ${entry.institution} by ${entry.requestedBy}`);
 
@@ -1994,12 +1991,12 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
       color: 'secondary',
       title: `New document request submitted: ${entry.institution}`,
       desc: `${entry.requestedBy} requested a ${entry.documentType} document for ${entry.institution}.`
-    }, role => drLinkForRole(role, nextId));
+    }, role => drLinkForRole(role, entry.id));
     emailSubmissionReceipt(req.session.user, {
       tag: 'Document Request',
       title: `Document request received: ${entry.institution}`,
       desc: `Your request for ${entry.documentType} (${entry.institution}) was received by CSPC-CIRL. You will be notified by e-mail at each stage until it is completed.`,
-      link: drLinkForRole(req.session.user.role, nextId)
+      link: drLinkForRole(req.session.user.role, entry.id)
     });
 
     // Document Requests never have an upload step of their own, so this is
@@ -2008,15 +2005,16 @@ app.post('/api/document-requests', requireRequester, announce('documentRequest')
     // print/PDF feature) rather than a fabricated file.
     if (['Auth. Personnel', 'potential_partner'].includes(req.session.user.role)) {
       await archiveRequestRecordToLibrary(db, {
-        requestType: 'document', requestId: nextId, institution: entry.institution,
+        requestType: 'document', requestId: entry.id, institution: entry.institution,
         type: entry.documentType, submittedBy: entry.requestedBy, submittedByEmail: entry.requestedByEmail,
-        viewLink: `/document-requests/${nextId}/print`
+        viewLink: `/document-requests/${entry.id}/print`
       });
     }
 
     res.json({ success: true, request: entry });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document request submit error:', err);
+    res.status(500).json({ error: 'Unable to submit the document request right now. Please try again.' });
   }
 });
 
@@ -2030,7 +2028,8 @@ app.get('/api/document-requests/mine', requireRequester, async (req, res) => {
       .toArray();
     res.json(withDrCanonicalStatus(requests));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document requests list error:', err);
+    res.status(500).json({ error: 'Unable to load your document requests right now. Please try again.' });
   }
 });
 
@@ -2054,7 +2053,8 @@ app.delete('/api/document-requests/:id', requireRequester, announce('documentReq
     await db.collection('documentrequests').deleteOne({ id });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document request cancel error:', err);
+    res.status(500).json({ error: 'Unable to cancel the document request right now. Please try again.' });
   }
 });
 
@@ -2073,7 +2073,8 @@ app.get('/api/document-requests', requireStaffAccess, async (req, res) => {
     const requests = await db.collection('documentrequests').find(filter).sort({ id: -1 }).toArray();
     res.json(withDrCanonicalStatus(requests));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document requests list error:', err);
+    res.status(500).json({ error: 'Unable to load document requests right now. Please try again.' });
   }
 });
 
@@ -2189,7 +2190,8 @@ app.patch('/api/document-requests/:id', requireStaffAccess, announce('documentRe
 
     res.json({ success: true, request: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document request decision error:', err);
+    res.status(500).json({ error: 'Unable to update the document request right now. Please try again.' });
   }
 });
 
@@ -2210,7 +2212,10 @@ app.post('/api/document-requests/:id/documents', requireAuth, announce('document
       const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10MB.' : err.message;
       return res.status(400).json({ error: message });
     }
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) {
+      if (!err.clientSafe) console.error('❌ Document request upload error:', err);
+      return res.status(400).json({ error: err.clientSafe ? err.message : 'Upload failed. Please try again.' });
+    }
     const note = (req.body.note || '').trim().slice(0, 1000);
     // File is now OPTIONAL (2026-09-19) — same rule as the Partnership
     // Request draft upload above: reject only when neither a file nor a
@@ -2403,7 +2408,8 @@ app.get('/api/document-requests/:id/pdf', requireAuth, async (req, res) => {
     }
     renderDocumentRequestPdf(res, target);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document request PDF error:', err);
+    res.status(500).json({ error: 'Unable to generate the document right now. Please try again.' });
   }
 });
 
@@ -2431,7 +2437,8 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
       .toArray();
     res.json(withNotificationHref(docs, req.session.user.role));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Notifications list error:', err);
+    res.status(500).json({ error: 'Unable to load notifications right now. Please try again.' });
   }
 });
 
@@ -2465,7 +2472,8 @@ app.get('/api/notifications/mine', requireAuth, async (req, res) => {
       .toArray();
     res.json(withNotificationHref(docs, req.session.user.role));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Notifications list error:', err);
+    res.status(500).json({ error: 'Unable to load notifications right now. Please try again.' });
   }
 });
 
@@ -2482,7 +2490,8 @@ app.get('/api/notifications/all', requireAdmin, async (req, res) => {
     const docs = await db.collection('notifications').find({}).sort({ id: -1 }).toArray();
     res.json(docs.map(d => ({ ...d, priority: isPriorityNotification(d) })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Notifications list error:', err);
+    res.status(500).json({ error: 'Unable to load notifications right now. Please try again.' });
   }
 });
 
@@ -2570,7 +2579,8 @@ app.get('/api/document-folders/mine', requireUploader, async (req, res) => {
       .toArray();
     res.json(folders);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Document folders list error:', err);
+    res.status(500).json({ error: 'Unable to load document folders right now. Please try again.' });
   }
 });
 
@@ -2579,13 +2589,10 @@ app.post('/api/document-folders', requireUploader, async (req, res) => {
   if (!name) return res.status(400).json({ error: 'Folder name is required.' });
   try {
     const db = getDb();
-    const last = await db.collection('documentfolders').find({}).sort({ id: -1 }).limit(1).toArray();
-    const id = last.length ? last[0].id + 1 : 1;
-    const folder = {
+    const folder = await insertWithNextId(db.collection('documentfolders'), (id) => ({
       id, name, ownerEmail: req.session.user.email, archived: false,
       createdAt: new Date().toISOString()
-    };
-    await db.collection('documentfolders').insertOne(folder);
+    }));
     res.json({ success: true, folder });
   } catch (err) {
     console.error('❌ Create document folder error:', err);
@@ -2812,7 +2819,8 @@ app.get('/api/responsible-units', requireStaffAccess, async (req, res) => {
     const units = await db.collection('responsibleunits').find({}).sort({ name: 1 }).toArray();
     res.json(units);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Responsible units list error:', err);
+    res.status(500).json({ error: 'Unable to load responsible units right now. Please try again.' });
   }
 });
 
@@ -2845,10 +2853,9 @@ app.post('/api/responsible-units', requireStaffAccess, async (req, res) => {
     const existing = await db.collection('responsibleunits').findOne({ name: buildExactCaseInsensitiveMatch(name) });
     if (existing) return res.status(409).json({ error: `"${existing.name}" already exists as a Responsible Unit.` });
 
-    const last = await db.collection('responsibleunits').find({}).sort({ id: -1 }).limit(1).toArray();
-    const id = last.length ? last[0].id + 1 : 1;
-    const unit = { id, name, createdAt: new Date().toISOString(), createdByEmail: req.session.user.email };
-    await db.collection('responsibleunits').insertOne(unit);
+    const unit = await insertWithNextId(db.collection('responsibleunits'), (id) => (
+      { id, name, createdAt: new Date().toISOString(), createdByEmail: req.session.user.email }
+    ));
     res.json({ success: true, unit });
   } catch (err) {
     // A unique-index race (two simultaneous adds of the same name) surfaces as a duplicate-key error here —
@@ -2932,20 +2939,20 @@ app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async
       await geocoding.resolveLocation({ institution: fields.inst, country: fields.country })
     );
 
-    const last = await db.collection('partnerships').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length ? last[0].id + 1 : 1;
-    const entry = { id: nextId, ...fields, ...location.set };
-    if (sourceRequest) entry.sourceRequestId = sourceRequest.id;
-    await db.collection('partnerships').insertOne(entry);
-    await logActivity(db, req.session.user, 'ADD', `Partnership added: ${entry.inst || 'Record #' + nextId} (${entry.type || ''})`);
+    const entry = await insertWithNextId(db.collection('partnerships'), (nextId) => {
+      const candidate = { id: nextId, ...fields, ...location.set };
+      if (sourceRequest) candidate.sourceRequestId = sourceRequest.id;
+      return candidate;
+    });
+    await logActivity(db, req.session.user, 'ADD', `Partnership added: ${entry.inst || 'Record #' + entry.id} (${entry.type || ''})`);
 
     if (sourceRequest) {
       await db.collection('requests').updateOne(
         { id: sourceRequest.id },
-        { $set: { status: 'Approved', linkedPartnershipId: nextId, decidedBy: req.session.user.name, updatedAt: new Date().toISOString() } }
+        { $set: { status: 'Approved', linkedPartnershipId: entry.id, decidedBy: req.session.user.name, updatedAt: new Date().toISOString() } }
       );
       await logActivity(db, req.session.user, 'APPROVE',
-        `Partnership request approved and converted to Registry: ${sourceRequest.institution} (Record #${nextId})`);
+        `Partnership request approved and converted to Registry: ${sourceRequest.institution} (Record #${entry.id})`);
       if (sourceRequest.submittedByEmail) {
         const submitter = await db.collection('users').findOne({ email: sourceRequest.submittedByEmail });
         await notifyUsers(db, [sourceRequest.submittedByEmail], sourceRequest.isCollegeReport
@@ -2972,7 +2979,8 @@ app.post('/api/partnerships', requireStaffAccess, announce('partnership'), async
 
     res.json({ success: true, partnership: entry });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partnership create error:', err);
+    res.status(500).json({ error: 'Unable to create the partnership right now. Please try again.' });
   }
 });
 
@@ -3011,7 +3019,8 @@ app.patch('/api/partnerships/:id', requireStaffAccess, announce('partnership', {
     await logActivity(db, req.session.user, 'EDIT', `Partnership updated: ${updated.inst || 'Record #' + id} (${updated.type || ''})`);
     res.json({ success: true, partnership: updated });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partnership update error:', err);
+    res.status(500).json({ error: 'Unable to update the partnership right now. Please try again.' });
   }
 });
 
@@ -3039,7 +3048,8 @@ app.delete('/api/partnerships/:id', requireStaffAccess, announce('partnership', 
     await logActivity(db, req.session.user, 'DELETE', `Partnership deleted: ${target ? (target.inst || 'Record #' + id) : 'Record #' + id}`);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partnership delete error:', err);
+    res.status(500).json({ error: 'Unable to delete the partnership right now. Please try again.' });
   }
 });
 
@@ -3102,7 +3112,8 @@ app.get('/api/partnerships/stats', requireAuth, async (req, res) => {
     );
     res.json({ total, active, expiring, expired, byType, byRegion, byUnit, byInstitution, byCountry });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partnership stats error:', err);
+    res.status(500).json({ error: 'Unable to load partnership statistics right now. Please try again.' });
   }
 });
 
@@ -4220,7 +4231,7 @@ app.get('/api/reports/custom/preview', requireStaffAccess, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('❌ Custom Report Preview error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to generate the report preview right now. Please try again.' });
   }
 });
 
@@ -4239,7 +4250,7 @@ app.get('/api/reports/partnerships/pdf', requireStaffAccess, async (req, res) =>
     });
   } catch (err) {
     console.error('❌ Partnerships PDF export error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the PDF export right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -4542,7 +4553,7 @@ app.get('/api/reports/partnerships/excel', requireStaffAccess, async (req, res) 
     res.end();
   } catch (err) {
     console.error('❌ Partnerships Excel export error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the Excel export right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5171,7 +5182,7 @@ app.get('/api/reports/dimension-values', requireStaffAccess, async (req, res) =>
     res.json({ field, values });
   } catch (err) {
     console.error('❌ Dimension values error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load comparison values right now. Please try again.' });
   }
 });
 
@@ -5200,7 +5211,7 @@ app.get('/api/reports/comparison/preview', requireStaffAccess, async (req, res) 
     });
   } catch (err) {
     console.error('❌ Comparison Report preview error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to generate the comparison report preview right now. Please try again.' });
   }
 });
 
@@ -5213,7 +5224,7 @@ app.get('/api/reports/comparison/pdf', requireStaffAccess, async (req, res) => {
     renderComparisonReportPdf(res, data);
   } catch (err) {
     console.error('❌ Comparison Report PDF error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the comparison report PDF right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5232,7 +5243,7 @@ app.get('/api/reports/comparison/excel', requireStaffAccess, async (req, res) =>
     res.end();
   } catch (err) {
     console.error('❌ Comparison Report Excel error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the comparison report Excel export right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5575,7 +5586,10 @@ app.get('/api/reports/comparison/multi/preview', requireStaffAccess, async (req,
     });
   } catch (err) {
     console.error('❌ Multi-comparison preview error:', err);
-    res.status(err.status || 500).json({ error: err.message });
+    // err.status === 400 only ever comes from parseComparisonConfigs()'s own deliberate validation
+    // throws (see its definition) — those messages are safe and meaningful to show as-is. Anything else
+    // is an unexpected failure and must not echo raw internals to the client.
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Unable to generate the multi-comparison report right now. Please try again.' });
   }
 });
 
@@ -5588,7 +5602,7 @@ app.get('/api/reports/comparison/multi/pdf', requireStaffAccess, async (req, res
     renderMultiComparisonReportPdf(res, data);
   } catch (err) {
     console.error('❌ Multi-comparison PDF export error:', err);
-    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.status ? err.message : 'Unable to generate the multi-comparison report PDF right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5606,7 +5620,7 @@ app.get('/api/reports/comparison/multi/excel', requireStaffAccess, async (req, r
     res.end();
   } catch (err) {
     console.error('❌ Multi-comparison Excel export error:', err);
-    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message });
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.status ? err.message : 'Unable to generate the multi-comparison Excel export right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5634,7 +5648,7 @@ app.get('/api/reports/activitylog/pdf', requireStaffAccess, async (req, res) => 
     });
   } catch (err) {
     console.error('❌ Activity log PDF export error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the audit trail PDF right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5712,7 +5726,7 @@ app.get('/api/reports/activitylog/excel', requireStaffAccess, async (req, res) =
     res.end();
   } catch (err) {
     console.error('❌ Activity log Excel export error:', err);
-    if (!res.headersSent) res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: 'Unable to generate the audit trail Excel export right now. Please try again.' });
     else if (!res.writableEnded) res.end();
   }
 });
@@ -5745,7 +5759,8 @@ app.get('/api/users', requireStaffAccess, async (req, res) => {
     docs.forEach(d => { d.displayAvatar = avatarUrlFor(d); });
     res.json(docs);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Users list error:', err);
+    res.status(500).json({ error: 'Unable to load users right now. Please try again.' });
   }
 });
 
@@ -5812,18 +5827,15 @@ app.post('/api/users', requireStaffAccess, async (req, res) => {
     // the identity of) an existing user, which every edit/delete/password
     // route looks up by that same id.
     const { id: _clientId, _id: _clientMongoId, avatarUrl: _avatarUrl, googleAvatarUrl: _googleAvatarUrl, ...safeBody } = req.body; // avatarUrl: only via POST /api/profile/avatar; googleAvatarUrl: only via Google sign-in
-    const last = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length ? last[0].id + 1 : 1;
     // Unit/Department, Institution, Position and Contact Number are no longer asked for on Add User — the account
     // owner supplies them on first sign-in through the activation form (/activate), so a new account always starts
     // with activated: false. They are still accepted here if sent, normalized to an empty string when blank; after
     // activation only User Management's Edit User can change them (not the owner's Settings).
-    const entry = {
+    const entry = await insertWithNextId(db.collection('users'), (nextId) => ({
       id: nextId, ...safeBody, name, email, role, status, activated: false, unit: (req.body.unit || '').trim(),
       institution: typeof req.body.institution === 'string' ? req.body.institution.trim() : '',
       position: typeof req.body.position === 'string' ? req.body.position.trim() : '', contactNumber: contact.value || '', password: passwordToStore, createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    };
-    await db.collection('users').insertOne(entry);
+    }));
     await logActivity(db, req.session.user, 'ADD', `User created: ${entry.name} (${entry.role}) — ${entry.email}`);
     await notifyUsers(db, [entry.email], {
       module: 'user',
@@ -6033,15 +6045,13 @@ app.delete('/api/users/:id', requireStaffAccess, async (req, res) => {
  */
 async function logActivity(db, user, action, record, extra) {
   try {
-    const last = await db.collection('activitylogs').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length ? (last[0].id || 0) + 1 : 1;
     const e = extra || {};
     // 'System' (the pre-existing, unchanged fallback for every other null-actor call site — an automatic
     // process acted, not a person) would be actively misleading for an Authentication event with no resolved
     // account: nobody and nothing "System" did anything — an unidentified visitor's login attempt failed.
     // Display-only distinction; the real actor is still correctly absent (no id, email or role fabricated).
     const noActorLabel = e.category === 'Authentication' ? 'Unknown' : 'System';
-    await db.collection('activitylogs').insertOne({
+    await insertWithNextId(db.collection('activitylogs'), (nextId) => ({
       id: nextId,
       action,
       record,
@@ -6069,7 +6079,7 @@ async function logActivity(db, user, action, record, extra) {
       ip: e.ip,
       userAgent: e.userAgent,
       requestId: e.requestId
-    });
+    }));
   } catch (err) {
     // Deliberately unchanged from the pre-existing behavior every one of the other ~30 call sites already
     // relies on: fail OPEN (console-logged, never thrown) so a transient audit-write hiccup can never block
@@ -6456,10 +6466,18 @@ const LIFECYCLE_EXPIRING_WINDOW_DAYS = 90;
 const LIFECYCLE_CHECK_INTERVAL_MS = parseInt(process.env.LIFECYCLE_CHECK_INTERVAL_MS, 10) || 60 * 60 * 1000; // hourly by default
 
 /**
- * Derives a partnership's status purely from its end date — the same
- * "days until expiry" rule used across the UI (computeStatus/computeEditStatus/
- * computeRenewStatus), now applied server-side so it doesn't depend on a human
- * happening to open that specific record.
+ * Derives a partnership's status purely from its end date — the SINGLE authoritative rule for every part of
+ * the app that computes a status rather than reading one already stored (Reports & Analytics, the Dashboard
+ * widget, this file's hourly lifecycle job, and every client-side computeStatus/computeEditStatus/
+ * computeRenewStatus in lifecycle-gridjs.init.js and registry-gridjs.init.js — all independently written but
+ * all already using this same boundary; see the 2026-11 Phase 2 fix note below for the one place that didn't).
+ *
+ * Agreed day boundaries (days = ceil((end date) − (now), in days)):
+ *   days > 90   → Active
+ *   0 < days <= 90  → Expiring Soon   (includes the day before expiry, days === 1)
+ *   days === 0  → Expiring Soon   (the expiry date itself — still counted as not yet expired for the
+ *                                  whole of that day; it only becomes Expired once that date is in the past)
+ *   days < 0    → Expired         (the day after expiry onward)
  */
 function computeStatusFromEnd(endStr) {
   const end = new Date(endStr);
@@ -6502,14 +6520,18 @@ async function recomputePartnershipStatuses(db) {
   }
 
   if (toNotify.length) {
-    const last = await db.collection('notifications').find({}).sort({ id: -1 }).limit(1).toArray();
-    let nextId = last.length ? (last[0].id || 0) + 1 : 1;
     const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-    const docs = toNotify.map(({ partnership: p, status }) => {
+    // insertManyWithNextId() reserves the whole block in one round trip and this job's own batch is never
+    // the only writer of this collection (notificationService.createNotification(), called a few lines below
+    // for the reviewer broadcast, writes here independently and can interleave with it) — exactly the
+    // partial-batch-collision case that helper's own retry handles by re-trying only whichever docs lost that
+    // race, not the whole batch again.
+    await insertManyWithNextId(db.collection('notifications'), toNotify.length, (id, i) => {
+      const { partnership: p, status } = toNotify[i];
       const isExpired = status === 'Expired';
       return {
-        id: nextId++,
+        id,
         module: 'lifecycle',
         tag: 'Lifecycle',
         unread: true,
@@ -6522,8 +6544,6 @@ async function recomputePartnershipStatuses(db) {
         time: today
       };
     });
-
-    await db.collection('notifications').insertMany(docs);
 
     for (const item of toNotify) {
       const isExpired = item.status === 'Expired';
@@ -6728,7 +6748,8 @@ app.post('/api/lifecycle/recompute', requireAdmin, async (req, res) => {
     const emailBatches = await checkPartnershipExpirationNotifications(db);
     res.json({ success: true, notificationsCreated: count, expirationEmailsSent: emailBatches });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Lifecycle recompute error:', err);
+    res.status(500).json({ error: 'Unable to recompute partnership statuses right now. Please try again.' });
   }
 });
 
@@ -6741,7 +6762,8 @@ app.get('/api/activitylogs', requireStaffAccess, async (req, res) => {
       .toArray();
     res.json(docs);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Activity logs list error:', err);
+    res.status(500).json({ error: 'Unable to load the audit trail right now. Please try again.' });
   }
 });
 
@@ -6766,7 +6788,8 @@ app.patch('/api/notifications/markallread/mine', requireAuth, announce('notifica
     await db.collection('notifications').updateMany({ targetEmail: email }, { $set: { unread: false } });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Mark notifications read error:', err);
+    res.status(500).json({ error: 'Unable to update notifications right now. Please try again.' });
   }
 });
 
@@ -6806,7 +6829,8 @@ app.patch('/api/notifications/:id', requireAuth, announce('notificationState'), 
     await db.collection('notifications').updateOne({ id }, { $set: fields });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Notification update error:', err);
+    res.status(500).json({ error: 'Unable to update the notification right now. Please try again.' });
   }
 });
 
@@ -6822,7 +6846,8 @@ app.delete('/api/notifications/:id', requireAuth, announce('notificationState'),
     await db.collection('notifications').deleteOne({ id });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Notification delete error:', err);
+    res.status(500).json({ error: 'Unable to delete the notification right now. Please try again.' });
   }
 });
 
@@ -7006,7 +7031,8 @@ app.get('/api/calendarevents', requireAuth, async (req, res) => {
     const now = new Date();
     res.json(docs.map(d => calendarEventView(d, user, now)));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Calendar events list error:', err);
+    res.status(500).json({ error: 'Unable to load calendar events right now. Please try again.' });
   }
 });
 
@@ -7338,7 +7364,8 @@ app.post('/api/calendarevents', requireStaffAccess, announce('calendar'), async 
     // the invitation panel for a just-created event without a reload.
     res.json({ success: true, event: calendarEventView(entry, req.session.user, new Date()), invitations });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Calendar event create error:', err);
+    res.status(500).json({ error: 'Unable to create the calendar event right now. Please try again.' });
   }
 });
 
@@ -7424,7 +7451,8 @@ app.patch('/api/calendarevents/:id', requireStaffAccess, announce('calendar'), a
 
     res.json({ success: true, event: calendarEventView(updated, req.session.user, new Date()), invitations: invitationSummary(updated) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Calendar event update error:', err);
+    res.status(500).json({ error: 'Unable to update the calendar event right now. Please try again.' });
   }
 });
 
@@ -7455,7 +7483,8 @@ app.delete('/api/calendarevents/:id', requireStaffAccess, announce('calendar', {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Calendar event delete error:', err);
+    res.status(500).json({ error: 'Unable to delete the calendar event right now. Please try again.' });
   }
 });
 
@@ -7541,7 +7570,8 @@ app.post('/api/calendarevents/:id/join', requireAuth, announce('calendar'), asyn
     }
     res.json({ success: true, alreadyJoined: result.modifiedCount === 0, meetLink, myInvite: buildMyInvite(fresh, user, new Date()) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Meeting join error:', err);
+    res.status(500).json({ error: 'Unable to record your attendance right now. Please try again.' });
   }
 });
 
@@ -7628,7 +7658,8 @@ app.get('/api/calendarevents/:id/attendance', requireStaffAccess, async (req, re
       participants: participants.concat(facilitators)
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Meeting attendance error:', err);
+    res.status(500).json({ error: 'Unable to load meeting details right now. Please try again.' });
   }
 });
 
@@ -7690,7 +7721,8 @@ app.get('/api/google-calendar/status', requireAdmin, async (req, res) => {
       }
       : { ...common, connected: false });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Calendar status error:', err);
+    res.status(500).json({ error: 'Unable to check the Google Calendar connection right now. Please try again.' });
   }
 });
 
@@ -7749,7 +7781,8 @@ app.post('/api/google-calendar/verify', requireAdmin, async (req, res) => {
     if (result.ok) return res.json({ success: true, googleAccountEmail: result.accountEmail, calendarTimeZone: result.calendarTimeZone });
     res.json({ success: false, error: result.error === 'not_connected' ? 'Google Calendar is not connected.' : result.error });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Calendar verify error:', err);
+    res.status(500).json({ error: 'Unable to verify the Google Calendar connection right now. Please try again.' });
   }
 });
 
@@ -7759,7 +7792,8 @@ app.post('/api/google-calendar/disconnect', requireAdmin, async (req, res) => {
     await googleCalendarService.disconnect(db);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Calendar disconnect error:', err);
+    res.status(500).json({ error: 'Unable to disconnect Google Calendar right now. Please try again.' });
   }
 });
 
@@ -7798,7 +7832,8 @@ app.get('/api/google-docs/status', requireAdmin, async (req, res) => {
       }
       : { ...common, connected: false });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs status error:', err);
+    res.status(500).json({ error: 'Unable to check the Google Docs connection right now. Please try again.' });
   }
 });
 
@@ -7851,7 +7886,8 @@ app.post('/api/google-docs/verify', requireAdmin, async (req, res) => {
     if (result.ok) return res.json({ success: true, googleAccountEmail: result.accountEmail });
     res.json({ success: false, error: result.error === 'not_connected' ? 'Google Docs is not connected.' : result.error });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs verify error:', err);
+    res.status(500).json({ error: 'Unable to verify the Google Docs connection right now. Please try again.' });
   }
 });
 
@@ -7860,7 +7896,8 @@ app.post('/api/google-docs/disconnect', requireAdmin, async (req, res) => {
     await googleDocsService.disconnect(getDb());
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs disconnect error:', err);
+    res.status(500).json({ error: 'Unable to disconnect Google Docs right now. Please try again.' });
   }
 });
 
@@ -7906,7 +7943,8 @@ app.get('/api/requests/:id/google-docs', requireAuth, async (req, res) => {
       docs: docs.map(d => isReviewer ? publicDoc(d) : { id: d.id, kind: d.kind, title: d.title, url: d.url, createdAt: d.createdAt })
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs drafts list error:', err);
+    res.status(500).json({ error: 'Unable to load Google Docs drafts right now. Please try again.' });
   }
 });
 
@@ -7928,9 +7966,8 @@ app.post('/api/requests/:id/google-docs', requireStaffAccess, announce('request'
     } catch (err) {
       return res.status(422).json({ error: err.message });
     }
-    const last = await googleDocsService.docsCollection(db).find({}).sort({ id: -1 }).limit(1).toArray();
-    const doc = {
-      id: last.length ? (last[0].id || 0) + 1 : 1,
+    const doc = await insertWithNextId(googleDocsService.docsCollection(db), (nextId) => ({
+      id: nextId,
       requestId: id,
       kind,
       title: created.title,
@@ -7940,8 +7977,7 @@ app.post('/api/requests/:id/google-docs', requireStaffAccess, announce('request'
       createdByName: req.session.user.name,
       createdAt: new Date().toISOString(),
       sharing: created.sharing
-    };
-    await googleDocsService.docsCollection(db).insertOne(doc);
+    }));
     await logActivity(db, req.session.user, 'CREATE', `Google Docs ${kind} draft created for partnership request: ${request.institution} (#REQ-${String(id).padStart(3, '0')})`);
 
     if (request.submittedByEmail) {
@@ -7958,7 +7994,8 @@ app.post('/api/requests/:id/google-docs', requireStaffAccess, announce('request'
     }
     res.json({ success: true, doc: publicDoc(doc) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs draft create error:', err);
+    res.status(500).json({ error: 'Unable to complete the Google Docs draft request right now. Please try again.' });
   }
 });
 
@@ -7980,7 +8017,8 @@ app.post('/api/google-docs/:docId/reshare', requireStaffAccess, async (req, res)
     await googleDocsService.docsCollection(db).updateOne({ id: doc.id }, { $set: { sharing } });
     res.json({ success: true, doc: publicDoc({ ...doc, sharing }) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs reshare error:', err);
+    res.status(500).json({ error: 'Unable to re-share the draft right now. Please try again.' });
   }
 });
 
@@ -7994,7 +8032,8 @@ app.delete('/api/google-docs/:docId', requireStaffAccess, async (req, res) => {
     await logActivity(db, req.session.user, 'DELETE', `Google Docs ${doc.kind} draft unlinked from partnership request #REQ-${String(doc.requestId).padStart(3, '0')}`);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Google Docs draft unlink error:', err);
+    res.status(500).json({ error: 'Unable to remove the draft right now. Please try again.' });
   }
 });
 
@@ -8468,15 +8507,12 @@ app.post('/api/targets', requireAdmin, async (req, res) => {
   if (error) return res.status(400).json({ error });
   try {
     const db = getDb();
-    const last = await db.collection('targets').find({}).sort({ id: -1 }).limit(1).toArray();
-    const nextId = last.length ? last[0].id + 1 : 1;
     const now = new Date().toISOString();
-    const entry = {
+    const entry = await insertWithNextId(db.collection('targets'), (nextId) => ({
       id: nextId, ...value, active: true,
       createdBy: req.session.user.name, createdByEmail: req.session.user.email,
       createdAt: now, updatedAt: now
-    };
-    await db.collection('targets').insertOne(entry);
+    }));
     await logActivity(db, req.session.user, 'ADD',
       `Target created: ${value.type === 'monthly' ? `${value.month}/${value.year}` : value.year} — ${value.targetCount} partnerships`);
     res.json({ success: true, target: { ...entry, progress: await computeTargetAccomplishment(db, entry) } });
@@ -8963,7 +8999,8 @@ app.get('/api/partner/profile', requirePartner, async (req, res) => {
     const userDoc = await db.collection('users').findOne({ id: req.session.user.id }, { projection: { avatarUrl: 1, googleAvatarUrl: 1 } });
     res.json({ ...(doc ? doc.profile : {}), avatarUrl: avatarUrlFor(userDoc) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partner profile load error:', err);
+    res.status(500).json({ error: 'Unable to load your profile right now. Please try again.' });
   }
 });
 
@@ -8995,7 +9032,8 @@ app.post('/api/partner/profile', requirePartner, async (req, res) => {
     }
     res.json({ success: true, profile });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('❌ Partner profile save error:', err);
+    res.status(500).json({ error: 'Unable to save your profile right now. Please try again.' });
   }
 });
 
@@ -9027,7 +9065,10 @@ app.post('/api/partner/password', partnerPasswordLimiter, requirePartner, async 
 // save, which rewrites that whole document) and the other roles' Settings kept the photo in browser storage only.
 async function saveAvatarUpload(req, res) {
   uploadAvatar.single('avatar')(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+    if (err) {
+      if (!err.clientSafe) console.error('❌ Avatar upload error:', err);
+      return res.status(400).json({ error: err.clientSafe ? err.message : 'Upload failed. Please try again.' });
+    }
     if (!req.file) return res.status(400).json({ error: 'No image was uploaded.' });
     if (!verifyMagicBytes(req.file)) {
       return res.status(400).json({ error: 'Unsupported file type. Only JPG, JPEG, and PNG are accepted.' });

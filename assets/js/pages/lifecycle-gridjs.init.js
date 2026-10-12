@@ -1,4 +1,17 @@
 
+// Escapes text before it's placed inside an HTML string (2026-11 stored-XSS fix). Institution name, type,
+// category, and the start/end date fields are all plain strings server-side (cirl.js's PARTNERSHIP_FIELDS/
+// sanitizePartnershipFields) — inst has no character restriction at all, and start/end are validated only
+// as non-empty strings, never as real dates — so every one of them can legitimately contain `<`/`>`/`"`
+// characters and must never be trusted as-is inside .innerHTML. Same implementation as the sibling
+// registry-gridjs.init.js's own escapeHtml() (Monitoring page); duplicated here rather than shared because
+// the two files are independent <script> includes on different pages with no module system between them.
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
 /* ─── PAGINATION HELPERS (Request pattern) ─── */
 var lcCurrentPage = 1, lcItemsPerPage = 10;
 
@@ -85,12 +98,12 @@ function daysBadgeHtml(d, s) {
 
 function statusBadgeHtml(s) {
     var map = { Active: 'bg-success-subtle text-success', 'Expiring Soon': 'bg-warning-subtle text-warning', Expired: 'bg-danger-subtle text-danger' };
-    return '<span class="badge ' + (map[s] || 'bg-secondary-subtle text-secondary') + '">' + s + '</span>';
+    return '<span class="badge ' + (map[s] || 'bg-secondary-subtle text-secondary') + '">' + escapeHtml(s) + '</span>';
 }
 
 function typeBadgeHtml(t) {
     var cls = t === 'MOU' ? 'bg-info-subtle text-info' : 'bg-primary-subtle text-primary';
-    return '<span class="badge ' + cls + '">' + t + '</span>';
+    return '<span class="badge ' + cls + '">' + escapeHtml(t) + '</span>';
 }
 
 function getFiltered() {
@@ -236,8 +249,8 @@ function renderUrgentList() {
         var label = p.status === 'Expired' ? 'Expired' : (p.days + ' days');
         return '<li class="list-group-item px-3 py-2"><div class="d-flex align-items-center gap-2">'
             + '<span class="badge ' + dotClass + ' rounded-circle p-1">&nbsp;</span>'
-            + '<div><div class="fw-semibold fs-13">' + p.inst + '</div>'
-            + '<div class="text-muted fs-12">' + p.type + ' &middot; <strong class="' + textClass + '">' + label + '</strong></div></div>'
+            + '<div><div class="fw-semibold fs-13">' + escapeHtml(p.inst) + '</div>'
+            + '<div class="text-muted fs-12">' + escapeHtml(p.type) + ' &middot; <strong class="' + textClass + '">' + label + '</strong></div></div>'
             + '</div></li>';
     }).join('');
 }
@@ -251,7 +264,7 @@ function renderDssAlerts() {
         if (expiringSoon.length) {
             var soonest = expiringSoon[0];
             actionEl.innerHTML = '<span class="fw-semibold">Action Required:</span> '
-                + soonest.inst + ' ' + soonest.type + ' expires in <strong>' + soonest.days + ' day' + (soonest.days === 1 ? '' : 's') + '</strong>. '
+                + escapeHtml(soonest.inst) + ' ' + escapeHtml(soonest.type) + ' expires in <strong>' + soonest.days + ' day' + (soonest.days === 1 ? '' : 's') + '</strong>. '
                 + (expiringSoon.length > 1 ? (expiringSoon.length - 1) + ' other agreement' + (expiringSoon.length > 2 ? 's are' : ' is') + ' also expiring within 90 days.' : 'Consider initiating renewal.');
         } else {
             actionEl.textContent = 'No agreements are currently expiring within the next 90 days.';
@@ -264,7 +277,7 @@ function renderDssAlerts() {
             var mostOverdue = expired.slice().sort(function(a,b){ return a.days - b.days; })[0];
             var overdueDays = Math.abs(mostOverdue.days);
             reviewEl.innerHTML = '<span class="fw-semibold">Review Suggested:</span> '
-                + mostOverdue.inst + ' ' + mostOverdue.type + ' expired ' + overdueDays + ' day' + (overdueDays === 1 ? '' : 's') + ' ago. '
+                + escapeHtml(mostOverdue.inst) + ' ' + escapeHtml(mostOverdue.type) + ' expired ' + overdueDays + ' day' + (overdueDays === 1 ? '' : 's') + ' ago. '
                 + (expired.length > 1 ? (expired.length - 1) + ' other expired agreement' + (expired.length > 2 ? 's remain' : ' remains') + ' unrenewed.' : 'Renew or archive this record.');
         } else {
             reviewEl.textContent = 'No expired agreements currently require review.';
@@ -288,12 +301,12 @@ function openViewModal(id) {
     document.getElementById('view-title').textContent = p.inst;
     document.getElementById('view-body').innerHTML =
         '<div class="row g-3">'
-        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Institution</div><div class="fw-bold">' + p.inst + '</div></div>'
+        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Institution</div><div class="fw-bold">' + escapeHtml(p.inst) + '</div></div>'
         + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Type</div><div>' + typeBadgeHtml(p.type) + '</div></div>'
-        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Category</div><div class="fw-bold">' + p.cat + '</div></div>'
+        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Category</div><div class="fw-bold">' + escapeHtml(p.cat) + '</div></div>'
         + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Status</div><div>' + statusBadgeHtml(p.status) + '</div></div>'
-        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Start Date</div><div class="fw-bold">' + p.start + '</div></div>'
-        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Expiry Date</div><div class="fw-bold">' + p.end + '</div></div>'
+        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Start Date</div><div class="fw-bold">' + escapeHtml(p.start) + '</div></div>'
+        + '<div class="col-sm-6"><div class="text-muted fs-12 text-uppercase fw-semibold">Expiry Date</div><div class="fw-bold">' + escapeHtml(p.end) + '</div></div>'
         + '<div class="col-sm-12"><div class="text-muted fs-12 text-uppercase fw-semibold">Days Remaining</div><div class="fw-bold">' + (p.status === 'Expired' ? 'None' : p.days + ' days') + '</div></div>'
         + '</div>';
     new bootstrap.Modal(document.getElementById('viewPartnershipModal')).show();

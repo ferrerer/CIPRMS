@@ -23,7 +23,12 @@ const storage = multer.diskStorage({
 function fileFilter(req, file, cb) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_MIME.has(file.mimetype) || !ALLOWED_EXT.has(ext)) {
-    return cb(new Error('Unsupported file type. Only PDF, JPG, JPEG, and PNG are accepted.'));
+    // clientSafe: the route handler's upload-error callback (cirl.js) uses this flag to decide whether
+    // err.message is safe to send to the client as-is — true only for this deliberate, user-facing
+    // validation message, never for an unexpected disk/system error reaching the same callback.
+    const err = new Error('Unsupported file type. Only PDF, JPG, JPEG, and PNG are accepted.');
+    err.clientSafe = true;
+    return cb(err);
   }
   cb(null, true);
 }

@@ -16,6 +16,7 @@
  */
 
 const emailService = require('./emailService');
+const { insertManyWithNextId } = require('../db');
 
 const VALID_ROLES = ['Administrator', 'Staff', 'Auth. Personnel', 'potential_partner'];
 
@@ -144,28 +145,22 @@ async function createNotification(db, {
   // 1. Channel 1: In-System Notification (Database Insertion)
   let docs = [];
   try {
-    const last = await db.collection('notifications').find({}).sort({ id: -1 }).limit(1).toArray();
-    let nextId = last.length ? (last[0].id || 0) + 1 : 1;
-
+    const notifications = db.collection('notifications');
+    // insertManyWithNextId(), not one insertWithNextId() call per recipient — a per-recipient loop was tried
+    // first and measured to add ~9s to a single "notify all users" broadcast (POST /api/calendarevents with
+    // no specific recipients defaults to every active user — 58 of them against this project's own
+    // database), since each recipient cost its own find()+insertOne() round trip. insertManyWithNextId()
+    // reserves the whole block of ids and inserts it in one round trip, falling back to retrying only
+    // whichever stragglers lose a same-instant race against cirl.js's hourly lifecycle job (the other writer
+    // into this same collection) rather than the full list again.
     if (targetEmails.length) {
-      docs = targetEmails.map(targetEmail => ({
-        id: nextId++,
-        targetEmail,
-        unread: true,
-        time: notifTime,
-        ...payload
+      docs = await insertManyWithNextId(notifications, targetEmails.length, (id, i) => ({
+        id, targetEmail: targetEmails[i], unread: true, time: notifTime, ...payload
       }));
     } else if (allowUnaddressed) {
-      docs = [{
-        id: nextId++,
-        unread: true,
-        time: notifTime,
-        ...payload
-      }];
-    }
-
-    if (docs.length) {
-      await db.collection('notifications').insertMany(docs);
+      docs = await insertManyWithNextId(notifications, 1, (id) => ({
+        id, unread: true, time: notifTime, ...payload
+      }));
     }
 
     // Realtime in-app broadcast via SSE (non-blocking)

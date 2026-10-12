@@ -12,20 +12,28 @@ describe('TASK 2 — Partnership Expiration Email Notifications', () => {
   beforeAll(async () => {
     db = await connectDB();
 
-    // Create test active reviewer accounts
+    // Create test active reviewer accounts. $setOnInsert (not $set) for `id` — users.id now has a unique
+    // index (2026-11 Phase 2 sequential-id fix); an upsert that only ever $set name/role/status left every
+    // newly-inserted doc with NO id field at all, which that index treats as id: null, so the second and
+    // third upsert here collided with the first the moment all three ran against an empty filter. Computed
+    // once, up front, the same plain "read the current max, then increment" every other test fixture in this
+    // suite already uses (test/helpers.js's own createTestUser()) — fine for a one-time, serial beforeAll,
+    // not a path this app's real concurrent traffic ever runs through.
+    const lastUser = await db.collection('users').find({}).sort({ id: -1 }).limit(1).toArray();
+    let nextTestUserId = lastUser.length ? (lastUser[0].id || 0) + 1 : 1;
     await db.collection('users').updateOne(
       { email: 'admin-expire-test@cirl.test' },
-      { $set: { name: 'Admin Expire Test', role: 'Administrator', status: 'Active' } },
+      { $set: { name: 'Admin Expire Test', role: 'Administrator', status: 'Active' }, $setOnInsert: { id: nextTestUserId++ } },
       { upsert: true }
     );
     await db.collection('users').updateOne(
       { email: 'staff-expire-test@cirl.test' },
-      { $set: { name: 'Staff Expire Test', role: 'Staff', status: 'Active' } },
+      { $set: { name: 'Staff Expire Test', role: 'Staff', status: 'Active' }, $setOnInsert: { id: nextTestUserId++ } },
       { upsert: true }
     );
     await db.collection('users').updateOne(
       { email: 'inactive-expire-test@cirl.test' },
-      { $set: { name: 'Inactive User', role: 'Staff', status: 'Inactive' } },
+      { $set: { name: 'Inactive User', role: 'Staff', status: 'Inactive' }, $setOnInsert: { id: nextTestUserId++ } },
       { upsert: true }
     );
   });

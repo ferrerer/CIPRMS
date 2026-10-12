@@ -17,6 +17,14 @@ const { appTimeZone, parseEventInstant, eventDateOnly, addDaysToDateOnly, unique
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 const CALENDAR_ID = 'primary';
 
+// 2026-11 Phase 2: every outbound call this service makes (getToken, revokeToken, and every calendar.events.*
+// call below) goes through this one client's transporter, so a single `transporterOptions.timeout` here
+// bounds all of them — a stalled/unreachable Google Calendar now fails after this long instead of leaving
+// the Express request (and the user's click) hanging indefinitely. gaxios enforces it with AbortSignal.timeout
+// and the resulting error is pattern-matched in describeGoogleError() below so it still reaches the client as
+// a plain, safe sentence rather than a raw "operation was aborted" message.
+const GOOGLE_API_TIMEOUT_MS = 15000;
+
 // Every Calendar API write that has attendees asks Google to e-mail them
 // ("sendUpdates: 'all'"): the invitation on create, the update on a change, the
 // cancellation on delete. The mail is sent by Google Calendar itself, as the
@@ -77,15 +85,22 @@ function describeGoogleError(err) {
   if (/insufficient.*(scope|permission)/i.test(raw)) {
     return 'Google Calendar permission was not granted. Disconnect, reconnect, and allow the calendar access request.';
   }
+  // The GOOGLE_API_TIMEOUT_MS bound above (gaxios, via AbortSignal.timeout) surfaces as a DOMException named
+  // "TimeoutError" with a message like "This operation was aborted due to timeout" — never anything an
+  // Administrator could act on, so it gets the same "try again" framing as any other transient failure.
+  if (/timeout|aborted due to timeout|TimeoutError/i.test(raw)) {
+    return 'Google Calendar did not respond in time. Please try again.';
+  }
   return raw;
 }
 
 function buildOAuthClient(redirectUri) {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
-  );
+  return new google.auth.OAuth2({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri,
+    transporterOptions: { timeout: GOOGLE_API_TIMEOUT_MS }
+  });
 }
 
 function getAuthUrl(redirectUri, state) {
@@ -434,5 +449,6 @@ module.exports = {
   deleteGoogleEvent,
   getGoogleMeetLink,
   SEND_UPDATES,
-  buildGoogleEventBody // exported for unit testing the mapping logic in isolation
+  buildGoogleEventBody, // exported for unit testing the mapping logic in isolation
+  GOOGLE_API_TIMEOUT_MS // exported for unit testing the configured bound in isolation
 };

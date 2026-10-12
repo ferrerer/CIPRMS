@@ -21,6 +21,19 @@ if (!uri) {
 let client;
 let db;
 
+// Returns up to 20 { _id: <duplicated id value>, count } entries for a collection's `id` field — used to
+// decide, before ever attempting a unique index on it, whether that collection can actually take one.
+// MongoDB refuses to build a unique index over existing violations, so this is the check-first half of the
+// 2026-11 sequential-id race-condition remediation below; kept as its own exported function so it can be
+// proven correct against a throwaway collection without exercising all of connectDB()'s other startup work.
+async function findDuplicateIds(db, collectionName) {
+  return db.collection(collectionName).aggregate([
+    { $group: { _id: '$id', count: { $sum: 1 } } },
+    { $match: { count: { $gt: 1 } } },
+    { $limit: 20 }
+  ]).toArray();
+}
+
 async function connectDB() {
   if (db) return db;
   try {
@@ -87,6 +100,31 @@ async function connectDB() {
         await db.collection(coll).createIndex({ id: -1 });
       } catch (indexErr) {
         console.error(`⚠️  Could not create id index on ${coll} — nextId lookups on this collection remain unindexed:`, indexErr.message);
+      }
+    }
+    // 2026-11 sequential-id race-condition remediation (Phase 2). Every "get next id" write path in cirl.js
+    // — the same `.find({}).sort({ id: -1 }).limit(1)` pattern the perf indexes above speed up — is read-then-
+    // insert: two requests that race each other can both read the same max id and both insert it. The
+    // calendarevents fix below (2026-09-20) closed this for calendar events only, with a unique index plus a
+    // retry-on-conflict loop at its one insert site; this extends the exact same pair (unique index here,
+    // retry loop in cirl.js's new insertWithNextId()) to every other sequential-id collection.
+    // A collection that already holds duplicate ids — from this very race, before today's fix — cannot take a
+    // unique index at all (MongoDB refuses to build one over existing violations), so each is checked first;
+    // a dirty collection is skipped with a loud, specific warning rather than silently leaving the next
+    // createIndex's generic failure as the only trace. (Confirmed during this change: `requests` has one
+    // duplicate id, `activitylogs` fourteen, `notifications` sixteen — all genuine historical records, not
+    // test data, left exactly as found pending a deliberate decision on how to renumber them. A collection
+    // skipped here is not retry-protected until its duplicates are resolved and the app is restarted.)
+    for (const coll of ['partnerships', 'requests', 'documentrequests', 'documentfolders', 'responsibleunits', 'users', 'activitylogs', 'notifications', 'googleDocs', 'targets']) {
+      try {
+        const dupes = await findDuplicateIds(db, coll);
+        if (dupes.length) {
+          console.error(`⚠️  ${coll} already has ${dupes.length} duplicate id value(s) (${dupes.map(d => d._id).join(', ')}) — skipping its unique id index until these are resolved. Concurrent-insert protection for ${coll} is NOT active.`);
+          continue;
+        }
+        await db.collection(coll).createIndex({ id: 1 }, { unique: true, name: 'id_unique' });
+      } catch (indexErr) {
+        console.error(`⚠️  Could not create unique index on ${coll}.id — concurrent-create duplicate protection is NOT active:`, indexErr.message);
       }
     }
     // 2026-09-20 calendar duplicate-event protection. Two writes that race
@@ -194,4 +232,81 @@ async function closeDB() {
   }
 }
 
-module.exports = { connectDB, getDb, closeDB };
+// 2026-11 sequential-id race-condition remediation (Phase 2). Every "get next id" write path across cirl.js
+// and services/notificationService.js (partnerships, requests, documentrequests, documentfolders,
+// responsibleunits, users, activitylogs, notifications, googleDocs, targets — every `.find({}).sort({id:-1})
+// .limit(1)` call) used to read the current max id and insert right after it, with nothing stopping two
+// near-simultaneous requests from both reading the same max and both inserting the same id. Same fix POST
+// /api/calendarevents already used for its own insert (2026-09-20): a unique index on `id` (createIndex
+// calls above) makes the LOSER of that race fail with a duplicate-key error instead of silently succeeding,
+// and this retry loop is how it recovers — reread the (now higher) max id and try again. Lives here, not in
+// cirl.js, because services/notificationService.js's createNotification() needs it too and this is the one
+// module both already require. `collection` is the actual Collection object (not a name), so this also works
+// for googleDocsService's docsCollection(db), whose name can differ in tests.
+// maxAttempts=5 (this function's first version) sounded generous but wasn't: under genuine N-way concurrency
+// (proved in test/sequential-id-race.test.js with 30 truly simultaneous inserts, and even just 8-10 over a
+// real Atlas round trip) most callers are still in flight — reading the same "last id" — when the first one
+// commits, so a whole batch can collide and re-collide within the same few milliseconds. 20 attempts plus a
+// small random backoff before each retry (so losers don't all re-read and re-collide in lockstep again) is
+// what actually converges at that scale; still bounded, never an infinite retry.
+async function insertWithNextId(collection, buildEntry, { maxAttempts = 20 } = {}) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 25) + 5));
+    const last = await collection.find({}).sort({ id: -1 }).limit(1).toArray();
+    const nextId = last.length ? (last[0].id || 0) + 1 : 1;
+    const entry = buildEntry(nextId);
+    try {
+      await collection.insertOne(entry);
+      return entry;
+    } catch (err) {
+      // Only an id collision is retryable by picking a fresh id — any other unique-index violation (email,
+      // responsible-unit name, target period, calendarevents' own id) is the caller's own duplicate to
+      // report, never ours to paper over by quietly trying a different id.
+      const isIdCollision = err && err.code === 11000 && err.keyPattern && Object.prototype.hasOwnProperty.call(err.keyPattern, 'id');
+      if (!isIdCollision) throw err;
+    }
+  }
+  throw new Error(`Could not allocate an id for a new record in ${collection.collectionName} after ${maxAttempts} attempts — it may be under unusually heavy concurrent writes.`);
+}
+
+// Batch counterpart to insertWithNextId(), for a single call that inserts many docs at once — a real path in
+// this app (POST /api/calendarevents with no specific recipients picked notifies every active user; measured
+// against this project's own database at 58 users). A per-recipient loop calling insertWithNextId() once each
+// is the simple fix and was tried first, but it means one find()+insertOne() round trip PER recipient — timed
+// at ~9 extra seconds for that same 58-recipient broadcast, enough to blow a 15s test timeout and a real,
+// user-facing delay on every "notify all users" calendar event. This reserves a whole block of ids and
+// inserts it in ONE round trip instead; on a collision (another writer took part of the block first) it
+// keeps whatever prefix already landed — ordered inserts stop at the first failure, so recovering from it
+// means retrying only the stragglers that never made it in, not re-inserting everyone a second time.
+// `buildDoc(id, index)` builds the doc for position `index` (0-based across the whole logical batch) once it
+// has been assigned `id`.
+async function insertManyWithNextId(collection, count, buildDoc, { maxAttempts = 20 } = {}) {
+  if (count <= 0) return [];
+  let startIndex = 0; // how many docs, counting from the front, have already been safely inserted
+  const insertedDocs = [];
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 25) + 5));
+    const last = await collection.find({}).sort({ id: -1 }).limit(1).toArray();
+    let nextId = last.length ? (last[0].id || 0) + 1 : 1;
+    const batch = [];
+    for (let i = startIndex; i < count; i++) batch.push(buildDoc(nextId++, i));
+    try {
+      await collection.insertMany(batch, { ordered: true });
+      insertedDocs.push(...batch);
+      return insertedDocs;
+    } catch (err) {
+      // An ordered insertMany stops at its first failing document, so there is ever only one entry in
+      // writeErrors — its errmsg names the violated index (every id index created above is named
+      // 'id_unique'). Anything else (a different unique index on this collection) is the caller's own
+      // duplicate to report, never ours to paper over by retrying with different ids.
+      const onlyIdIndexViolated = err && err.code === 11000 && err.result && typeof err.result.insertedCount === 'number' &&
+        err.writeErrors && err.writeErrors.length === 1 && /\bid_unique\b/.test(err.writeErrors[0].errmsg || '');
+      if (!onlyIdIndexViolated) throw err;
+      insertedDocs.push(...batch.slice(0, err.result.insertedCount));
+      startIndex += err.result.insertedCount;
+    }
+  }
+  throw new Error(`Could not allocate ids for a batch insert into ${collection.collectionName} after ${maxAttempts} attempts — it may be under unusually heavy concurrent writes.`);
+}
+
+module.exports = { connectDB, getDb, closeDB, insertWithNextId, insertManyWithNextId, findDuplicateIds };
