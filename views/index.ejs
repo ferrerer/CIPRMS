@@ -99,10 +99,10 @@
            makes modal-body the thing that scrolls once modal-content hits the explicit max-height below,
            never the whole page behind it. */
         .about-modal-dialog {
-            max-width: 1100px;
+            max-width: 1250px;
         }
         @media (min-width: 1200px) {
-            .about-modal-dialog { max-width: 1220px; }
+            .about-modal-dialog { max-width: 1360px; }
         }
         .about-modal-dialog .modal-content {
             max-height: 90vh;
@@ -148,31 +148,38 @@
             .about-modal-dialog .modal-body { padding: 1.25rem 1.25rem; }
         }
 
-        /* Team cards. Plain CSS-drawn initials avatars (no photo assets exist for the five members —
-           confirmed again while enlarging this modal), navy-and-gold to match the CIRL seal's own
-           palette rather than an arbitrary color per card. Dark-mode variant included even though
-           this logged-out page itself always renders light (ui-state-init.ejs forces Light on
-           login/signup) — the brief asked for dark-mode-safe modal styling regardless, defensive
-           against that forcing ever changing. */
+        /* Team cards. Two of the five members have a real photo on file in /public/images (beggie.jpg,
+           raven.png — found while matching filenames to names; the other three have none and keep the
+           plain CSS-drawn initials avatar used here previously). Both variants share the same 76px
+           circular footprint so the grid stays visually consistent regardless of which a given card
+           uses. Navy-and-gold border to match the CIRL seal's own palette either way. Dark-mode variant
+           included even though this logged-out page itself always renders light (ui-state-init.ejs
+           forces Light on login/signup) — the brief asked for dark-mode-safe modal styling regardless,
+           defensive against that forcing ever changing. */
         .team-card {
             border: 1px solid var(--vz-border-color, #e9ebec);
             border-radius: .75rem;
             height: 100%;
             min-width: 0; /* lets long names wrap instead of overflowing a grid/flex item */
         }
-        .team-avatar {
-            width: 60px;
-            height: 60px;
+        .team-avatar, .team-avatar-photo {
+            width: 76px;
+            height: 76px;
             flex: none;
             border-radius: 50%;
+            border: 2px solid #f1b44c;
+        }
+        .team-avatar {
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 1rem;
+            font-size: 1.15rem;
             color: #fff;
             background: linear-gradient(135deg, #405189, #2e3b66);
-            border: 2px solid #f1b44c;
+        }
+        .team-avatar-photo {
+            object-fit: cover;
         }
         [data-bs-theme="dark"] .team-card {
             border-color: #3a4053;
@@ -309,19 +316,27 @@
 
                     <h6 class="fw-semibold text-uppercase fs-12 text-muted mb-3">Development Team — Team Dunbar</h6>
                     <!-- Top row (3, left to right): Briñas, Golpe, Malto. Bottom row (2, centered): Baliber,
-                         Ferrer. Array order below IS the visual order — see .about-team-grid in <style>. -->
+                         Ferrer. Array order below IS the visual order — see .about-team-grid in <style>.
+                         `photo` is the actual filename found in /public/images matched to each member by
+                         name (beggie.jpg -> Begie B. Golpe, raven.png -> John Raven M. Ferrer); the other
+                         three have no matching file there and keep the initials avatar (see .team-avatar
+                         above) rather than guessing. -->
                     <div class="about-team-grid">
                         <% const teamMembers = [
-                            { name: 'Lui Vhinz Dominic P. Briñas', initials: 'LB' },
-                            { name: 'Begie B. Golpe', initials: 'BG' },
-                            { name: 'Zyra Devie D. Malto', initials: 'ZM' },
-                            { name: 'Joshua B. Baliber', initials: 'JB' },
-                            { name: 'John Raven M. Ferrer', initials: 'JF' }
+                            { name: 'Lui Vhinz Dominic P. Briñas', initials: 'LB', photo: null },
+                            { name: 'Begie B. Golpe', initials: 'BG', photo: '/images/beggie.jpg' },
+                            { name: 'Zyra Devie D. Malto', initials: 'ZM', photo: null },
+                            { name: 'Joshua B. Baliber', initials: 'JB', photo: null },
+                            { name: 'John Raven M. Ferrer', initials: 'JF', photo: '/images/raven.png' }
                         ]; %>
                         <% teamMembers.forEach(function (m) { %>
                         <div class="team-card-col">
                             <div class="team-card p-3 d-flex gap-3 align-items-start">
+                                <% if (m.photo) { %>
+                                <img src="<%= m.photo %>" alt="Photo of <%= m.name %>" class="team-avatar-photo">
+                                <% } else { %>
                                 <div class="team-avatar"><%= m.initials %></div>
+                                <% } %>
                                 <div class="flex-grow-1 min-width-0">
                                     <h6 class="mb-0"><%= m.name %></h6>
                                     <p class="text-primary fs-13 fw-medium mb-1">Project Proponent, Team Dunbar</p>
