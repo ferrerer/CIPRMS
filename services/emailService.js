@@ -27,7 +27,15 @@ function getTransporter() {
       host,
       port,
       secure,
-      auth: { user: process.env.MAIL_USER, pass: String(process.env.MAIL_APP_PASSWORD || '').replace(/\s+/g, '') }
+      auth: { user: process.env.MAIL_USER, pass: String(process.env.MAIL_APP_PASSWORD || '').replace(/\s+/g, '') },
+      // 2026-11 Phase 3: nodemailer's own defaults leave a stalled SMTP connection to hang for up to ~10
+      // minutes (socketTimeout) before failing — every call site here is already fire-and-forget
+      // (`.catch()`, never awaited by a request handler), so this never blocked a response, but a hung
+      // socket could sit open far longer than any real delivery attempt needs. Bounded the same way the
+      // Google Calendar/Docs clients were in Phase 2.
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000
     });
   }
   return transporter;

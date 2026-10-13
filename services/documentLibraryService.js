@@ -2,7 +2,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
-const { getDb } = require('../db');
+const { getDb, insertWithNextId } = require('../db');
 
 const DOCUMENTS_DIR = path.join(__dirname, '..', 'uploads', 'documents');
 if (!fs.existsSync(DOCUMENTS_DIR)) fs.mkdirSync(DOCUMENTS_DIR, { recursive: true });
@@ -20,11 +20,6 @@ function shortDocType(documentType) {
   if (/contract/i.test(documentType)) return 'Contract';
   if (/^jva$/i.test(documentType)) return 'JVA';
   return 'Other';
-}
-
-async function nextDocumentId(db) {
-  const last = await db.collection('documents').find({}).sort({ id: -1 }).limit(1).toArray();
-  return last.length ? last[0].id + 1 : 1;
 }
 
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -174,7 +169,6 @@ async function archiveToDocumentLibrary(tempFilePath, originalName, extraction, 
   }
 
   const db = getDb();
-  const id = await nextDocumentId(db);
   const type = shortDocType(extraction && extraction.documentType);
   const institution = (extraction && extraction.institution) || null;
   const partner = (extraction && (extraction.partner || extraction.institution)) || null;
@@ -198,7 +192,7 @@ async function archiveToDocumentLibrary(tempFilePath, originalName, extraction, 
     ? `${extraction.startDate || '?'} – ${extraction.endDate || '?'}`
     : null;
 
-  const doc = {
+  const buildDoc = (id) => ({
     id,
     title,
     type,
@@ -262,10 +256,14 @@ async function archiveToDocumentLibrary(tempFilePath, originalName, extraction, 
     // field so the two are never confused, and so a Document Library record can show which partnership it
     // was the supporting document for.
     ...(meta.partnershipId != null ? { partnershipId: meta.partnershipId } : {})
-  };
+  });
 
-  await db.collection('documents').insertOne(doc);
-  return { documentId: id, fileLink: doc.fileLink };
+  // 2026-11 Phase 3: documents was the one sequential-id collection the Phase 2 race-condition fix
+  // missed (nextDocumentId() read-then-inserted with no protection against two concurrent uploads
+  // landing on the same id). insertWithNextId() (db.js) retries on an id collision the same way every
+  // other collection's insert does now.
+  const doc = await insertWithNextId(db.collection('documents'), buildDoc);
+  return { documentId: doc.id, fileLink: doc.fileLink };
 }
 
 async function updateDocument(id, updates) {
@@ -288,9 +286,8 @@ async function updateDocument(id, updates) {
 // (both requests collections store one — MOA/MOU/LOI/JVA/Accreditation/Other —
 // so no OCR-style free-text mapping is needed here).
 async function archiveRequestRecordToLibrary(db, meta) {
-  const id = await nextDocumentId(db);
   const label = meta.requestType === 'document' ? 'Document Request' : 'Partnership Request';
-  const doc = {
+  return insertWithNextId(db.collection('documents'), (id) => ({
     id,
     title: `${label} – ${meta.institution || 'Untitled'} (#${meta.requestId})`,
     type: meta.type || 'Other',
@@ -306,9 +303,7 @@ async function archiveRequestRecordToLibrary(db, meta) {
     originalFilename: null,
     requestId: meta.requestId,
     requestType: meta.requestType
-  };
-  await db.collection('documents').insertOne(doc);
-  return doc;
+  }));
 }
 
 module.exports = { archiveToDocumentLibrary, updateDocument, archiveRequestRecordToLibrary, findPossibleDuplicates, DOCUMENTS_DIR };

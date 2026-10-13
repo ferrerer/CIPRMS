@@ -18,7 +18,10 @@ router.post('/extract', (req, res) => {
       return res.status(400).json({ success: false, error: message });
     }
     if (err) {
-      return res.status(400).json({ success: false, error: err.message });
+      // clientSafe (middleware/uploadMiddleware.js's fileFilter): the one deliberate validation error this
+      // can throw — any other, unexpected error here previously leaked err.message straight to the client.
+      if (!err.clientSafe) console.error('❌ OCR upload error:', err);
+      return res.status(400).json({ success: false, error: err.clientSafe ? err.message : 'Upload failed. Please try again.' });
     }
     if (req.file && !verifyMagicBytes(req.file)) {
       return res.status(400).json({ success: false, error: 'Unsupported file type. Only PDF, JPG, JPEG, and PNG are accepted.' });

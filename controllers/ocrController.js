@@ -94,8 +94,10 @@ async function confirm(req, res) {
     const archived = await ocrService.confirmJob(jobId, overrides, session, extraMeta);
     res.json({ success: true, documentId: archived.documentId, fileLink: archived.fileLink });
   } catch (err) {
+    // Same convention as the safe-error-response pass elsewhere in this app: log the real error
+    // server-side, never echo it to the client (it previously did `error: err.message`).
     console.error('❌ OCR confirm error:', err);
-    res.status(500).json({ success: false, error: err.message || 'Failed to save the document. Please try again.' });
+    res.status(500).json({ success: false, error: 'Failed to save the document. Please try again.' });
   }
 }
 

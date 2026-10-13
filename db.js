@@ -95,7 +95,7 @@ async function connectDB() {
     // indexes that only speed up the existing sort, so a failure to create
     // one just leaves that collection's writes at their current speed — it
     // never changes the nextId logic itself.
-    for (const coll of ['partnerships', 'users', 'requests', 'documentrequests', 'documentfolders', 'activitylogs', 'notifications', 'calendarevents', 'targets']) {
+    for (const coll of ['partnerships', 'users', 'requests', 'documentrequests', 'documentfolders', 'activitylogs', 'notifications', 'calendarevents', 'targets', 'documents']) {
       try {
         await db.collection(coll).createIndex({ id: -1 });
       } catch (indexErr) {
@@ -108,14 +108,15 @@ async function connectDB() {
     // calendarevents fix below (2026-09-20) closed this for calendar events only, with a unique index plus a
     // retry-on-conflict loop at its one insert site; this extends the exact same pair (unique index here,
     // retry loop in cirl.js's new insertWithNextId()) to every other sequential-id collection.
-    // A collection that already holds duplicate ids — from this very race, before today's fix — cannot take a
+    // A collection that already holds duplicate ids — from this very race, before this fix — cannot take a
     // unique index at all (MongoDB refuses to build one over existing violations), so each is checked first;
     // a dirty collection is skipped with a loud, specific warning rather than silently leaving the next
-    // createIndex's generic failure as the only trace. (Confirmed during this change: `requests` has one
-    // duplicate id, `activitylogs` fourteen, `notifications` sixteen — all genuine historical records, not
-    // test data, left exactly as found pending a deliberate decision on how to renumber them. A collection
-    // skipped here is not retry-protected until its duplicates are resolved and the app is restarted.)
-    for (const coll of ['partnerships', 'requests', 'documentrequests', 'documentfolders', 'responsibleunits', 'users', 'activitylogs', 'notifications', 'googleDocs', 'targets']) {
+    // createIndex's generic failure as the only trace. (`requests`/`activitylogs`/`notifications` were
+    // reconciled in a separate, approved, backed-up migration — see that migration's own report — and are
+    // expected to pass this check cleanly now. `documents` (2026-11 Phase 3) was the one sequential-id
+    // collection this list originally missed; confirmed zero existing duplicates before adding it here. A
+    // collection skipped here is not retry-protected until its duplicates are resolved and the app restarts.)
+    for (const coll of ['partnerships', 'requests', 'documentrequests', 'documentfolders', 'responsibleunits', 'users', 'activitylogs', 'notifications', 'googleDocs', 'targets', 'documents']) {
       try {
         const dupes = await findDuplicateIds(db, coll);
         if (dupes.length) {

@@ -310,8 +310,13 @@ async function runJob(jobId, filePath, mimetype, meta = {}) {
   } catch (err) {
     // On failure, clean up the temp file and mark the job as errored.
     // Nothing is saved to the Document Library — the user simply sees an error.
+    // The real error (a Tesseract/PDF-rasterization/filesystem failure, etc.) is logged here — this
+    // catch previously stored err.message directly on the job with no server-side log at all, so a
+    // real failure was both leaked to the client (GET /api/ocr/status/:jobId returns job.error
+    // verbatim) and undiagnosable afterward.
+    console.error('❌ OCR job failed:', jobId, err);
     fs.unlink(filePath, () => {});
-    updateJob(jobId, { status: 'error', progress: 100, stage: 'error', error: err.message || 'OCR processing failed.', tempFilePath: null });
+    updateJob(jobId, { status: 'error', progress: 100, stage: 'error', error: 'OCR processing failed. Please try again.', tempFilePath: null });
   }
 }
 

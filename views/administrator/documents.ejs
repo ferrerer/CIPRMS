@@ -848,10 +848,10 @@
 
             const rightLabel = isAccred ? 'Issuing Body:' : 'Nature:';
             const rightValue = isAccred
-                ? `<span class="fw-bold fs-12 d-block text-truncate" title="${doc.issuingBody || '—'}">${doc.issuingBody || '—'}</span>`
-                : `<span class="badge ${natureBadge} fs-10">${nature}</span>`;
+                ? `<span class="fw-bold fs-12 d-block text-truncate" title="${escHtml(doc.issuingBody || '—')}">${escHtml(doc.issuingBody || '—')}</span>`
+                : `<span class="badge ${natureBadge} fs-10">${escHtml(nature)}</span>`;
             const accredExtra = isAccred && (doc.accreditationLevel || doc.certificateNumber)
-                ? `<div class="mb-2 fs-11 text-muted">${doc.accreditationLevel ? 'Level: ' + doc.accreditationLevel : ''}${doc.accreditationLevel && doc.certificateNumber ? ' &middot; ' : ''}${doc.certificateNumber ? 'Cert No: ' + doc.certificateNumber : ''}</div>`
+                ? `<div class="mb-2 fs-11 text-muted">${doc.accreditationLevel ? 'Level: ' + escHtml(doc.accreditationLevel) : ''}${doc.accreditationLevel && doc.certificateNumber ? ' &middot; ' : ''}${doc.certificateNumber ? 'Cert No: ' + escHtml(doc.certificateNumber) : ''}</div>`
                 : '';
 
             return `
@@ -863,14 +863,14 @@
                                     <span class="avatar-title bg-light rounded fs-3"><i class="${icon}"></i></span>
                                 </div>
                                 <div class="flex-grow-1 overflow-hidden">
-                                    <h5 class="fs-14 mb-1 text-truncate" title="${doc.title}">${doc.title}</h5>
-                                    <p class="text-muted fs-12 mb-0 text-truncate">${doc.institution || doc.partner || ''}</p>
+                                    <h5 class="fs-14 mb-1 text-truncate" title="${escHtml(doc.title)}">${escHtml(doc.title)}</h5>
+                                    <p class="text-muted fs-12 mb-0 text-truncate">${escHtml(doc.institution || doc.partner || '')}</p>
                                 </div>
                             </div>
                             <div class="row g-2 mb-2 align-items-center">
                                 <div class="col-4" style="min-width:0;">
                                     <small class="text-muted d-block fs-11">Type:</small>
-                                    <span class="fw-bold fs-12 d-block text-truncate" title="${doc.type || ''}">${doc.type}</span>
+                                    <span class="fw-bold fs-12 d-block text-truncate" title="${escHtml(doc.type || '')}">${escHtml(doc.type)}</span>
                                 </div>
                                 <div class="col-8 text-end" style="min-width:0;">
                                     <small class="text-muted d-block fs-11">${rightLabel}</small>
@@ -921,12 +921,12 @@
             return `
                 <tr>
                     <td><span class="avatar-title bg-light rounded fs-4" style="width:36px;height:36px;display:inline-flex"><i class="${icon}"></i></span></td>
-                    <td class="text-truncate" style="max-width:240px" title="${doc.title}">${doc.title}</td>
-                    <td class="text-truncate" style="max-width:180px">${doc.institution || doc.partner || '—'}</td>
-                    <td class="text-truncate" style="max-width:180px" title="${doc.type || ''}">${doc.type}</td>
-                    <td><span class="badge ${natureBadge} fs-10">${nature}</span></td>
-                    <td>${doc.date || '—'}</td>
-                    <td><span class="badge ${statusBadge} fs-10">${doc.status || '—'}</span></td>
+                    <td class="text-truncate" style="max-width:240px" title="${escHtml(doc.title)}">${escHtml(doc.title)}</td>
+                    <td class="text-truncate" style="max-width:180px">${escHtml(doc.institution || doc.partner || '—')}</td>
+                    <td class="text-truncate" style="max-width:180px" title="${escHtml(doc.type || '')}">${escHtml(doc.type)}</td>
+                    <td><span class="badge ${natureBadge} fs-10">${escHtml(nature)}</span></td>
+                    <td>${escHtml(doc.date || '—')}</td>
+                    <td><span class="badge ${statusBadge} fs-10">${escHtml(doc.status || '—')}</span></td>
                     <td style="min-width:140px">
                         <select class="form-select form-select-sm" title="Move to folder" onchange="moveDocument(${doc.id}, this.value)">
                             ${folderOptionsHtml(doc)}
