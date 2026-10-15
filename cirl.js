@@ -9116,6 +9116,53 @@ app.use((req, res) => {
   res.status(404).send('<h2>404 — Page not found</h2><a href="/">Go home</a>');
 });
 
+// A failure reaching the global error handler whose root cause is "the database is not reachable" (the
+// MongoDB driver's own error classes for a dropped/unreachable connection, a failed server-selection
+// attempt, or an operation that timed out — plus getDb()'s own synchronous guard before connectDB() has
+// ever completed). Deliberately narrow: only genuine connectivity failures qualify, never a validation or
+// application-logic error that happens to come from a DB call, so this never masks a real bug as "DB is down".
+const DB_DOWN_ERROR_NAMES = new Set([
+  'MongoNetworkError', 'MongoServerSelectionError', 'MongoTimeoutError',
+  'MongoNotConnectedError', 'MongoTopologyClosedError', 'MongoServerClosedError'
+]);
+function isDatabaseDownError(err) {
+  if (!err) return false;
+  if (err.message === 'Database not initialized. Call connectDB first.') return true;
+  return !!(err.name && DB_DOWN_ERROR_NAMES.has(err.name));
+}
+
+// Self-contained — no layout/partials, no external stylesheet or font — so it still renders correctly even
+// though the thing that just failed is the app's own data layer; the same copy/tone as the client-side
+// system-status banner (public/js/ciprms-system-status.js), just as a full page for the case where the
+// failure happened before that page (and its banner script) ever got to render at all.
+function renderDatabaseDownPage(res) {
+  res.status(503).send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>CIPRMS — Temporarily Unavailable</title>
+<style>
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f8f9fa;color:#212529;
+    display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;box-sizing:border-box;}
+  .card{max-width:480px;background:#fff;border-top:4px solid #f06548;border-radius:6px;
+    box-shadow:0 2px 10px rgba(0,0,0,.08);padding:32px;text-align:center;}
+  .card h1{font-size:19px;margin:12px 0 8px;}
+  .card p{font-size:14px;color:#495057;line-height:1.5;margin:0 0 20px;}
+  .actions{display:flex;gap:10px;justify-content:center;}
+  .btn{display:inline-block;padding:8px 18px;border-radius:4px;font-size:13.5px;text-decoration:none;cursor:pointer;border:1px solid #ced4da;}
+  .btn-primary{background:#f06548;color:#fff;border-color:#f06548;}
+  .btn-light{background:#fff;color:#212529;}
+</style></head>
+<body>
+  <div class="card">
+    <div style="font-size:32px;" role="img" aria-label="Warning">⚠️</div>
+    <h1>CIPRMS is currently unavailable</h1>
+    <p>The database is not responding, so most pages and actions will fail until it recovers. Please try again shortly.</p>
+    <div class="actions">
+      <button type="button" class="btn btn-primary" onclick="location.reload()">Retry</button>
+      <a class="btn btn-light" href="/">Go home</a>
+    </div>
+  </div>
+</body></html>`);
+}
+
 // ── GLOBAL ERROR HANDLER ────────────────────────────────────────────────────
 // Last-resort fallback for anything not already caught by a route's own
 // try/catch — every route here already handles its own expected failure
@@ -9125,12 +9172,23 @@ app.use((req, res) => {
 // error middleware — an unhandled async rejection). Logs the real error
 // server-side but never leaks it to the client, regardless of NODE_ENV
 // (S13, Roadmap v2 Phase G4, docs/SYSTEM_AUDIT_2026-07-16.md).
+//
+// A database-connectivity failure gets its own friendlier "service unavailable" response (matching the
+// client-side status banner's look/copy) ahead of the generic 500 fallback below, since it's an expected,
+// recoverable outage rather than an application bug — the plain 500 page remains the fallback for anything
+// that isn't recognizably a DB-down condition.
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err);
   if (res.headersSent) return next(err);
   const wantsJson = req.path.startsWith('/api/') || req.xhr || (req.headers.accept || '').includes('application/json');
+  const dbDown = isDatabaseDownError(err);
   if (wantsJson) {
-    res.status(500).json({ error: 'An unexpected server error occurred.' });
+    res.status(dbDown ? 503 : 500).json({
+      error: dbDown ? 'The database is not responding. Please try again shortly.' : 'An unexpected server error occurred.',
+      ...(dbDown ? { code: 'DB_UNAVAILABLE' } : {})
+    });
+  } else if (dbDown) {
+    renderDatabaseDownPage(res);
   } else {
     res.status(500).send('<h2>500 — Something went wrong</h2><a href="/">Go home</a>');
   }
