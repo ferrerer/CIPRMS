@@ -197,11 +197,11 @@ describe('GET /api/system-status — Google Calendar/Docs checks are bounded by 
   }, 10000);
 });
 
-describe('GET /api/system-status — email state transitions (mocked SMTP sign-in, never a real send)', () => {
-  // This real environment has no MAIL_USER/MAIL_APP_PASSWORD set, so "configured" + "verify() outcome"
+describe('GET /api/system-status — email state transitions (mocked provider sign-in, never a real send)', () => {
+  // This real environment has no RESEND_API_KEY/MAIL_USER set, so "configured" + "verify() outcome"
   // can only be exercised by temporarily substituting emailService's own exported functions — the same
   // monkey-patch-then-restore pattern test/centralized-notification-system.test.js already uses for
-  // sendNotificationEmails. Nothing here ever calls the real nodemailer transporter or sends mail.
+  // sendNotificationEmails. Nothing here ever calls the real Resend API or sends mail.
   const originalIsConfigured = emailService.isConfigured;
   const originalVerify = emailService.verify;
   afterEach(() => {

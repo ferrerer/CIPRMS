@@ -18,12 +18,14 @@ services:
         sync: false
       - key: GOOGLE_TOKEN_ENCRYPTION_KEY
         sync: false
-      # Required for e-mail notifications (services/emailService.js). Without these, CIPRMS runs normally
-      # but e-mail delivery is skipped and the System Status banner reports "Email Notifications" as not
-      # configured. Set in the Render dashboard (Environment tab) — never commit real values here.
-      - key: MAIL_USER
+      # Required for e-mail notifications (services/emailService.js), sent via Resend's HTTPS API — this
+      # plan is "free", and Render blocks outbound SMTP ports on free web services, so a raw-SMTP provider
+      # (Gmail, etc.) cannot be used here. Without these, CIPRMS runs normally but e-mail delivery is
+      # skipped and the System Status banner reports "Email Notifications" as not configured. Set in the
+      # Render dashboard (Environment tab) — never commit real values here.
+      - key: RESEND_API_KEY
         sync: false
-      - key: MAIL_APP_PASSWORD
+      - key: MAIL_USER
         sync: false
       # Public URL used to build the "Open in CIPRMS" links inside notification e-mails. Without this,
       # emailService.js falls back to http://localhost:<PORT>, which is unreachable from a recipient's inbox.

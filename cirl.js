@@ -9207,7 +9207,7 @@ if (require.main === module) {
       await connectDB();
       console.log(emailService.isConfigured()
         ? '✅ Email notifications configured (MAIL_USER set).'
-        : '⚠️  Email notifications NOT configured — set MAIL_USER and MAIL_APP_PASSWORD to enable e-mail delivery (see .env.example).');
+        : '⚠️  Email notifications NOT configured — set RESEND_API_KEY and MAIL_USER to enable e-mail delivery (see .env.example).');
       await migrateLegacyPartnerAvatars().catch(err => console.error('⚠️  Partner avatar migration skipped:', err.message));
       await runLifecycleCheck(); // catch up immediately on startup, don't wait for the first interval tick
       setInterval(runLifecycleCheck, LIFECYCLE_CHECK_INTERVAL_MS);

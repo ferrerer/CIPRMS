@@ -1,44 +1,28 @@
-// E-mail copies of request notifications (2026-09-26). Sent through a Gmail / Google Workspace account with an App
-// Password (Google Account → Security → 2-Step Verification → App passwords), configured in the environment:
-//   MAIL_USER           the sending address, e.g. the CIRL office account
-//   MAIL_APP_PASSWORD   its 16-character App Password (spaces are ignored)
+// E-mail copies of request notifications (2026-09-26). Originally sent via Gmail SMTP; switched to Resend's
+// HTTPS API (2026-10-15) because Render's free web-service plan blocks all outbound traffic on SMTP ports
+// 25/465/587 (https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)
+// — Gmail SMTP never completed a connection from there, it just hung until the caller's own timeout fired.
+// Resend is reached over HTTPS (port 443), which Render's free plan does not block. Configured in the
+// environment:
+//   RESEND_API_KEY      API key from the Resend dashboard (Settings → API Keys)
+//   MAIL_USER           the "From" address shown on outgoing mail — must be on a domain verified in Resend
+//                        (Resend dashboard → Domains); without a verified domain Resend rejects the send
 //   MAIL_FROM_NAME      optional display name (default "CIPRMS — CSPC CIRL")
 //   APP_BASE_URL        optional public address used for links in the e-mail (default http://localhost:<PORT>)
 // E-mail is always best-effort: a missing configuration or a mail failure is logged and never blocks the request
 // action that triggered it. Under Jest nothing leaves the machine — messages are captured in `sentForTests`.
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 const sentForTests = [];
-let transporter = null;
+let resendClient = null;
 
 function isConfigured() {
-  return !!(process.env.MAIL_USER && process.env.MAIL_APP_PASSWORD);
+  return !!(process.env.RESEND_API_KEY && process.env.MAIL_USER);
 }
 
-function getTransporter() {
-  if (process.env.JEST_WORKER_ID) {
-    return { sendMail: async (msg) => { sentForTests.push(msg); return { messageId: 'jest-' + sentForTests.length }; } };
-  }
-  if (!transporter) {
-    const host = process.env.MAIL_HOST || 'smtp.gmail.com';
-    const port = parseInt(process.env.MAIL_PORT, 10) || 465;
-    const secure = process.env.MAIL_SECURE ? process.env.MAIL_SECURE === 'true' : port === 465;
-    transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user: process.env.MAIL_USER, pass: String(process.env.MAIL_APP_PASSWORD || '').replace(/\s+/g, '') },
-      // 2026-11 Phase 3: nodemailer's own defaults leave a stalled SMTP connection to hang for up to ~10
-      // minutes (socketTimeout) before failing — every call site here is already fire-and-forget
-      // (`.catch()`, never awaited by a request handler), so this never blocked a response, but a hung
-      // socket could sit open far longer than any real delivery attempt needs. Bounded the same way the
-      // Google Calendar/Docs clients were in Phase 2.
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 15000
-    });
-  }
-  return transporter;
+function getClient() {
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
 }
 
 function baseUrl() {
@@ -89,13 +73,27 @@ async function sendNotificationEmails(emails, payload) {
     result.skipped = 'not_configured';
     return result;
   }
-  const t = getTransporter();
   for (const to of targets) {
+    const msg = buildMessage(to, payload || {});
     try {
-      await t.sendMail(buildMessage(to, payload || {}));
+      if (process.env.JEST_WORKER_ID) {
+        sentForTests.push(msg);
+      } else {
+        // buildMessage()'s `from` stays a plain {name, address} object (unchanged shape — existing tests
+        // read msg.to/subject/text/html directly) — only converted to Resend's "Name <address>" string here,
+        // at the one real call site, never inside buildMessage itself.
+        const { error } = await getClient().emails.send({
+          from: `${msg.from.name} <${msg.from.address}>`,
+          to: msg.to,
+          subject: msg.subject,
+          text: msg.text,
+          html: msg.html
+        });
+        if (error) throw new Error(error.message || 'Resend API rejected the e-mail.');
+      }
       result.sent.push(to);
     } catch (err) {
-      // Never log the password; nodemailer's auth errors do not include it.
+      // Never log the API key; Resend's errors do not include it.
       console.error(`E-mail notification to ${to} failed:`, err && err.message);
       result.failed.push({ email: to, error: err && err.message });
     }
@@ -103,11 +101,14 @@ async function sendNotificationEmails(emails, payload) {
   return result;
 }
 
-// Confirms the SMTP login works (used by the startup log and the test script). Never throws.
+// Confirms the Resend API key actually authenticates (used by the startup log and the System Status check).
+// domains.list() is a read-only call — chosen specifically so this never sends a real e-mail just to verify
+// the connection. Never throws.
 async function verify() {
-  if (!isConfigured()) return { ok: false, error: 'MAIL_USER / MAIL_APP_PASSWORD are not set.' };
+  if (!isConfigured()) return { ok: false, error: 'RESEND_API_KEY / MAIL_USER are not set.' };
   try {
-    await getTransporter().verify();
+    const { error } = await getClient().domains.list();
+    if (error) return { ok: false, error: error.message || 'Resend rejected the API key.' };
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err && err.message };
