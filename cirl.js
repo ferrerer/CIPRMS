@@ -65,7 +65,12 @@ app.use(helmet({
       // creation was silently rejected (confirmed live: "Creating a worker from 'blob:...' violates ...
       // script-src") and the map never finished loading. A dedicated worker-src covers exactly that case.
       workerSrc: ["'self'", "blob:"],
-      frameSrc: ["'none'"],
+      // 'self' (not 'none'): the Document Library's in-page preview modal (views/partials/document_viewer.ejs)
+      // embeds an uploaded file's own same-origin URL (/uploads/documents/...) in an <iframe> so PDFs render
+      // with the browser's built-in viewer — 'none' blocked that iframe outright (confirmed live: the preview
+      // modal showed a blank/blocked frame while "Open in New Tab" and "Download", plain navigation rather
+      // than framing, worked fine). 'self' still refuses to frame any other origin.
+      frameSrc: ["'self'"],
       objectSrc: ["'none'"]
     }
   },
